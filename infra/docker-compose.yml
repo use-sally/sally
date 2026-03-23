@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: automatethis-pm-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: automatethis_pm
+    ports:
+      - '5432:5432'
+    volumes:
+      - automatethis-pm-postgres:/var/lib/postgresql/data
+volumes:
+  automatethis-pm-postgres:

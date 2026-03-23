@@ -6,6 +6,7 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
+    "clean:web": "rm -rf apps/web/.next",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint"
   }
