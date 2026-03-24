@@ -299,6 +299,15 @@ function canAccessTaskAssignee(scope: { restricted: boolean; allowedAssignees: s
   return scope.allowedAssignees.includes(assignee)
 }
 
+async function logActivity(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; actorName?: string | null; actorEmail?: string | null; type: string; summary: string; payload?: any }) {
+  await prisma.activityLog.create({ data: { workspaceId: input.workspaceId, projectId: input.projectId ?? null, taskId: input.taskId ?? null, actorName: input.actorName ?? null, actorEmail: input.actorEmail ?? null, type: input.type, summary: input.summary, payload: input.payload ?? undefined } })
+}
+
+function actorFromRequest(request: any) {
+  const account = (request as any).account as { name?: string | null; email?: string | null } | undefined
+  return { actorName: account?.name ?? null, actorEmail: account?.email ?? null }
+}
+
 async function getAssigneeAvatarMap(workspaceId: string, assignees: Array<string | null | undefined>) {
   const desired = Array.from(new Set(assignees.map((value) => value?.trim()).filter(Boolean) as string[]))
   const map = new Map<string, string | null>()
@@ -1002,6 +1011,7 @@ const start = async () => {
         }
         await prisma.projectMembership.update({ where: { id: membershipId }, data: { role } })
       }
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'project.member.updated', summary: `Updated project member role to ${body.role}.`, payload: { membershipId, role: body.role } })
       return { ok: true }
     })
 
@@ -1027,6 +1037,7 @@ const start = async () => {
         }
       }
       await prisma.projectMembership.delete({ where: { id: membershipId } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'project.member.removed', summary: `Removed project member (${membership.accountId}) from project.`, payload: { membershipId } })
       return { ok: true }
     })
 
@@ -1336,6 +1347,14 @@ const start = async () => {
       return { ok: true }
     })
 
+    app.get('/projects/:projectId/activity', async (request, reply) => {
+      const workspace = (request as any).workspace
+      const { projectId } = request.params as { projectId: string }
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      const events = await prisma.activityLog.findMany({ where: { workspaceId: workspace.id, projectId }, orderBy: { createdAt: 'desc' }, take: 50 })
+      return events.map((event) => ({ id: event.id, type: event.type, summary: event.summary, actorName: event.actorName, actorEmail: event.actorEmail, createdAt: event.createdAt.toISOString() }))
+    })
+
     app.post('/projects/:projectId/statuses', async (request, reply) => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
@@ -1360,6 +1379,7 @@ const start = async () => {
       if (!status) return reply.code(404).send({ ok: false, error: 'Status not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       await prisma.taskStatus.update({ where: { id: statusId }, data: { ...(body.name !== undefined ? { name: body.name.trim() } : {}), ...(body.color !== undefined ? { color: body.color.trim() || '#cbd5e1' } : {}) } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'status.updated', summary: `Updated status ${status.name}.`, payload: { statusId, name: body.name, color: body.color } })
       return { ok: true }
     })
 
@@ -1534,6 +1554,7 @@ const start = async () => {
       const nextDescription = body.description !== undefined ? body.description : existing.description
       await prisma.task.update({ where: { id: params.taskId }, data: { ...(body.title !== undefined ? { title: body.title } : {}), ...(body.description !== undefined ? { description: body.description } : {}), ...(body.assignee !== undefined ? { assignee: body.assignee } : {}), ...(body.priority !== undefined ? { priority: body.priority } : {}), ...(body.dueDate !== undefined ? { dueDate: toIsoOrNull(body.dueDate) } : {}), ...(body.statusId !== undefined ? { statusId: body.statusId } : {}) } })
       if (body.description !== undefined) cleanupRemovedDescriptionImages(existing.description, nextDescription)
+      await logActivity({ workspaceId: workspace.id, projectId: existing.projectId, taskId: existing.id, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'task.updated', summary: `Updated task ${existing.title}.`, payload: { taskId: existing.id } })
       return { ok: true }
     })
 
@@ -1549,6 +1570,7 @@ const start = async () => {
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       const archived = body.archived !== false
       await prisma.task.update({ where: { id: taskId }, data: { archivedAt: archived ? new Date() : null } })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: archived ? 'task.archived' : 'task.unarchived', summary: `${archived ? 'Archived' : 'Unarchived'} task ${task.title}.`, payload: { taskId } })
       return { ok: true }
     })
 
@@ -1743,7 +1765,7 @@ const start = async () => {
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { timesheetId } = request.params as { timesheetId: string }
       const body = request.body as { minutes?: number; description?: string | null; date?: string; billable?: boolean; validated?: boolean; taskId?: string | null; userId?: string }
-      const entry = await prisma.timesheetEntry.findFirst({ where: { id: timesheetId, project: { workspaceId: workspace.id } }, select: { id: true, projectId: true, userId: true } })
+      const entry = await prisma.timesheetEntry.findFirst({ where: { id: timesheetId, project: { workspaceId: workspace.id } }, select: { id: true, projectId: true, userId: true, taskId: true, minutes: true } })
       if (!entry) return reply.code(404).send({ ok: false, error: 'Timesheet entry not found' })
       if (!(await requireProjectRole(request, reply, entry.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const scope = await resolveTimesheetScope(request, workspace.id, entry.projectId)
@@ -1782,6 +1804,7 @@ const start = async () => {
       }
       if (!Object.keys(data).length) return reply.code(400).send({ ok: false, error: 'No editable fields provided' })
       await prisma.timesheetEntry.update({ where: { id: timesheetId }, data })
+      await logActivity({ workspaceId: workspace.id, projectId: entry.projectId, taskId: entry.taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'timesheet.updated', summary: `Updated timesheet entry (${entry.minutes} minutes).`, payload: { timesheetId } })
       return { ok: true }
     })
 
@@ -1795,6 +1818,7 @@ const start = async () => {
       const scope = await resolveTimesheetScope(request, workspace.id, entry.projectId)
       if (!scope.elevated && scope.userId && entry.userId !== scope.userId) return reply.code(403).send({ ok: false, error: 'Timesheet access denied' })
       await prisma.timesheetEntry.delete({ where: { id: timesheetId } })
+      await logActivity({ workspaceId: workspace.id, projectId: entry.projectId, taskId: entry.taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'timesheet.deleted', summary: `Deleted a timesheet entry (${entry.minutes} minutes).`, payload: { timesheetId } })
       return { ok: true }
     })
 

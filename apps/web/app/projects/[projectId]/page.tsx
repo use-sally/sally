@@ -8,6 +8,7 @@ import { ProjectTabs } from '../../../components/project-tabs'
 import { StatusSettings } from '../../../components/status-settings'
 import { TimesheetsTable } from '../../../components/timesheets-table'
 import { ProjectCurrentTasks } from '../../../components/project-current-tasks'
+import { getProjectActivity } from '../../../lib/api'
 import { useProjectQuery } from '../../../lib/query'
 
 function ArchivedProjectTimesheets({ entries }: { entries: { id: string; userName: string; taskTitle: string | null; date: string; minutes: number; description: string | null; billable: boolean; validated: boolean }[] }) {
@@ -36,10 +37,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const archivedParam = searchParams.get('archived') === 'true'
   const [projectId, setProjectId] = useState<string>('')
   const [showEdit, setShowEdit] = useState(false)
+  const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; createdAt: string }[]>([])
 
   useEffect(() => {
     void params.then((p) => setProjectId(p.projectId))
   }, [params])
+
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    void getProjectActivity(projectId)
+      .then((events) => { if (!cancelled) setActivity(events) })
+      .catch(() => { if (!cancelled) setActivity([]) })
+    return () => { cancelled = true }
+  }, [projectId])
 
   const { data: project, error } = useProjectQuery(projectId, { archived: archivedParam })
   const recentTasks = project?.recentTasks.slice(0, 5) ?? []
@@ -86,6 +97,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
             <div style={panel}>
               <div style={{ fontWeight: 750, marginBottom: 14 }}>Recent tasks</div>
               <ProjectCurrentTasks project={project} archived={archivedParam} />
+            </div>
+
+            <div style={panel}>
+              <div style={{ fontWeight: 750, marginBottom: 14 }}>Recent activity</div>
+              {activity.length ? (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {activity.slice(0, 15).map((event) => (
+                    <div key={event.id} style={{ display: 'grid', gap: 4, padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}>
+                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{event.summary}</div>
+                      <div style={{ color: '#64748b', fontSize: 12 }}>{event.actorName || event.actorEmail || 'System'} · {new Date(event.createdAt).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : <div style={{ color: '#64748b' }}>No activity recorded yet.</div>}
             </div>
 
             <div style={panel}>

@@ -55,6 +55,7 @@ export function updateProject(projectId: string, payload: { name?: string; descr
 export function archiveProject(projectId: string, archived = true): Promise<{ ok: boolean }> { return getJson(`/projects/${projectId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
 export function deleteProject(projectId: string): Promise<{ ok: boolean }> { return getJson(`/projects/${projectId}`, { method: 'DELETE' }) }
 export function getProjectMembers(projectId: string): Promise<ProjectMember[]> { return getJson(`/projects/${projectId}/members`) }
+export function getProjectActivity(projectId: string): Promise<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; createdAt: string }[]> { return getJson(`/projects/${projectId}/activity`) }
 export function addProjectMember(projectId: string, payload: { accountId?: string; email?: string; name?: string; role?: string }): Promise<{ ok: boolean; membershipId: string; existing?: boolean }> {
   return getJson(`/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(payload) })
 }
