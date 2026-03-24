@@ -1,20 +1,39 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { AppShell, panel, pill, priorityStars, tagStyle } from '../../../components/app-shell'
 import { EditProjectModal } from '../../../components/edit-project-modal'
 import { ProjectTabs } from '../../../components/project-tabs'
 import { StatusSettings } from '../../../components/status-settings'
-import { TaskDrawer } from '../../../components/task-drawer'
 import { TimesheetsTable } from '../../../components/timesheets-table'
 import { ProjectCurrentTasks } from '../../../components/project-current-tasks'
 import { useProjectQuery } from '../../../lib/query'
 
+function ArchivedProjectTimesheets({ entries }: { entries: { id: string; userName: string; taskTitle: string | null; date: string; minutes: number; description: string | null; billable: boolean; validated: boolean }[] }) {
+  if (!entries.length) return <div style={{ color: '#64748b' }}>No timesheets in this archived project.</div>
+
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {entries.map((entry) => (
+        <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 120px 110px 1.5fr', gap: 10, alignItems: 'center', padding: '12px 14px', border: '1px solid #e2e8f0', borderRadius: 14, background: '#fff' }}>
+          <div>{String(entry.date).slice(0, 10)}</div>
+          <div>
+            <div style={{ fontWeight: 700, color: '#0f172a' }}>{entry.taskTitle || 'Project only'}</div>
+            <div style={{ color: '#64748b', fontSize: 12 }}>{entry.userName}</div>
+          </div>
+          <div style={{ fontWeight: 700 }}>{entry.minutes} min</div>
+          <div><span style={pill(entry.billable ? '#ecfeff' : '#f8fafc', entry.billable ? '#155e75' : '#475569')}>{entry.billable ? 'Billable' : 'Non-billable'}</span></div>
+          <div style={{ color: '#475569' }}>{entry.description || '—'}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
   const searchParams = useSearchParams()
-  const taskId = searchParams.get('task') || ''
+  const archivedParam = searchParams.get('archived') === 'true'
   const [projectId, setProjectId] = useState<string>('')
   const [showEdit, setShowEdit] = useState(false)
 
@@ -22,14 +41,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
     void params.then((p) => setProjectId(p.projectId))
   }, [params])
 
-  const { data: project, error } = useProjectQuery(projectId)
+  const { data: project, error } = useProjectQuery(projectId, { archived: archivedParam })
   const recentTasks = project?.recentTasks.slice(0, 5) ?? []
   const taskOptions = project?.recentTasks.map((task) => ({ id: task.id, title: task.title })) ?? []
 
   return (
-    <AppShell title={project?.name ?? 'Project'} subtitle={project?.description || 'Project overview and recent work.'} actions={<div style={{ display: 'flex', gap: 10 }}>{projectId ? <button onClick={() => setShowEdit(true)} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }}>Edit project</button> : null}{projectId ? <Link href={`/projects/${projectId}/board`} style={{ background: '#0f172a', color: '#fff', borderRadius: 12, padding: '11px 14px', fontWeight: 700, textDecoration: 'none' }}>Open board</Link> : null}</div>}>
-      {projectId ? <ProjectTabs projectId={projectId} current="overview" /> : null}
+    <AppShell title={project?.name ?? 'Project'} subtitle={project?.description || 'Project overview and recent work.'}>
+      {projectId && !archivedParam ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+          <ProjectTabs projectId={projectId} current="overview" />
+          <button onClick={() => setShowEdit(true)} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 12, padding: '11px 14px', fontWeight: 700, flex: '0 0 auto' }}>Edit project</button>
+        </div>
+      ) : null}
       {error ? <div style={{ color: '#991b1b', marginBottom: 16 }}>{error instanceof Error ? error.message : 'Failed to load project'}</div> : null}
+      {archivedParam ? <div style={{ ...panel, border: '1px dashed #cbd5e1', background: '#f8fafc', color: '#475569', marginBottom: 18 }}>This project is archived. Restore it from the Projects list to resume work.</div> : null}
 
       {project ? (
         <>
@@ -40,7 +65,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={pill(project.client ? '#ecfeff' : '#fee2e2', project.client ? '#155e75' : '#991b1b')}>{project.client ? 'Linked' : 'Not linked'}</span>
-              <button onClick={() => setShowEdit(true)} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 14px', fontWeight: 700 }}>{project.client ? 'Change client' : 'Assign client'}</button>
+              {!archivedParam ? <button onClick={() => setShowEdit(true)} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 14px', fontWeight: 700 }}>{project.client ? 'Change client' : 'Assign client'}</button> : null}
             </div>
           </div>
 
@@ -51,25 +76,26 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
           </div>
 
           <div style={{ display: 'grid', gap: 20 }}>
-            <div style={panel}>
-              <div style={{ fontWeight: 750, marginBottom: 14 }}>Workflow</div>
-              <StatusSettings projectId={projectId} statuses={project.statuses} />
-            </div>
+            {!archivedParam ? (
+              <div style={panel}>
+                <div style={{ fontWeight: 750, marginBottom: 14 }}>Workflow</div>
+                <StatusSettings projectId={projectId} statuses={project.statuses} />
+              </div>
+            ) : null}
 
             <div style={panel}>
               <div style={{ fontWeight: 750, marginBottom: 14 }}>Recent tasks</div>
-              <ProjectCurrentTasks project={project} />
+              <ProjectCurrentTasks project={project} archived={archivedParam} />
             </div>
 
             <div style={panel}>
               <div style={{ fontWeight: 750, marginBottom: 14 }}>Timesheets</div>
-              <TimesheetsTable lockedProjectId={projectId} lockedProjectName={project.name} taskOptions={taskOptions} showProjectColumn={false} showCustomerColumn={false} />
+              {archivedParam ? <ArchivedProjectTimesheets entries={project.recentTimesheets} /> : <TimesheetsTable lockedProjectId={projectId} lockedProjectName={project.name} taskOptions={taskOptions} showProjectColumn={false} showCustomerColumn={false} />}
             </div>
           </div>
         </>
       ) : <div style={{ color: '#64748b' }}>Loading project…</div>}
 
-      {taskId && projectId ? <TaskDrawer taskId={taskId} closeHref={`/projects/${projectId}`} projectId={projectId} /> : null}
       {showEdit && project ? (
         <EditProjectModal
           projectId={projectId}

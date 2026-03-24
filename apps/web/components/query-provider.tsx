@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactNode, useState } from 'react'
+import { AuthGate } from './auth-gate'
 
 export function AppQueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -16,5 +17,9 @@ export function AppQueryProvider({ children }: { children: ReactNode }) {
       })
   )
 
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      <AuthGate>{children}</AuthGate>
+    </QueryClientProvider>
+  )
 }

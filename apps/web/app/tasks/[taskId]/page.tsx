@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { TaskDetail } from '@automatethis-pm/types/src'
-import { AppShell, panel, pill, priorityStars, tagStyle } from '../../../components/app-shell'
+import { AppShell, panel, priorityStars, tagStyle } from '../../../components/app-shell'
+import { AssigneeAvatar } from '../../../components/assignee-avatar'
 import { TaskDescriptionRender } from '../../../components/task-description-render'
 import { getTask } from '../../../lib/api'
 
@@ -48,7 +49,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
           <div style={panel}>
             <div style={{ display: 'grid', gap: 12 }}>
               <div><div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Project</div><div style={{ marginTop: 4 }}><Link href={`/projects/${task.project.id}`} style={{ textDecoration: 'none', color: '#0f172a', fontWeight: 700 }}>{task.project.name}</Link></div></div>
-              <div><div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Assignee</div><div style={{ marginTop: 4 }}>{task.assignee}</div></div>
+              <div><div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Assignee</div><div style={{ marginTop: 6 }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={36} /></div></div>
               <div><div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Priority</div><div style={{ marginTop: 4, fontSize: 18, color: '#0f172a' }}>{priorityStars(task.priority)}</div></div>
               <div><div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Status</div><div style={{ marginTop: 4 }}><span style={tagStyle()}>{task.status}</span></div></div>
             </div>

@@ -1,9 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
-import { createTask } from '../lib/api'
+import type { ProjectMember, ProjectTaskListItem } from '@automatethis-pm/types/src'
+import { archiveTask, createTask, getProjectMembers } from '../lib/api'
 import { qk, useProjectQuery, useProjectTasksQuery } from '../lib/query'
+import { pill, priorityStars, tagStyle } from './app-shell'
+import { AssigneeAvatar } from './assignee-avatar'
+import { statusChipStyle } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
 import { InlineTaskPanel } from './inline-task-panel'
 
@@ -12,25 +17,44 @@ const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid #dbe
 type SortKey = 'title' | 'assignee' | 'priority' | 'dueDate' | 'status'
 type SortDir = 'asc' | 'desc'
 
-export function ProjectTasksTable({ projectId, showFilters = true, limit }: { projectId: string; showFilters?: boolean; limit?: number }) {
+export function ProjectTasksTable({ projectId, showFilters = true, limit, archived = false }: { projectId: string; showFilters?: boolean; limit?: number; archived?: boolean }) {
   const qc = useQueryClient()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const tableRef = useRef<HTMLDivElement | null>(null)
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(archived ? null : (searchParams.get('task') || null))
   const [status, setStatus] = useState('')
   const [assignee, setAssignee] = useState('')
   const [label, setLabel] = useState('')
   const [search, setSearch] = useState('')
   const [newTitle, setNewTitle] = useState('')
-  const [newAssignee, setNewAssignee] = useState('')
-  const [newPriority, setNewPriority] = useState<'P1' | 'P2' | 'P3'>('P2')
-  const [newDueDate, setNewDueDate] = useState('')
   const [newStatusId, setNewStatusId] = useState('')
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
   const [creating, setCreating] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('dueDate')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [showArchived, setShowArchived] = useState(archived)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
 
-  const filters = useMemo(() => ({ status, assignee, search, label }), [status, assignee, search, label])
-  const { data: project } = useProjectQuery(projectId)
+  const filters = useMemo(() => ({ status: status.startsWith('!') ? '' : status, assignee, search, label, archived: showArchived }), [status, assignee, search, label, showArchived])
+
+  useEffect(() => {
+    setShowArchived(archived)
+    if (archived) {
+      setExpandedTaskId(null)
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('task')
+      const next = params.toString()
+      window.history.replaceState(window.history.state, '', next ? `${pathname}?${next}` : pathname)
+    }
+  }, [archived, pathname, searchParams])
+
+  useEffect(() => {
+    if (archived) return
+    setExpandedTaskId(searchParams.get('task') || null)
+  }, [archived, searchParams])
+  const { data: project } = useProjectQuery(projectId, { archived: showArchived || archived })
   const { data: tasks = [], error } = useProjectTasksQuery(projectId, filters)
 
   useEffect(() => {
@@ -38,6 +62,30 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit }: { pr
   }, [project?.statuses, newStatusId])
 
   useEffect(() => {
+    let cancelled = false
+    void getProjectMembers(projectId)
+      .then((members) => { if (!cancelled) setProjectMembers(members) })
+      .catch(() => { if (!cancelled) setProjectMembers([]) })
+    return () => { cancelled = true }
+  }, [projectId])
+
+  useEffect(() => {
+    if (!expandedTaskId) return
+    const node = rowRefs.current[expandedTaskId]
+    if (!node) return
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const marginTop = 24
+        const rect = node.getBoundingClientRect()
+        const targetTop = Math.max(0, window.scrollY + rect.top - marginTop)
+        window.scrollTo({ top: targetTop, behavior: 'smooth' })
+      })
+    })
+  }, [expandedTaskId])
+
+  useEffect(() => {
+    if (!showFilters) return
+
     function closeWhenSafe() {
       if (!tableRef.current) return
       const saving = tableRef.current.querySelector('[data-description-saving="true"]')
@@ -45,21 +93,36 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit }: { pr
         setTimeout(closeWhenSafe, 100)
         return
       }
-      setExpandedTaskId(null)
+      setExpandedTaskParam(null)
     }
 
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node | null
+      const targetElement = target instanceof Element ? target : null
+      if (targetElement?.closest('[data-preserve-task-open="true"]')) return
       if (tableRef.current && target && !tableRef.current.contains(target)) {
         setTimeout(closeWhenSafe, 0)
       }
     }
-    document.addEventListener('click', handleOutsideClick)
-    return () => document.removeEventListener('click', handleOutsideClick)
-  }, [])
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [showFilters, pathname, searchParams])
+
+  const assigneeOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const member of projectMembers) {
+      const value = member.name?.trim() || member.email.trim()
+      const label = member.name?.trim() ? `${member.name} (${member.email})` : member.email
+      if (value) map.set(value, label)
+    }
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }))
+  }, [projectMembers])
 
   const sortedTasks = useMemo(() => {
-    const list = [...tasks]
+    const list = [...tasks].filter((task) => {
+      if (!status.startsWith('!')) return true
+      return task.status !== status.slice(1)
+    })
     list.sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
       const titleTieBreak = a.title.localeCompare(b.title) || a.id.localeCompare(b.id)
@@ -76,13 +139,32 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit }: { pr
       return titleTieBreak
     })
     return typeof limit === 'number' ? list.slice(0, limit) : list
-  }, [tasks, sortKey, sortDir, limit])
+  }, [tasks, status, sortKey, sortDir, limit])
+
+  function setExpandedTaskParam(taskId: string | null) {
+    setExpandedTaskId(taskId)
+    const params = new URLSearchParams(searchParams.toString())
+    if (taskId) params.set('task', taskId)
+    else params.delete('task')
+    const next = params.toString()
+    window.history.replaceState(window.history.state, '', next ? `${pathname}?${next}` : pathname)
+  }
 
   function toggleSort(nextKey: SortKey) {
     if (sortKey === nextKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     else { setSortKey(nextKey); setSortDir('asc') }
   }
   function indicator(key: SortKey) { return sortKey !== key ? '' : sortDir === 'asc' ? ' ↑' : ' ↓' }
+
+  async function invalidateAll() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['project', projectId] }),
+      qc.invalidateQueries({ queryKey: ['projectTasks', projectId] }),
+      qc.invalidateQueries({ queryKey: qk.board(projectId) }),
+      qc.invalidateQueries({ queryKey: ['projects'] }),
+      qc.invalidateQueries({ queryKey: qk.projectsSummary }),
+    ])
+  }
 
   async function addTask() {
     const title = newTitle.trim()
@@ -92,26 +174,25 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit }: { pr
       const created = await createTask({
         projectId,
         title,
-        assignee: newAssignee.trim() || undefined,
-        priority: newPriority,
-        dueDate: newDueDate || null,
         statusId: newStatusId || project?.statuses?.[0]?.id,
       })
       setNewTitle('')
-      setNewAssignee('')
-      setNewPriority('P2')
-      setNewDueDate('')
       setNewStatusId(project?.statuses?.[0]?.id || '')
-      setExpandedTaskId(created.taskId)
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: qk.project(projectId) }),
-        qc.invalidateQueries({ queryKey: qk.projectTasks(projectId), exact: false }),
-        qc.invalidateQueries({ queryKey: qk.board(projectId) }),
-        qc.invalidateQueries({ queryKey: qk.projects }),
-        qc.invalidateQueries({ queryKey: qk.projectsSummary }),
-      ])
+      setExpandedTaskParam(created.taskId)
+      await invalidateAll()
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function restoreTask(taskId: string) {
+    if (!taskId) return
+    setRestoringId(taskId)
+    try {
+      await archiveTask(taskId, false)
+      await invalidateAll()
+    } finally {
+      setRestoringId(null)
     }
   }
 
@@ -122,36 +203,81 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit }: { pr
       {showFilters ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 12 }}>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks" style={inputStyle} />
-          <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}><option value="">All statuses</option>{(project?.statuses || []).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}</select>
-          <input value={assignee} onChange={(e) => setAssignee(e.target.value)} placeholder="Filter by assignee" style={inputStyle} />
+          <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
+            <option value="">All statuses</option>
+            {(project?.statuses || []).flatMap((s) => [
+              <option key={s.id} value={s.name}>{s.name}</option>,
+              <option key={`${s.id}-not`} value={`!${s.name}`}>{`Not ${s.name}`}</option>,
+            ])}
+          </select>
+          <select value={assignee} onChange={(e) => setAssignee(e.target.value)} style={inputStyle}>
+            <option value="">All assignees</option>
+            {assigneeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Filter by label" style={inputStyle} />
         </div>
       ) : null}
 
       <div ref={tableRef} style={{ display: 'grid', gap: 12 }}>
-        <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700, padding: '0 4px' }}>Tasks</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+          <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700 }}>Tasks{showArchived ? ' · Archived' : ''}</div>
+          {!archived ? (
+            <button onClick={() => { setShowArchived((prev) => !prev); setExpandedTaskParam(null) }} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 12 }}>
+              {showArchived ? 'Hide archived' : 'Show archived'}
+            </button>
+          ) : <div />}
+        </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); void addTask() }} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr 56px', padding: '14px 16px', gap: 10, alignItems: 'center', background: '#fcfcfd', border: '1px solid #e2e8f0', borderRadius: 16 }}>
-          <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Add task title" style={inputStyle} />
-          <input value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} placeholder="Assignee" style={inputStyle} />
-          <select value={newPriority} onChange={(e) => setNewPriority(e.target.value as 'P1'|'P2'|'P3')} style={inputStyle}><option value="P1">High</option><option value="P2">Medium</option><option value="P3">Low</option></select>
-          <input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} style={inputStyle} />
-          <select value={newStatusId} onChange={(e) => setNewStatusId(e.target.value)} style={inputStyle}>{(project?.statuses || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-          <div style={{ color: '#94a3b8', fontSize: 14 }}>Add tags after create</div>
-          <button type="submit" disabled={creating || !newTitle.trim() || !projectId} style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }}>{creating ? '…' : '+'}</button>
-        </form>
+        {!showArchived ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', padding: '14px 16px', gap: 10, alignItems: 'center', background: '#fcfcfd', border: '1px solid #e2e8f0', borderRadius: 16 }}>
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addTask() } }}
+              placeholder={creating ? 'Creating task…' : 'Add task title and press Enter'}
+              disabled={creating || !projectId}
+              style={inputStyle}
+            />
+          </div>
+        ) : null}
 
         {sortedTasks.map((task) => {
+          if (showArchived) {
+            return (
+              <div key={task.id} style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
+                <ArchivedTaskRow task={task} restoring={restoringId === task.id} onRestore={() => void restoreTask(task.id)} />
+              </div>
+            )
+          }
+
           const expanded = expandedTaskId === task.id
           return (
-            <div key={task.id} style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
-              <EditableTaskRow task={task} projectId={projectId} statuses={project?.statuses || []} expanded={expanded} onActivate={() => setExpandedTaskId(task.id)} />
+            <div key={task.id} ref={(node) => { rowRefs.current[task.id] = node }} style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
+              <EditableTaskRow task={task} projectId={projectId} statuses={project?.statuses || []} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} />
               {expanded ? <InlineTaskPanel taskId={task.id} projectId={projectId} /> : null}
             </div>
           )
         })}
         {!sortedTasks.length ? <div style={{ padding: 18, color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 16, background: '#fff' }}>No tasks match the current filters.</div> : null}
       </div>
+    </div>
+  )
+}
+
+function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskListItem; restoring: boolean; onRestore: () => void }) {
+  const dueLabel = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr 110px', gap: 10, padding: '14px 16px', alignItems: 'center', background: '#fff' }}>
+      <div style={{ fontWeight: 700, color: '#0f172a' }}>{task.title}</div>
+      <div style={{ display: 'flex', alignItems: 'center' }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} /></div>
+      <div style={{ color: '#94a3b8' }}>{priorityStars(task.priority)}</div>
+      <div>{task.dueDate ? <span style={pill('#eef2ff', '#3730a3')}>{dueLabel}</span> : <span style={{ color: '#94a3b8' }}>—</span>}</div>
+      <div><span style={statusChipStyle(task.statusColor)}>{task.status}</span></div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {task.labels?.length ? task.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>) : <span style={{ color: '#94a3b8' }}>—</span>}
+      </div>
+      <button onClick={onRestore} disabled={restoring} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 10, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }}>{restoring ? 'Restoring…' : 'Restore'}</button>
     </div>
   )
 }

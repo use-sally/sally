@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
-import { useProjectQuery, qk, useTaskQuery } from '../lib/query'
-import { createComment, createProjectLabel, createTaskTodo, createTimesheetEntry, deleteTask, deleteTaskTodo, deleteTimesheetEntry, reorderTaskTodos, updateTask, updateTaskLabels, updateTaskTodo, updateTimesheetEntry, uploadTaskDescriptionImage } from '../lib/api'
+import { useProjectQuery, qk, useTaskQuery, useTimesheetUsersQuery } from '../lib/query'
+import { archiveTask, createComment, createProjectLabel, createTaskTodo, createTimesheetEntry, deleteTask, deleteTaskTodo, deleteTimesheetEntry, reorderTaskTodos, updateTask, updateTaskLabels, updateTaskTodo, updateTimesheetEntry, uploadTaskDescriptionImage } from '../lib/api'
 import { pill, tagStyle } from './app-shell'
 import { useEffect, useRef, useState } from 'react'
 import type { TodoItem, TimesheetEntry } from '@automatethis-pm/types/src'
@@ -50,11 +50,12 @@ async function compressImageForTask(file: File): Promise<{ mimeType: string; bas
   }
 }
 
-export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; closeHref: string; projectId: string }) {
+export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { taskId: string; closeHref: string; projectId: string; drawerStyle?: React.CSSProperties }) {
   const router = useRouter()
   const qc = useQueryClient()
   const { data: task, isLoading, error } = useTaskQuery(taskId)
   const { data: project } = useProjectQuery(projectId)
+  const { data: timesheetUsers = [] } = useTimesheetUsersQuery(projectId)
   const [commentBody, setCommentBody] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [newLabel, setNewLabel] = useState('')
@@ -66,13 +67,15 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
   const lastCommittedDescriptionRef = useRef('')
   const [timeMinutes, setTimeMinutes] = useState('')
   const [timeDescription, setTimeDescription] = useState('')
+  const [timeUserId, setTimeUserId] = useState('')
   const [timeUserName, setTimeUserName] = useState('Alex')
   const [timeDate, setTimeDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [timeBillable, setTimeBillable] = useState(true)
   const [timeBusy, setTimeBusy] = useState(false)
   const [editingTimesheetId, setEditingTimesheetId] = useState<string | null>(null)
-  const [editingTimesheetForm, setEditingTimesheetForm] = useState({ minutes: '', date: '', description: '', billable: true, taskId: '' })
+  const [editingTimesheetForm, setEditingTimesheetForm] = useState({ minutes: '', date: '', description: '', billable: true, validated: false, taskId: '' })
   const [timesheetEditBusy, setTimesheetEditBusy] = useState(false)
+  const [showValidatedTimesheets, setShowValidatedTimesheets] = useState(false)
   const editingTimesheetMinutesRef = useRef<HTMLInputElement | null>(null)
   const editingTimesheetOriginal = useRef<TimesheetEntry | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
@@ -82,12 +85,18 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
   }, [task?.todos])
 
   useEffect(() => {
-    setDescriptionDraft(task?.description ?? '')
+    const nextDescription = task?.description ?? ''
+    setDescriptionDraft(nextDescription)
+    lastCommittedDescriptionRef.current = nextDescription
   }, [task?.description])
 
   useEffect(() => {
     if (editingTimesheetId && editingTimesheetMinutesRef.current) editingTimesheetMinutesRef.current.focus()
   }, [editingTimesheetId])
+
+  useEffect(() => {
+    if (!timeUserId && timesheetUsers.length) setTimeUserId(timesheetUsers[0].id)
+  }, [timesheetUsers, timeUserId])
 
   async function invalidateAll() {
     await Promise.all([
@@ -96,7 +105,7 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
       qc.invalidateQueries({ queryKey: qk.projectTasks(projectId), exact: false }),
       qc.invalidateQueries({ queryKey: qk.projectTimesheets(projectId) }),
       qc.invalidateQueries({ queryKey: qk.board(projectId) }),
-      qc.invalidateQueries({ queryKey: qk.projects }),
+      qc.invalidateQueries({ queryKey: ['projects'] }),
       qc.invalidateQueries({ queryKey: qk.projectsSummary }),
     ])
   }
@@ -135,13 +144,23 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
     if (!minutes || minutes <= 0) return
     setTimeBusy(true)
     try {
-      await createTimesheetEntry({ projectId: task.project.id, taskId: task.id, userName: timeUserName.trim() || 'Alex', date: timeDate, minutes, description: timeDescription.trim() || undefined, billable: timeBillable })
+      const userId = timeUserId || undefined
+      const userName = userId ? undefined : (timeUserName.trim() || 'Alex')
+      await createTimesheetEntry({ projectId: task.project.id, taskId: task.id, userId, userName, date: timeDate, minutes, description: timeDescription.trim() || undefined, billable: timeBillable })
       setTimeMinutes('')
       setTimeDescription('')
       await invalidateAll()
     } finally {
       setTimeBusy(false)
     }
+  }
+
+  async function handleArchiveTask() {
+    if (!task) return
+    if (typeof window !== 'undefined' && !window.confirm('Archive this task? You can still recover it later.')) return
+    await archiveTask(taskId)
+    await invalidateAll()
+    router.push(closeHref)
   }
 
   async function handleDeleteTask() {
@@ -174,13 +193,14 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
       date: String(entry.date).slice(0, 10),
       description: entry.description ?? '',
       billable: entry.billable,
+      validated: entry.validated,
       taskId: entry.taskId ?? '',
     })
   }
 
   function resetTimesheetEdit() {
     setEditingTimesheetId(null)
-    setEditingTimesheetForm({ minutes: '', date: '', description: '', billable: true, taskId: '' })
+    setEditingTimesheetForm({ minutes: '', date: '', description: '', billable: true, validated: false, taskId: '' })
     editingTimesheetOriginal.current = null
   }
 
@@ -196,6 +216,7 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
       original &&
       Math.round(minutes) === original.minutes &&
       editingTimesheetForm.billable === original.billable &&
+      editingTimesheetForm.validated === original.validated &&
       editingTimesheetForm.date === originalDate &&
       nextDescription === (original.description ?? '') &&
       nextTaskId === (original.taskId ?? '')
@@ -210,6 +231,7 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
         date: editingTimesheetForm.date,
         description: nextDescription || null,
         billable: editingTimesheetForm.billable,
+        validated: editingTimesheetForm.validated,
         taskId: nextTaskId || null,
       })
       resetTimesheetEdit()
@@ -322,17 +344,20 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
   const doneTodos = todoItems.filter((todo) => todo.done).length
   const totalTodos = todoItems.length
   const todoProgress = totalTodos ? `${doneTodos}/${totalTodos}` : null
+  const visibleTimesheets = task ? (showValidatedTimesheets ? task.timesheets : task.timesheets.filter((entry) => !entry.validated)) : []
+  const validatedCount = task ? task.timesheets.filter((entry) => entry.validated).length : 0
 
   return (
     <div style={overlay}>
       <Link href={closeHref} style={backdrop} aria-label="Close task drawer" />
-      <aside style={drawer} onClick={(e) => e.stopPropagation()}>
+      <aside style={{ ...drawer, ...drawerStyle }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 22, fontWeight: 750 }}>Task</div>
             {todoProgress ? <div style={{ marginTop: 6 }}><span style={pill('#ecfeff', '#155e75')}>Todos {todoProgress}</span></div> : null}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => void handleArchiveTask()} style={secondaryBtn}>Archive</button>
             <button type="button" onClick={() => void handleDeleteTask()} style={dangerBtn}>Delete</button>
             <Link href={closeHref} style={closeBtn}>Close</Link>
           </div>
@@ -388,7 +413,12 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
               <div style={{ marginTop: 8 }}>
                 <MarkdownDescriptionEditor
                   value={descriptionDraft}
-                  onCommit={(nextValue) => { if (nextValue === lastCommittedDescriptionRef.current) return; lastCommittedDescriptionRef.current = nextValue; void saveDescription(nextValue) }}
+                  onCommit={(nextValue) => {
+                    if (nextValue === lastCommittedDescriptionRef.current) return
+                    lastCommittedDescriptionRef.current = nextValue
+                    setDescriptionDraft(nextValue)
+                    void saveDescription(nextValue)
+                  }}
                   onImageUpload={(file) => handleDescriptionImageUpload(file)}
                   busy={descriptionBusy}
                 />
@@ -400,7 +430,13 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
               <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 8 }}>
                   <input value={timeMinutes} onChange={(e) => setTimeMinutes(e.target.value)} placeholder="Minutes" inputMode="numeric" style={inputStyle} />
-                  <input value={timeUserName} onChange={(e) => setTimeUserName(e.target.value)} placeholder="User" style={inputStyle} />
+                  {timesheetUsers.length ? (
+                    <select value={timeUserId} onChange={(e) => setTimeUserId(e.target.value)} style={inputStyle}>
+                      {timesheetUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                    </select>
+                  ) : (
+                    <input value={timeUserName} onChange={(e) => setTimeUserName(e.target.value)} placeholder="User" style={inputStyle} />
+                  )}
                 </div>
                 <input type="date" value={timeDate} onChange={(e) => setTimeDate(e.target.value)} style={inputStyle} />
                 <input value={timeDescription} onChange={(e) => setTimeDescription(e.target.value)} placeholder="What was done" style={inputStyle} />
@@ -410,13 +446,14 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
                   <button onClick={() => void submitTime()} disabled={timeBusy || !timeMinutes} style={secondaryBtn}>{timeBusy ? 'Saving…' : 'Add time'}</button>
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: 12 }}>Click a row to edit. Changes save when you click away.</div>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#475569', fontSize: 13 }}><input type="checkbox" checked={showValidatedTimesheets} onChange={(e) => setShowValidatedTimesheets(e.target.checked)} /> Show validated entries ({validatedCount})</label>
                 {project ? (
                   <datalist id="drawer-task-options">
                     {project.recentTasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
                   </datalist>
                 ) : null}
                 <div style={{ display: 'grid', gap: 8 }}>
-                  {task.timesheets.length ? task.timesheets.map((entry) => (
+                  {visibleTimesheets.length ? visibleTimesheets.map((entry) => (
                     <div
                       key={entry.id}
                       style={{ border: editingTimesheetId === entry.id ? '1px solid #0f172a' : '1px solid #e2e8f0', borderRadius: 12, padding: 12, background: '#fff', cursor: editingTimesheetId ? 'default' : 'pointer' }}
@@ -440,13 +477,14 @@ export function TaskDrawer({ taskId, closeHref, projectId }: { taskId: string; c
                           <input list="drawer-task-options" value={editingTimesheetForm.taskId} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, taskId: e.target.value }))} placeholder="Task ID (leave blank for project only)" style={inputStyle} />
                           <input value={editingTimesheetForm.description} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, description: e.target.value }))} placeholder="What was done" style={inputStyle} />
                           <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#475569', fontSize: 14 }}><input type="checkbox" checked={editingTimesheetForm.billable} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, billable: e.target.checked }))} /> Billable</label>
+                          <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#475569', fontSize: 14 }}><input type="checkbox" checked={editingTimesheetForm.validated} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, validated: e.target.checked }))} /> Validated</label>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><div style={{ color: '#94a3b8', fontSize: 12 }}>Changes save on blur.</div><button type="button" onClick={() => void deleteTimesheet(entry.id)} style={dangerTextBtn}>Delete entry</button></div>
                         </div>
                       ) : (
-                        <div style={{ marginTop: 10, color: '#94a3b8', fontSize: 12 }}>Billable: {entry.billable ? 'Yes' : 'No'} · Click to edit</div>
+                        <div style={{ marginTop: 10, color: '#94a3b8', fontSize: 12 }}>Billable: {entry.billable ? 'Yes' : 'No'}{entry.validated ? ' · Validated' : ''} · Click to edit</div>
                       )}
                     </div>
-                  )) : <div style={{ color: '#64748b' }}>No time logged yet.</div>}
+                  )) : <div style={{ color: '#64748b' }}>{validatedCount ? 'All entries are validated. Toggle “Show validated entries” to review.' : 'No time logged yet.'}</div>}
                 </div>
               </div>
             </div>

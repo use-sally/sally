@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ProjectTaskListItem, StatusOption } from '@automatethis-pm/types/src'
 import { createProjectLabel, updateTask, updateTaskLabels } from '../lib/api'
-import { qk } from '../lib/query'
+import { qk, useTimesheetUsersQuery } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
+import { AssigneeAvatar } from './assignee-avatar'
+import { statusChipStyle } from '../lib/status-colors'
 
 type ActiveField = 'title' | 'assignee' | 'dueDate' | 'status' | 'labels' | null
 
@@ -43,6 +45,7 @@ export function EditableTaskRow({
   const [dueDate, setDueDate] = useState(task.dueDate ? String(task.dueDate).slice(0, 10) : '')
   const [statusId, setStatusId] = useState(task.statusId)
   const [labelsInput, setLabelsInput] = useState((task.labels || []).join(', '))
+  const { data: users = [] } = useTimesheetUsersQuery(projectId)
 
   useEffect(() => {
     setActiveField(null)
@@ -64,7 +67,7 @@ export function EditableTaskRow({
       qc.invalidateQueries({ queryKey: qk.project(projectId) }),
       qc.invalidateQueries({ queryKey: qk.projectTasks(projectId), exact: false }),
       qc.invalidateQueries({ queryKey: qk.board(projectId) }),
-      qc.invalidateQueries({ queryKey: qk.projects }),
+      qc.invalidateQueries({ queryKey: ['projects'] }),
       qc.invalidateQueries({ queryKey: qk.projectsSummary }),
     ])
   }
@@ -90,7 +93,18 @@ export function EditableTaskRow({
   }
 
   function startEdit(field: ActiveField) {
+    if (!expanded) {
+      onActivate()
+      return
+    }
     setActiveField(field)
+  }
+
+  function handleFieldClick(field: ActiveField) {
+    return (event: React.MouseEvent) => {
+      event.stopPropagation()
+      startEdit(field)
+    }
   }
 
   function priorityLevel(value: 'P1' | 'P2' | 'P3') {
@@ -99,8 +113,8 @@ export function EditableTaskRow({
 
   return (
     <div>
-      <div onClick={onActivate} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr 56px', gap: 10, padding: '14px 16px', alignItems: 'center', background: expanded ? '#f8fafc' : '#fff' }}>
-        <div onClick={() => startEdit('title')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
+      <div onClick={() => { if (!expanded) onActivate() }} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', background: expanded ? '#f8fafc' : '#fff' }}>
+        <div onClick={handleFieldClick('title')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
           {activeField === 'title' ? (
             <input
               value={title}
@@ -115,18 +129,21 @@ export function EditableTaskRow({
           )}
         </div>
 
-        <div onClick={() => startEdit('assignee')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text', color: '#475569' }}>
+        <div onClick={handleFieldClick('assignee')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#475569' }}>
           {activeField === 'assignee' ? (
-            <input
+            <select
               value={assignee}
               onChange={(e) => setAssignee(e.target.value)}
-              onBlur={() => { if (assignee !== (task.assignee === 'Unassigned' ? '' : task.assignee)) void saveTask({ assignee: assignee.trim() || 'Unassigned' }); setActiveField(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (assignee !== (task.assignee === 'Unassigned' ? '' : task.assignee)) void saveTask({ assignee: assignee.trim() || 'Unassigned' }); setActiveField(null) } }}
+              onBlur={() => { if (assignee !== (task.assignee === 'Unassigned' ? '' : task.assignee)) void saveTask({ assignee: assignee || 'Unassigned' }); setActiveField(null) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (assignee !== (task.assignee === 'Unassigned' ? '' : task.assignee)) void saveTask({ assignee: assignee || 'Unassigned' }); setActiveField(null) } }}
               autoFocus
               style={inputStyle}
-            />
+            >
+              <option value="">Unassigned</option>
+              {users.map((user) => <option key={user.id} value={user.name}>{user.name}</option>)}
+            </select>
           ) : (
-            <div>{task.assignee}</div>
+            <AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} />
           )}
         </div>
 
@@ -138,7 +155,7 @@ export function EditableTaskRow({
               <button
                 key={rating}
                 type="button"
-                onClick={() => { setPriority(value); if (value !== task.priority) void saveTask({ priority: value }) }}
+                onClick={(event) => { event.stopPropagation(); setPriority(value); if (!expanded) { onActivate(); return } if (value !== task.priority) void saveTask({ priority: value }) }}
                 style={{ ...starBtn, color: filled ? '#f59e0b' : '#cbd5e1' }}
               >
                 ★
@@ -147,7 +164,7 @@ export function EditableTaskRow({
           })}
         </div>
 
-        <div onClick={() => startEdit('dueDate')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
+        <div onClick={handleFieldClick('dueDate')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
           {activeField === 'dueDate' ? (
             <input
               type="date"
@@ -163,7 +180,7 @@ export function EditableTaskRow({
           )}
         </div>
 
-        <div onClick={() => startEdit('status')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+        <div onClick={handleFieldClick('status')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
           {activeField === 'status' ? (
             <select
               value={statusId}
@@ -175,11 +192,11 @@ export function EditableTaskRow({
               {statuses.map((status) => <option key={status.id} value={status.id}>{status.name}</option>)}
             </select>
           ) : (
-            <span style={pill('#f8fafc', '#334155')}>{activeStatus?.name || task.status}</span>
+            <span style={statusChipStyle(activeStatus?.color || task.statusColor)}>{activeStatus?.name || task.status}</span>
           )}
         </div>
 
-        <div onClick={() => startEdit('labels')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
+        <div onClick={handleFieldClick('labels')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
           {activeField === 'labels' ? (
             <input
               value={labelsInput}
@@ -199,7 +216,6 @@ export function EditableTaskRow({
           )}
         </div>
 
-        <div style={{ color: '#94a3b8', fontWeight: 700, textAlign: 'right', fontSize: 16 }}>{expanded ? '▲' : '▼'}</div>
       </div>
     </div>
   )

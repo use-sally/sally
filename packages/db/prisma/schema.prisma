@@ -21,15 +21,153 @@ enum TaskStatusType {
   DONE
 }
 
+enum PlatformRole {
+  NONE
+  SUPERADMIN
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ProjectRole {
+  OWNER
+  MEMBER
+  VIEWER
+}
+
 model Workspace {
   id        String    @id @default(cuid())
   name      String
   slug      String    @unique
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  projects  Project[]
-  clients   Client[]
-  users     User[]
+  projects     Project[]
+  clients      Client[]
+  users        User[]
+  memberships  WorkspaceMembership[]
+  invites      AccountInvite[]
+}
+
+model Account {
+  id          String                 @id @default(cuid())
+  email       String                 @unique
+  name        String?
+  avatarUrl   String?
+  passwordHash String?
+  platformRole PlatformRole          @default(NONE)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  memberships WorkspaceMembership[]
+  projectMemberships ProjectMembership[]
+  sessions    AccountSession[]
+  apiKeys     AccountApiKey[]
+  emailChanges EmailChangeToken[]
+  invites     AccountInvite[]
+  passwordResets PasswordReset[]
+}
+
+model AccountInvite {
+  id          String        @id @default(cuid())
+  email       String
+  workspaceId String
+  role        WorkspaceRole @default(MEMBER)
+  token       String        @unique
+  createdAt   DateTime      @default(now())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  accountId   String?
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account     Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([workspaceId])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  accountId String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model EmailChangeToken {
+  id        String   @id @default(cuid())
+  accountId String
+  newEmail  String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([newEmail])
+  @@index([expiresAt])
+}
+
+model WorkspaceMembership {
+  id          String         @id @default(cuid())
+  workspaceId String
+  accountId   String
+  role        WorkspaceRole  @default(MEMBER)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account     Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, accountId])
+  @@index([accountId])
+}
+
+model ProjectMembership {
+  id        String      @id @default(cuid())
+  projectId String
+  accountId String
+  role      ProjectRole @default(MEMBER)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, accountId])
+  @@index([accountId])
+}
+
+model AccountSession {
+  id        String   @id @default(cuid())
+  accountId String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
+}
+
+model AccountApiKey {
+  id        String   @id @default(cuid())
+  accountId String
+  label     String
+  prefix    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+  revokedAt DateTime?
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([revokedAt])
 }
 
 model Client {
@@ -65,6 +203,7 @@ model Project {
   name        String
   slug        String
   description String?
+  archivedAt  DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -73,6 +212,7 @@ model Project {
   tasks       Task[]
   labels      Label[]
   timesheets  TimesheetEntry[]
+  memberships ProjectMembership[]
 
   @@unique([workspaceId, slug])
 }
@@ -100,6 +240,7 @@ model Task {
   assignee    String?
   dueDate     DateTime?
   position    Int              @default(0)
+  archivedAt  DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)

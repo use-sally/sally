@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { getWorkspaceId, loadSession } from '../lib/auth'
 import { useProjectTasksQuery } from '../lib/query'
 import { TimesheetsFiltersBar, TimesheetsSummaryBar } from './timesheets-table-chrome'
 import { TimesheetsAddRow, TimesheetsEntryRow } from './timesheets-table-rows'
@@ -35,6 +36,8 @@ export function TimesheetsTable({
     to,
     projectId,
     clientId,
+    userId,
+    taskId,
     activeCell,
     draftValue,
     busyCell,
@@ -43,17 +46,22 @@ export function TimesheetsTable({
     newDescription,
     newBillable,
     newTaskId,
+    newUserId,
     newValidated,
+    newEntryError,
     newBusy,
     inputRef,
     report,
     error,
     projects,
     clients,
+    users,
     setFrom,
     setTo,
     setProjectId,
     setClientId,
+    setUserId,
+    setTaskId,
     showValidated,
     setDraftValue,
     setShowValidated,
@@ -62,6 +70,7 @@ export function TimesheetsTable({
     setNewDescription,
     setNewBillable,
     setNewTaskId,
+    setNewUserId,
     setNewValidated,
     startCellEdit,
     saveCell,
@@ -82,7 +91,19 @@ export function TimesheetsTable({
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   const resolvedTaskOptions = (taskOptions.length ? taskOptions : selectedProjectTasks.map((task) => ({ id: task.id, title: task.title })))
+  const showTaskFilter = !!activeProjectId && !lockedTaskId
 
+  const filteredProjects = useMemo(() => {
+    if (!clientId) return projects
+    return projects.filter((project) => project.client?.id === clientId)
+  }, [projects, clientId])
+
+  const canEditTimesheetUser = useMemo(() => {
+    const session = loadSession()
+    const workspaceId = getWorkspaceId()
+    const membership = session?.memberships?.find((item) => item.workspaceId === workspaceId) ?? session?.memberships?.[0]
+    return session?.account?.platformRole === 'SUPERADMIN' || membership?.role === 'OWNER'
+  }, [])
 
   const sortedEntries = useMemo(() => {
     const entries = [...(report?.entries ?? [])]
@@ -132,7 +153,7 @@ export function TimesheetsTable({
 
   function exportCsv() {
     const rows = [
-      ['Date', 'Customer', 'Project', 'User', 'Minutes', 'Billable', 'Task', 'Description'],
+      ['Date', 'Customer', 'Project', 'User', 'Minutes', 'Billable', 'Validated', 'Task', 'Description'],
       ...(report?.entries ?? []).map((entry) => [
         String(entry.date).slice(0, 10),
         entry.clientName || '',
@@ -140,6 +161,7 @@ export function TimesheetsTable({
         entry.userName,
         String(entry.minutes),
         entry.billable ? 'yes' : 'no',
+        entry.validated ? 'yes' : 'no',
         entry.taskTitle || entry.taskId || '',
         (entry.description || '').replace(/\n/g, ' '),
       ]),
@@ -155,7 +177,7 @@ export function TimesheetsTable({
   }
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
+    <div data-preserve-task-open="true" onMouseDown={(event) => event.stopPropagation()} style={{ display: 'grid', gap: 14 }}>
       <TimesheetsSummaryBar
         entries={report?.summary.entries ?? 0}
         totalMinutes={report?.summary.totalMinutes ?? 0}
@@ -168,13 +190,20 @@ export function TimesheetsTable({
         to={to}
         projectId={projectId}
         clientId={clientId}
-        projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+        userId={userId}
+        taskId={taskId}
+        projects={filteredProjects.map((project) => ({ id: project.id, name: project.name }))}
         clients={clients.map((client) => ({ id: client.id, name: client.name }))}
+        users={users.map((user) => ({ id: user.id, name: user.name }))}
+        taskOptions={showTaskFilter ? resolvedTaskOptions : []}
         lockedProjectId={lockedProjectId}
+        showTaskFilter={showTaskFilter}
         onFromChange={setFrom}
         onToChange={setTo}
         onProjectChange={setProjectId}
         onClientChange={setClientId}
+        onUserChange={setUserId}
+        onTaskChange={setTaskId}
         showValidated={showValidated}
         onShowValidatedChange={setShowValidated}
       />
@@ -203,11 +232,14 @@ export function TimesheetsTable({
           newTaskId={newTaskId}
           newDescription={newDescription}
           newValidated={newValidated}
+          newEntryError={newEntryError}
           newBusy={newBusy}
+          newUserId={newUserId}
           lockedProjectId={lockedProjectId}
           lockedProjectName={lockedProjectName}
           projectId={projectId}
-          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          projects={filteredProjects.map((project) => ({ id: project.id, name: project.name }))}
+          users={users.map((user) => ({ id: user.id, name: user.name }))}
           showCustomerColumn={effectiveShowCustomerColumn}
           showProjectColumn={effectiveShowProjectColumn}
           showUserColumn={effectiveShowUserColumn}
@@ -218,6 +250,7 @@ export function TimesheetsTable({
           onBillableChange={setNewBillable}
           taskOptions={resolvedTaskOptions}
           onTaskIdChange={setNewTaskId}
+          onUserChange={setNewUserId}
           onDescriptionChange={setNewDescription}
           onValidatedChange={setNewValidated}
           onProjectChange={setProjectId}
@@ -236,8 +269,10 @@ export function TimesheetsTable({
               showCustomerColumn={effectiveShowCustomerColumn}
               showProjectColumn={effectiveShowProjectColumn}
               showUserColumn={effectiveShowUserColumn}
-          showTaskColumn={effectiveShowTaskColumn}
-          showValidationColumn={effectiveShowValidationColumn}
+              showTaskColumn={effectiveShowTaskColumn}
+              showValidationColumn={effectiveShowValidationColumn}
+              users={users.map((user) => ({ id: user.id, name: user.name }))}
+              canEditUser={canEditTimesheetUser}
               activeField={activeField}
               draftValue={draftValue}
               inputRef={inputRef}

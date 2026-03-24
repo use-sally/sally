@@ -1,11 +1,12 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import type { Project } from '@automatethis-pm/types/src'
 import { createTask } from '../lib/api'
 import { tagStyle } from './app-shell'
 
-export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated }: { projects: Project[]; defaultProjectId?: string; onClose: () => void; onCreated: () => Promise<void> | void }) {
+type TaskModalProjectOption = { id: string; name: string }
+
+export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated }: { projects: TaskModalProjectOption[]; defaultProjectId?: string; onClose: () => void; onCreated: () => Promise<void> | void }) {
   const [projectId, setProjectId] = useState(defaultProjectId || projects[0]?.id || '')
   const [title, setTitle] = useState('')
   const [assignee, setAssignee] = useState('')

@@ -19,6 +19,7 @@ export type Project = {
   lead: string
   tasks: number
   status: ProjectStatus
+  archivedAt: string | null
 }
 
 export type Client = {
@@ -26,6 +27,24 @@ export type Client = {
   name: string
   notes: string | null
   projectCount: number
+}
+
+export type ClientProjectSummary = {
+  id: string
+  name: string
+  lead: string
+  tasks: number
+  status: ProjectStatus
+  archivedAt: string | null
+}
+
+export type ClientDetail = {
+  id: string
+  name: string
+  notes: string | null
+  createdAt: string
+  projectCount: number
+  projects: ClientProjectSummary[]
 }
 
 export type LabelOption = {
@@ -38,6 +57,7 @@ export type StatusOption = {
   name: string
   type: string
   position: number
+  color?: string | null
 }
 
 export type TodoItem = {
@@ -90,12 +110,15 @@ export type ProjectTaskListItem = {
   id: string
   title: string
   assignee: string
+  assigneeAvatarUrl?: string | null
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
+  statusColor?: string | null
   dueDate: string | null
   labels: string[]
   todoProgress: TodoProgress
+  archivedAt: string | null
 }
 
 export type BoardCard = {
@@ -104,6 +127,7 @@ export type BoardCard = {
   meta: string
   description: string
   assignee: string
+  assigneeAvatarUrl?: string | null
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
@@ -136,9 +160,11 @@ export type ProjectDetail = {
     id: string
     title: string
     assignee: string
+    assigneeAvatarUrl?: string | null
     priority: 'P1' | 'P2' | 'P3'
     status: string
     statusId: string
+    statusColor?: string | null
     dueDate: string | null
     labels: string[]
     todoProgress: TodoProgress
@@ -150,6 +176,7 @@ export type TaskDetail = {
   title: string
   description: string
   assignee: string
+  assigneeAvatarUrl?: string | null
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
@@ -161,4 +188,36 @@ export type TaskDetail = {
   timesheetUsers: TimesheetUser[]
   project: { id: string; name: string; client: { id: string; name: string } | null }
   comments: { id: string; author: string; body: string; createdAt: string }[]
+}
+
+export type WorkspaceInfo = {
+  id: string
+  name: string
+  slug: string
+  createdAt: string
+}
+
+export type AccountSummary = {
+  id: string
+  name: string | null
+  email: string
+  memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[]
+}
+
+export type WorkspaceMember = {
+  id: string
+  accountId: string
+  name: string | null
+  email: string
+  role: string
+  createdAt: string
+}
+
+export type ProjectMember = {
+  id: string
+  accountId: string
+  name: string | null
+  email: string
+  role: string
+  createdAt: string
 }

@@ -49,8 +49,13 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
       <div style={newClientBox}>
         <div style={{ fontWeight: 600 }}>Need a new client?</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <input value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Client name" style={input} />
-          <button onClick={() => void handleAdd()} disabled={!newClientName.trim() || creating} style={{ ...primaryBtn, padding: '10px 12px' }}>{creating ? 'Adding…' : 'Add'}</button>
+          <input
+            value={newClientName}
+            onChange={(e) => setNewClientName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAdd() } }}
+            placeholder="Client name"
+            style={input}
+          />
         </div>
         <span style={helperText}>New clients become available immediately and stay available for other projects.</span>
         {error ? <div style={{ color: '#b91c1c', marginTop: 6 }}>{error}</div> : null}
@@ -63,4 +68,3 @@ const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, c
 const input: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 12px', background: '#fff', fontWeight: 500 }
 const helperText: React.CSSProperties = { fontSize: 12, color: '#64748b', fontWeight: 500 }
 const newClientBox: React.CSSProperties = { border: '1px dashed #dbe1ea', borderRadius: 14, padding: 12, display: 'grid', gap: 6, background: '#f8fafc' }
-const primaryBtn: React.CSSProperties = { background: '#0f172a', color: '#fff', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }

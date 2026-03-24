@@ -23,6 +23,7 @@ export function BottomTaskDrawer({ taskId, closeHref, projectId }: { taskId: str
     dueDate: task.dueDate,
     labels: task.labels,
     todoProgress: task.todos.length ? `${task.todos.filter((todo) => todo.done).length}/${task.todos.length}` : null,
+    archivedAt: null,
   }
 
   return (

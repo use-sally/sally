@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { TimesheetReportEntry } from '@automatethis-pm/types/src'
 import { createTimesheetEntry, deleteTimesheetEntry, updateTimesheetEntry } from '../lib/api'
-import { qk, useClientsQuery, useProjectsQuery, useTimesheetReportQuery } from '../lib/query'
+import { qk, useClientsQuery, useProjectsQuery, useTimesheetReportQuery, useTimesheetUsersQuery } from '../lib/query'
 import type { ActiveCell, EditableField } from './timesheets-table-rows'
 
 export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedProjectId?: string; lockedTaskId?: string }) {
@@ -12,6 +12,8 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
   const [to, setTo] = useState('')
   const [projectId, setProjectId] = useState(lockedProjectId || '')
   const [clientId, setClientId] = useState('')
+  const [userId, setUserId] = useState('')
+  const [taskId, setTaskId] = useState('')
   const [showValidated, setShowValidated] = useState(false)
   const [activeCell, setActiveCell] = useState<ActiveCell>(null)
   const [draftValue, setDraftValue] = useState<string | boolean>('')
@@ -21,9 +23,11 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
   const [newDescription, setNewDescription] = useState('')
   const [newBillable, setNewBillable] = useState(true)
   const [newTaskId, setNewTaskId] = useState('')
+  const [newUserId, setNewUserId] = useState('')
   const [newValidated, setNewValidated] = useState(false)
+  const [newEntryError, setNewEntryError] = useState<string | null>(null)
   const [newBusy, setNewBusy] = useState(false)
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
   const qc = useQueryClient()
 
   useEffect(() => {
@@ -31,9 +35,13 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
   }, [lockedProjectId])
 
   useEffect(() => {
+    if (!lockedTaskId) setTaskId('')
+  }, [projectId, lockedTaskId])
+
+  useEffect(() => {
     if (activeCell && inputRef.current) {
       inputRef.current.focus()
-      inputRef.current.select?.()
+      if (inputRef.current instanceof HTMLInputElement) inputRef.current.select()
     }
   }, [activeCell])
 
@@ -42,21 +50,34 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
     to: to || undefined,
     projectId: (lockedProjectId || projectId) || undefined,
     clientId: clientId || undefined,
-    taskId: lockedTaskId || undefined,
+    userId: userId || undefined,
+    taskId: lockedTaskId || taskId || undefined,
     showValidated,
-  }), [from, to, projectId, clientId, showValidated, lockedProjectId, lockedTaskId])
+  }), [from, to, projectId, clientId, userId, taskId, showValidated, lockedProjectId, lockedTaskId])
 
   const { data: report, error } = useTimesheetReportQuery(filters)
   const { data: projects = [] } = useProjectsQuery()
   const { data: clients = [] } = useClientsQuery()
+  const { data: users = [] } = useTimesheetUsersQuery(lockedProjectId || projectId || undefined)
+
+  useEffect(() => {
+    if (!newUserId && users.length) setNewUserId(users[0].id)
+  }, [users, newUserId])
+
+  useEffect(() => {
+    if (!clientId || !projectId) return
+    const selectedProject = projects.find((project) => project.id === projectId)
+    if (selectedProject && selectedProject.client?.id !== clientId) setProjectId('')
+  }, [clientId, projectId, projects])
 
   async function invalidate(entry?: TimesheetReportEntry) {
+    const targetProjectId = entry?.projectId || lockedProjectId
     await Promise.all([
-      qc.invalidateQueries({ queryKey: qk.timesheetReport(filters) }),
-      entry ? qc.invalidateQueries({ queryKey: qk.project(entry.projectId) }) : Promise.resolve(),
-      entry ? qc.invalidateQueries({ queryKey: qk.projectTimesheets(entry.projectId) }) : Promise.resolve(),
-      lockedProjectId ? qc.invalidateQueries({ queryKey: qk.project(lockedProjectId) }) : Promise.resolve(),
-      lockedProjectId ? qc.invalidateQueries({ queryKey: qk.projectTimesheets(lockedProjectId) }) : Promise.resolve(),
+      qc.invalidateQueries({ queryKey: ['timesheetReport'] }),
+      targetProjectId ? qc.invalidateQueries({ queryKey: ['project', targetProjectId] }) : Promise.resolve(),
+      targetProjectId ? qc.invalidateQueries({ queryKey: qk.projectTimesheets(targetProjectId) }) : Promise.resolve(),
+      lockedTaskId ? qc.invalidateQueries({ queryKey: qk.task(lockedTaskId) }) : Promise.resolve(),
+      lockedTaskId ? qc.invalidateQueries({ queryKey: qk.taskTimesheets(lockedTaskId) }) : Promise.resolve(),
     ])
   }
 
@@ -66,6 +87,7 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
 
   function getFieldValue(entry: TimesheetReportEntry, field: EditableField): string | boolean {
     if (field === 'date') return String(entry.date).slice(0, 10)
+    if (field === 'userId') return entry.userId
     if (field === 'minutes') return String(entry.minutes)
     if (field === 'billable') return entry.billable
     if (field === 'taskId') return entry.taskId ?? ''
@@ -96,6 +118,9 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
       const nextDate = String(draftValue || '').trim()
       if (!nextDate) return
       if (nextDate !== String(entry.date).slice(0, 10)) payload = { date: nextDate }
+    } else if (cell.field === 'userId') {
+      const nextUserId = String(draftValue || '').trim()
+      if (nextUserId && nextUserId !== entry.userId) payload = { userId: nextUserId }
     } else if (cell.field === 'minutes') {
       const minutes = Math.round(Number(draftValue))
       if (!minutes || minutes <= 0) return
@@ -130,7 +155,19 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
   async function submitNewEntry() {
     const minutes = Number(newMinutes)
     const nextProjectId = lockedProjectId || projectId
-    if (!nextProjectId || !minutes || minutes <= 0 || !newDate) return
+    setNewEntryError(null)
+    if (!nextProjectId) {
+      setNewEntryError('Select a project first.')
+      return
+    }
+    if (!newDate) {
+      setNewEntryError('Date is required.')
+      return
+    }
+    if (!newMinutes.trim() || !minutes || minutes <= 0) {
+      setNewEntryError('Minutes are required.')
+      return
+    }
     setNewBusy(true)
     try {
       await createTimesheetEntry({
@@ -141,11 +178,13 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
         billable: newBillable,
         validated: newValidated,
         taskId: lockedTaskId || newTaskId.trim() || undefined,
+        userId: newUserId || undefined,
       })
       setNewMinutes('')
       setNewDescription('')
       setNewTaskId('')
       setNewValidated(false)
+      setNewEntryError(null)
       await invalidate()
     } finally {
       setNewBusy(false)
@@ -183,6 +222,8 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
     to,
     projectId,
     clientId,
+    userId,
+    taskId,
     showValidated,
     activeCell,
     draftValue,
@@ -192,17 +233,22 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
     newDescription,
     newBillable,
     newTaskId,
+    newUserId,
     newValidated,
+    newEntryError,
     newBusy,
     inputRef,
     report,
     error,
     projects,
     clients,
+    users,
     setFrom,
     setTo,
     setProjectId,
     setClientId,
+    setUserId,
+    setTaskId,
     setShowValidated,
     setDraftValue,
     setNewMinutes,
@@ -210,6 +256,7 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
     setNewDescription,
     setNewBillable,
     setNewTaskId,
+    setNewUserId,
     setNewValidated,
     startCellEdit,
     saveCell,

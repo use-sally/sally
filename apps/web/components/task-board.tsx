@@ -10,6 +10,7 @@ import type { BoardCard, BoardColumn } from '@automatethis-pm/types/src'
 import { createTask, reorderTask } from '../lib/api'
 import { qk } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
+import { AssigneeAvatar } from './assignee-avatar'
 
 function dueBadge(dueDate: string | null) {
   if (!dueDate) return null
@@ -37,7 +38,7 @@ export function TaskBoard({ columns, taskBaseHref, projectId }: { columns: Board
       qc.invalidateQueries({ queryKey: qk.board(projectId) }),
       qc.invalidateQueries({ queryKey: qk.project(projectId) }),
       qc.invalidateQueries({ queryKey: qk.projectTasks(projectId), exact: false }),
-      qc.invalidateQueries({ queryKey: qk.projects }),
+      qc.invalidateQueries({ queryKey: ['projects'] }),
       qc.invalidateQueries({ queryKey: qk.projectsSummary }),
     ])
   }
@@ -170,7 +171,7 @@ function SortableTaskCard({ card, taskBaseHref }: { card: BoardCard; taskBaseHre
       <Link href={`${taskBaseHref}?task=${card.id}`} style={{ textAlign: 'left', textDecoration: 'none', color: '#0f172a', background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 12, display: 'block' }}>
         <div {...attributes} {...listeners} style={{ cursor: 'grab' }}>
           <div style={{ fontWeight: 600, lineHeight: 1.35 }}>{card.title}</div>
-          <div style={{ marginTop: 8, color: '#64748b', fontSize: 13 }}>{card.assignee} · <span style={{ color: '#0f172a' }}>{priorityStars(card.priority)}</span></div>
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13 }}><AssigneeAvatar name={card.assignee} avatarUrl={card.assigneeAvatarUrl} size={26} /><span style={{ color: '#0f172a' }}>{priorityStars(card.priority)}</span></div>
           {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             {card.todoProgress ? <span style={pill('#ecfeff', '#155e75')}>Todos {card.todoProgress}</span> : null}

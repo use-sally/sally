@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { createComment, createProjectLabel, createTaskTodo, deleteTaskTodo, updateTask, updateTaskLabels, updateTaskTodo, uploadTaskDescriptionImage } from '../lib/api'
+import { archiveTask, createComment, createProjectLabel, createTaskTodo, deleteTask, deleteTaskTodo, updateTask, updateTaskLabels, updateTaskTodo, uploadTaskDescriptionImage } from '../lib/api'
 import { qk, useProjectQuery, useTaskQuery } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
 import { MarkdownDescriptionEditor } from './markdown-description-editor'
@@ -78,7 +78,7 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
       qc.invalidateQueries({ queryKey: qk.project(projectId) }),
       qc.invalidateQueries({ queryKey: qk.projectTasks(projectId), exact: false }),
       qc.invalidateQueries({ queryKey: qk.board(projectId) }),
-      qc.invalidateQueries({ queryKey: qk.projects }),
+      qc.invalidateQueries({ queryKey: ['projects'] }),
       qc.invalidateQueries({ queryKey: qk.projectsSummary }),
     ])
   }
@@ -189,6 +189,30 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
     }
   }
 
+  async function handleArchiveTask() {
+    if (!task) return
+    if (typeof window !== 'undefined' && !window.confirm('Archive this task? You can restore it later.')) return
+    setBusy(true)
+    try {
+      await archiveTask(task.id)
+      await invalidateAll()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteTask() {
+    if (!task) return
+    if (typeof window !== 'undefined' && !window.confirm('Delete this task? This removes its comments, todos, and time logs.')) return
+    setBusy(true)
+    try {
+      await deleteTask(task.id)
+      await invalidateAll()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (error) return <div style={{ color: '#991b1b' }}>{error instanceof Error ? error.message : 'Failed to load task'}</div>
   if (!task) return <div style={{ color: '#64748b' }}>Loading task…</div>
 
@@ -199,7 +223,12 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
           <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Description</div>
           <MarkdownDescriptionEditor
             value={description}
-            onCommit={(nextValue) => { if (nextValue === lastCommittedDescriptionRef.current) return; lastCommittedDescriptionRef.current = nextValue; void saveDescription(nextValue) }}
+            onCommit={(nextValue) => {
+              if (nextValue === lastCommittedDescriptionRef.current) return
+              lastCommittedDescriptionRef.current = nextValue
+              setDescription(nextValue)
+              void saveDescription(nextValue)
+            }}
             onImageUpload={(file) => handleDescriptionImageUpload(file)}
             busy={busy}
           />
@@ -230,6 +259,11 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
           <button onClick={() => void addComment()} style={btnStyle}>Comment</button>
         </div>
       </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+        <button onClick={() => void handleArchiveTask()} disabled={busy} aria-label="Archive task" title="Archive task" style={panelIconBtn}>🗄️</button>
+        <button onClick={() => void handleDeleteTask()} disabled={busy} aria-label="Delete task" title="Delete task" style={panelDangerIconBtn}>🗑️</button>
+      </div>
     </div>
   )
 }
@@ -237,3 +271,5 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
 const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 12px', background: '#fff' }
 const btnStyle: React.CSSProperties = { background: '#0f172a', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }
 const ghostIconBtn: React.CSSProperties = { background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1 }
+const panelIconBtn: React.CSSProperties = { background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 999, width: 38, height: 38, display: 'grid', placeItems: 'center', fontSize: 17, lineHeight: 1, cursor: 'pointer' }
+const panelDangerIconBtn: React.CSSProperties = { background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 999, width: 38, height: 38, display: 'grid', placeItems: 'center', fontSize: 17, lineHeight: 1, cursor: 'pointer' }

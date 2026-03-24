@@ -27,3 +27,6 @@ Modern internal PM product for AutomateThis.
 - kanban board
 - comments
 - basic filters
+
+## Auth/workspace notes
+See `docs/auth.md` for the current API token + workspace header setup.

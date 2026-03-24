@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { apiUrl } from '../lib/api'
@@ -17,10 +17,6 @@ function normalizeManagedPaths(markdown: string) {
     .replace(/\[([^\]]+)\]\((\/uploads\/[^\s\)]+)(\s+["'][^"']+["'])?\)/g, (_match, text, href, title = '') => `[${text}](${apiUrl(href)}${title || ''})`)
 }
 
-function escapeAttr(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-}
-
 function denormalizeManagedPath(src: string) {
   try {
     const url = new URL(src)
@@ -29,34 +25,12 @@ function denormalizeManagedPath(src: string) {
   return src
 }
 
-function extractPersistedWidth(imgTag: string) {
-  const styleMatch = imgTag.match(/width:\s*(\d+)px/i)
-  if (styleMatch) return Number(styleMatch[1])
-  const attrMatch = imgTag.match(/width=["'](\d+)["']/i)
-  if (attrMatch) return Number(attrMatch[1])
-  const titleMatch = imgTag.match(/title=["']width=(\d+)["']/i)
-  if (titleMatch) return Number(titleMatch[1])
-  return 640
-}
-
-function wrapImagesWithResizablePreview(html: string) {
-  return html.replace(/<img\b([^>]*?)src=["']([^"']+)["']([^>]*?)alt=["']([^"']*)["']([^>]*?)>|<img\b([^>]*?)alt=["']([^"']*)["']([^>]*?)src=["']([^"']+)["']([^>]*?)>/gi, (...args) => {
-    const match = args[0] as string
-    const src = (args[2] || args[9] || '') as string
-    const alt = (args[4] || args[7] || '') as string
-    const width = extractPersistedWidth(match)
-    const persistedSrc = denormalizeManagedPath(src)
-    return `<span data-resizable-image="1" data-src="${escapeAttr(persistedSrc)}" data-alt="${escapeAttr(alt)}" style="display:block;position:relative;max-width:100%;width:min(100%, ${width}px);border:1px dashed #e2e8f0;border-radius:12px;padding:4px;background:#fff;margin:12px 0;overflow:visible;"><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" style="display:block;width:100%;height:auto;max-width:none;border-radius:8px;" /><span data-resize-handle="1" style="position:absolute;top:4px;right:-6px;bottom:4px;width:12px;cursor:ew-resize;background:linear-gradient(to right, transparent, rgba(148,163,184,0.45));border-radius:999px;"></span></span>`
-  })
-}
-
 export function renderMarkdownToHtml(markdown: string) {
   const html = marked.parse(normalizeManagedPaths(markdown || ''), {
     breaks: true,
     gfm: true,
   }) as string
-  const sanitized = DOMPurify.sanitize(html)
-  return wrapImagesWithResizablePreview(sanitized)
+  return DOMPurify.sanitize(html)
 }
 
 const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-', codeBlockStyle: 'fenced' })
