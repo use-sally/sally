@@ -22,10 +22,10 @@ if [ -z "$DATABASE_URL" ]; then
   exit 1
 fi
 
-export DATABASE_URL
+PG_DUMP_URL=${DATABASE_URL%%\?schema=*}
 export PGAPPNAME=automatethis-backup
 
-pg_dump --clean --if-exists --no-owner --no-privileges --format=custom --file="$TARGET_DIR/database.dump" "$DATABASE_URL"
+pg_dump --clean --if-exists --no-owner --no-privileges --format=custom --file="$TARGET_DIR/database.dump" "$PG_DUMP_URL"
 
 if [ -d "$UPLOADS_DIR" ]; then
   tar -C "$UPLOADS_DIR" -czf "$TARGET_DIR/uploads.tar.gz" .
