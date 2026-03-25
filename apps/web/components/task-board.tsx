@@ -6,11 +6,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { DndContext, DragEndEvent, DragOverEvent, PointerSensor, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { BoardCard, BoardColumn } from '@automatethis-pm/types/src'
+import type { BoardCard, BoardColumn } from '@sally/types/src'
 import { createTask, reorderTask } from '../lib/api'
 import { qk } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
 import { AssigneeAvatar } from './assignee-avatar'
+import { taskTitleText } from '../lib/theme'
 
 function dueBadge(dueDate: string | null) {
   if (!dueDate) return null
@@ -137,10 +138,10 @@ export function TaskBoard({ columns, taskBaseHref, projectId }: { columns: Board
 function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTask, savingFor }: any) {
   const { setNodeRef } = useDroppable({ id: column.id })
   return (
-    <div ref={setNodeRef} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: 12 }}>
+    <div ref={setNodeRef} style={{ background: 'var(--panel-bg)', border: '1px solid var(--panel-border)', borderRadius: 16, padding: 12, boxShadow: 'var(--panel-shadow)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontWeight: 700, fontSize: 14 }}>{column.title}</div>
-        <div style={{ color: '#64748b', fontSize: 13 }}>{column.cards.length}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{column.cards.length}</div>
       </div>
 
       <SortableContext items={column.cards.map((c: BoardCard) => c.id)} strategy={verticalListSortingStrategy}>
@@ -155,9 +156,9 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
           onChange={(e) => setDrafts((d: any) => ({ ...d, [column.id]: e.target.value }))}
           onKeyDown={(e) => { if (e.key === 'Enter') void addInlineTask(column.id) }}
           placeholder={`Add to ${column.title}`}
-          style={{ width: '100%', border: '1px solid #dbe1ea', borderRadius: 10, padding: '10px 12px', background: '#fff' }}
+          style={{ width: '100%', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', background: 'var(--form-bg)', color: 'var(--form-text)' }}
         />
-        <div style={{ color: '#64748b', fontSize: 12 }}>{savingFor === column.id ? 'Adding…' : 'Press Enter to create'}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{savingFor === column.id ? 'Adding…' : 'Press Enter to create'}</div>
       </div>
     </div>
   )
@@ -168,10 +169,10 @@ function SortableTaskCard({ card, taskBaseHref }: { card: BoardCard; taskBaseHre
   const badge = dueBadge(card.dueDate)
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}>
-      <Link href={`${taskBaseHref}?task=${card.id}`} style={{ textAlign: 'left', textDecoration: 'none', color: '#0f172a', background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 12, display: 'block' }}>
+      <Link href={`${taskBaseHref}?task=${card.id}`} style={{ textAlign: 'left', textDecoration: 'none', color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'block', boxShadow: '0 10px 24px rgba(16, 185, 129, 0.08)' }}>
         <div {...attributes} {...listeners} style={{ cursor: 'grab' }}>
-          <div style={{ fontWeight: 600, lineHeight: 1.35 }}>{card.title}</div>
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: 13 }}><AssigneeAvatar name={card.assignee} avatarUrl={card.assigneeAvatarUrl} size={26} /><span style={{ color: '#0f172a' }}>{priorityStars(card.priority)}</span></div>
+          <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35 }}>{card.title}</div>
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}><AssigneeAvatar name={card.assignee} avatarUrl={card.assigneeAvatarUrl} size={26} /><span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span></div>
           {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             {card.todoProgress ? <span style={pill('#ecfeff', '#155e75')}>Todos {card.todoProgress}</span> : null}

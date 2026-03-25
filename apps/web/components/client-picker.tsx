@@ -11,12 +11,16 @@ type ClientPickerProps = {
   onChange: (clientId: string) => void
 }
 
+const ADD_NEW_CLIENT_VALUE = '__add_new_client__'
+
 export function ClientPicker({ value, onChange }: ClientPickerProps) {
   const { data: clients } = useClientsQuery()
   const qc = useQueryClient()
   const [newClientName, setNewClientName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [addingNewClient, setAddingNewClient] = useState(false)
+  const showInlineCreate = addingNewClient
 
   async function handleAdd() {
     if (!newClientName.trim() || creating) return
@@ -25,6 +29,7 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
       setError(null)
       const result = await createClient({ name: newClientName.trim() })
       setNewClientName('')
+      setAddingNewClient(false)
       onChange(result.clientId)
       await qc.invalidateQueries({ queryKey: qk.clients })
     } catch (err) {
@@ -35,36 +40,41 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
+    <div style={{ display: 'grid', gap: 10 }}>
       <label style={field}>
         <span>Client</span>
-        <select value={value} onChange={(e) => onChange(e.target.value)} style={input}>
+        <select value={showInlineCreate ? ADD_NEW_CLIENT_VALUE : value} onChange={(e) => {
+          setError(null)
+          if (e.target.value === ADD_NEW_CLIENT_VALUE) {
+            setAddingNewClient(true)
+            return
+          }
+          setAddingNewClient(false)
+          onChange(e.target.value)
+        }} style={input}>
           <option value="">No client / internal</option>
           {(clients || []).map((client) => (
             <option key={client.id} value={client.id}>{client.name}</option>
           ))}
+          <option value={ADD_NEW_CLIENT_VALUE}>Add new client</option>
         </select>
         <span style={helperText}>Attach work to a customer to make reporting and handoffs easier.</span>
       </label>
-      <div style={newClientBox}>
-        <div style={{ fontWeight: 600 }}>Need a new client?</div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <input
-            value={newClientName}
-            onChange={(e) => setNewClientName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAdd() } }}
-            placeholder="Client name"
-            style={input}
-          />
-        </div>
-        <span style={helperText}>New clients become available immediately and stay available for other projects.</span>
-        {error ? <div style={{ color: '#b91c1c', marginTop: 6 }}>{error}</div> : null}
-      </div>
+      {showInlineCreate ? (
+        <input
+          autoFocus
+          value={newClientName}
+          onChange={(e) => setNewClientName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAdd() } }}
+          placeholder="Add client name and press Enter"
+          style={input}
+        />
+      ) : null}
+      {error ? <div style={{ color: '#b91c1c' }}>{error}</div> : null}
     </div>
   )
 }
 
-const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: '#334155' }
-const input: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 12px', background: '#fff', fontWeight: 500 }
-const helperText: React.CSSProperties = { fontSize: 12, color: '#64748b', fontWeight: 500 }
-const newClientBox: React.CSSProperties = { border: '1px dashed #dbe1ea', borderRadius: 14, padding: 12, display: 'grid', gap: 6, background: '#f8fafc' }
+const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: 'rgba(209, 250, 229, 0.72)' }
+const input: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', background: 'var(--form-bg)', fontWeight: 500 }
+const helperText: React.CSSProperties = { fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }

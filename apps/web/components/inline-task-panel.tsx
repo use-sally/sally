@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { archiveTask, createComment, createProjectLabel, createTaskTodo, deleteTask, deleteTaskTodo, updateTask, updateTaskLabels, updateTaskTodo, uploadTaskDescriptionImage } from '../lib/api'
+import type { MentionableUser } from '@sally/types/src'
+import { archiveTask, createComment, createProjectLabel, createTaskTodo, deleteTask, deleteTaskTodo, getMentionableUsers, updateTask, updateTaskLabels, updateTaskTodo, uploadTaskDescriptionImage } from '../lib/api'
+import { loadSession } from '../lib/auth'
 import { qk, useProjectQuery, useTaskQuery } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
 import { MarkdownDescriptionEditor } from './markdown-description-editor'
 import { TimesheetsTable } from './timesheets-table'
+import { archiveTextAction, deleteTextAction } from '../lib/theme'
 async function compressImageForTask(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
   const imageUrl = URL.createObjectURL(file)
   try {
@@ -44,6 +47,39 @@ async function compressImageForTask(file: File): Promise<{ mimeType: string; bas
   }
 }
 
+function getTextareaCaretPosition(textarea: HTMLTextAreaElement, caretIndex: number) {
+  const style = window.getComputedStyle(textarea)
+  const mirror = document.createElement('div')
+  mirror.style.position = 'absolute'
+  mirror.style.visibility = 'hidden'
+  mirror.style.whiteSpace = 'pre-wrap'
+  mirror.style.wordWrap = 'break-word'
+  mirror.style.boxSizing = 'border-box'
+  mirror.style.font = style.font
+  mirror.style.fontFamily = style.fontFamily
+  mirror.style.fontSize = style.fontSize
+  mirror.style.fontWeight = style.fontWeight
+  mirror.style.lineHeight = style.lineHeight
+  mirror.style.letterSpacing = style.letterSpacing
+  mirror.style.padding = style.padding
+  mirror.style.border = style.border
+  mirror.style.width = `${textarea.clientWidth}px`
+  mirror.style.overflow = 'hidden'
+
+  const before = textarea.value.slice(0, caretIndex)
+  const after = textarea.value.slice(caretIndex) || ' '
+  mirror.textContent = before
+  const marker = document.createElement('span')
+  marker.textContent = after[0]
+  mirror.appendChild(marker)
+  document.body.appendChild(mirror)
+  const top = marker.offsetTop - textarea.scrollTop
+  const left = marker.offsetLeft - textarea.scrollLeft
+  const lineHeight = Number.parseFloat(style.lineHeight || '20') || 20
+  document.body.removeChild(mirror)
+  return { top, left, lineHeight }
+}
+
 export function InlineTaskPanel({ taskId, projectId }: { taskId: string; projectId: string }) {
   const qc = useQueryClient()
   const { data: task, error } = useTaskQuery(taskId)
@@ -57,8 +93,17 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
   const [newLabel, setNewLabel] = useState('')
   const [newTodo, setNewTodo] = useState('')
   const [commentBody, setCommentBody] = useState('')
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionOptions, setMentionOptions] = useState<MentionableUser[]>([])
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionRange, setMentionRange] = useState<{ start: number; end: number } | null>(null)
+  const [mentionMenuPos, setMentionMenuPos] = useState<{ top: number; left: number } | null>(null)
+  const [mentionMap, setMentionMap] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const [timesheetsOpen, setTimesheetsOpen] = useState(false)
   const lastCommittedDescriptionRef = useRef('')
+  const commentInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const session = useMemo(() => loadSession(), [])
 
   useEffect(() => {
     if (!task) return
@@ -71,6 +116,29 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
     setDescription(nextDescription)
     lastCommittedDescriptionRef.current = nextDescription
   }, [task])
+
+  useEffect(() => {
+    if (!task?.project.id || !mentionQuery) {
+      setMentionOptions([])
+      setMentionIndex(0)
+      return
+    }
+    let cancelled = false
+    void getMentionableUsers(task.project.id, mentionQuery)
+      .then((users) => {
+        if (!cancelled) {
+          setMentionOptions(users)
+          setMentionIndex(0)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMentionOptions([])
+          setMentionIndex(0)
+        }
+      })
+    return () => { cancelled = true }
+  }, [mentionQuery, task?.project.id])
 
   async function invalidateAll() {
     await Promise.all([
@@ -176,13 +244,66 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
     }
   }
 
+  function syncMentionState(value: string, caretIndex: number) {
+    const beforeCaret = value.slice(0, caretIndex)
+    const match = beforeCaret.match(/(^|\s)@([a-zA-Z0-9._-]{0,30})$/)
+    if (!match) {
+      setMentionRange(null)
+      setMentionMenuPos(null)
+      setMentionQuery('')
+      setMentionOptions([])
+      setMentionIndex(0)
+      return
+    }
+    const start = caretIndex - match[0].length + match[1].length
+    setMentionRange({ start, end: caretIndex })
+    setMentionQuery(match[2] || '')
+    if (commentInputRef.current) {
+      const coords = getTextareaCaretPosition(commentInputRef.current, caretIndex)
+      setMentionMenuPos({ top: coords.top + coords.lineHeight + 6, left: coords.left })
+    }
+  }
+
+  function handleCommentChange(value: string, caretIndex: number) {
+    setCommentBody(value)
+    syncMentionState(value, caretIndex)
+  }
+
+  function insertMention(user: MentionableUser) {
+    if (!mentionRange) return
+    const textarea = commentInputRef.current
+    const display = (user.name || user.email.split('@')[0]).replace(/\s+/g, '.').toLowerCase()
+    const nextValue = `${commentBody.slice(0, mentionRange.start)}@${display} ${commentBody.slice(mentionRange.end)}`
+    const nextCaret = mentionRange.start + display.length + 2
+    setCommentBody(nextValue)
+    setMentionMap((current) => ({ ...current, [display]: user.accountId }))
+    setMentionRange(null)
+    setMentionMenuPos(null)
+    setMentionQuery('')
+    setMentionOptions([])
+    setMentionIndex(0)
+    requestAnimationFrame(() => {
+      textarea?.focus()
+      textarea?.setSelectionRange(nextCaret, nextCaret)
+    })
+  }
+
   async function addComment() {
     const body = commentBody.trim()
     if (!body) return
+    const mentionedIds = Object.entries(mentionMap)
+      .filter(([display]) => body.includes(`@${display}`))
+      .map(([, accountId]) => accountId)
     setBusy(true)
     try {
-      await createComment(taskId, { body, author: 'Alex' })
+      await createComment(taskId, { body, author: session?.account?.name || session?.account?.email, mentions: mentionedIds })
       setCommentBody('')
+      setMentionMap({})
+      setMentionRange(null)
+      setMentionMenuPos(null)
+      setMentionQuery('')
+      setMentionOptions([])
+      setMentionIndex(0)
       await invalidateAll()
     } finally {
       setBusy(false)
@@ -214,13 +335,13 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
   }
 
   if (error) return <div style={{ color: '#991b1b' }}>{error instanceof Error ? error.message : 'Failed to load task'}</div>
-  if (!task) return <div style={{ color: '#64748b' }}>Loading task…</div>
+  if (!task) return <div style={{ color: 'var(--text-muted)' }}>Loading task…</div>
 
   return (
-    <div data-description-saving={busy ? 'true' : 'false'} style={{ borderTop: '1px solid #eef2f7', background: '#f8fafc', padding: 18, display: 'grid', gap: 16 }}>
+    <div data-description-saving={busy ? 'true' : 'false'} style={{ borderTop: '1px solid color-mix(in srgb, var(--form-border-focus) 24%, var(--panel-border))', background: 'color-mix(in srgb, var(--panel-bg) 94%, white)', padding: 18, display: 'grid', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)', gap: 16, alignItems: 'start' }}>
         <div>
-          <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Description</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Description</div>
           <MarkdownDescriptionEditor
             value={description}
             onCommit={(nextValue) => {
@@ -232,44 +353,111 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
             onImageUpload={(file) => handleDescriptionImageUpload(file)}
             busy={busy}
           />
-          {busy ? <div style={{ marginTop: 6, color: '#64748b', fontSize: 12 }}>Saving…</div> : null}
+          {busy ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>Saving…</div> : null}
         </div>
         <div style={{ display: 'grid', gap: 10 }}>
-          <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700 }}>Checklist</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Checklist</div>
           <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addTodo() } }} style={inputStyle} placeholder="Add checklist item and press Enter" />
           <div style={{ display: 'grid', gap: 8 }}>
-            {task.todos.map((todo) => <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={todo.done} onChange={() => void toggleTodo(todo.id, todo.done)} /> {todo.text}</label><button onClick={() => void removeTodo(todo.id)} style={ghostIconBtn}>🗑️</button></div>)}
+            {task.todos.map((todo) => <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" checked={todo.done} onChange={() => void toggleTodo(todo.id, todo.done)} /> <span style={{ textDecoration: todo.done ? 'line-through' : 'none', opacity: todo.done ? 0.55 : 1 }}>{todo.text}</span></label><button onClick={() => void removeTodo(todo.id)} style={deleteTextAction}>Delete</button></div>)}
           </div>
         </div>
       </div>
 
 
       <div style={{ display: 'grid', gap: 8 }}>
-        <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700 }}>Timesheets</div>
-        <TimesheetsTable lockedProjectId={projectId} lockedTaskId={taskId} lockedProjectName={project?.name} showProjectColumn={false} showCustomerColumn={false} showTaskColumn={false} showValidationColumn={false} />
+        <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Comments</div>
+        <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflow: 'auto' }}>
+          {task.comments.map((comment) => <div key={comment.id} style={{ background: 'var(--form-bg)', border: '1px solid var(--panel-border)', borderRadius: 12, padding: 10 }}><div style={{ fontWeight: 700, fontSize: 13 }}>{comment.author}</div><div style={{ marginTop: 6, color: 'rgba(209, 250, 229, 0.62)', fontSize: 14 }}>{comment.body}</div></div>)}
+        </div>
+        <div style={{ position: 'relative', display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <textarea
+              ref={commentInputRef}
+              value={commentBody}
+              onChange={(e) => handleCommentChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+              onClick={(e) => syncMentionState(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length)}
+              onKeyUp={(e) => syncMentionState(e.currentTarget.value, e.currentTarget.selectionStart ?? e.currentTarget.value.length)}
+              onKeyDown={(e) => {
+                if (mentionOptions.length) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setMentionIndex((current) => (current + 1) % mentionOptions.length)
+                    return
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setMentionIndex((current) => (current - 1 + mentionOptions.length) % mentionOptions.length)
+                    return
+                  }
+                  if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+                    e.preventDefault()
+                    const selected = mentionOptions[mentionIndex] || mentionOptions[0]
+                    if (selected) insertMention(selected)
+                    return
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setMentionOptions([])
+                    setMentionIndex(0)
+                    setMentionRange(null)
+                    setMentionMenuPos(null)
+                    setMentionQuery('')
+                    return
+                  }
+                }
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault()
+                  void addComment()
+                }
+              }}
+              rows={3}
+              style={{ ...inputStyle, resize: 'vertical', minHeight: 84 }}
+              placeholder="Add comment… Use @name to mention a teammate."
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Type <strong>@</strong> to mention a teammate. Press <strong>⌘/Ctrl+Enter</strong> to submit.</div>
+              <button onClick={() => void addComment()} style={btnStyle}>Comment</button>
+            </div>
+          </div>
+          {mentionOptions.length && mentionMenuPos ? (
+            <div style={{ position: 'absolute', top: mentionMenuPos.top, left: mentionMenuPos.left, width: 260, maxWidth: 'min(320px, calc(100% - 12px))', zIndex: 10, border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', overflow: 'hidden' }}>
+              {mentionOptions.map((user, index) => (
+                <button
+                  key={user.accountId}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => insertMention(user)}
+                  style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', borderBottom: '1px solid var(--panel-border)', background: index === mentionIndex ? 'color-mix(in srgb, var(--form-border-focus) 18%, transparent)' : 'transparent', cursor: 'pointer' }}
+                >
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user.name || user.email}</div>
+                  <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)' }}>{user.email}</div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div style={{ display: 'grid', gap: 8 }}>
-        <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700 }}>Comments</div>
-        <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflow: 'auto' }}>
-          {task.comments.map((comment) => <div key={comment.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10 }}><div style={{ fontWeight: 700, fontSize: 13 }}>{comment.author}</div><div style={{ marginTop: 6, color: '#475569', fontSize: 14 }}>{comment.body}</div></div>)}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input value={commentBody} onChange={(e) => setCommentBody(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addComment() } }} style={inputStyle} placeholder="Add comment" />
-          <button onClick={() => void addComment()} style={btnStyle}>Comment</button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setTimesheetsOpen((current) => !current)}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit' }}
+        >
+          <span style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Timesheets</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{timesheetsOpen ? 'Hide' : 'Show'}</span>
+        </button>
+        {timesheetsOpen ? <TimesheetsTable lockedProjectId={projectId} lockedTaskId={taskId} lockedProjectName={project?.name} showProjectColumn={false} showCustomerColumn={false} showTaskColumn={false} showValidationColumn={false} /> : null}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
-        <button onClick={() => void handleArchiveTask()} disabled={busy} aria-label="Archive task" title="Archive task" style={panelIconBtn}>🗄️</button>
-        <button onClick={() => void handleDeleteTask()} disabled={busy} aria-label="Delete task" title="Delete task" style={panelDangerIconBtn}>🗑️</button>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8, borderTop: '1px solid var(--panel-border)' }}>
+        <button onClick={() => void handleArchiveTask()} disabled={busy} aria-label="Archive task" title="Archive task" style={archiveTextAction}>Archive</button>
+        <button onClick={() => void handleDeleteTask()} disabled={busy} aria-label="Delete task" title="Delete task" style={deleteTextAction}>Delete</button>
       </div>
     </div>
   )
 }
 
-const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 12px', background: '#fff' }
-const btnStyle: React.CSSProperties = { background: '#0f172a', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }
-const ghostIconBtn: React.CSSProperties = { background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1 }
-const panelIconBtn: React.CSSProperties = { background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 999, width: 38, height: 38, display: 'grid', placeItems: 'center', fontSize: 17, lineHeight: 1, cursor: 'pointer' }
-const panelDangerIconBtn: React.CSSProperties = { background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: 999, width: 38, height: 38, display: 'grid', placeItems: 'center', fontSize: 17, lineHeight: 1, cursor: 'pointer' }
+const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', background: 'var(--form-bg)', color: 'var(--form-text)' }
+const btnStyle: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }

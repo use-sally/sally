@@ -7,11 +7,12 @@ import { useProjectQuery, qk, useTaskQuery, useTimesheetUsersQuery } from '../li
 import { archiveTask, createComment, createProjectLabel, createTaskTodo, createTimesheetEntry, deleteTask, deleteTaskTodo, deleteTimesheetEntry, reorderTaskTodos, updateTask, updateTaskLabels, updateTaskTodo, updateTimesheetEntry, uploadTaskDescriptionImage } from '../lib/api'
 import { pill, tagStyle } from './app-shell'
 import { useEffect, useRef, useState } from 'react'
-import type { TodoItem, TimesheetEntry } from '@automatethis-pm/types/src'
+import type { TodoItem, TimesheetEntry } from '@sally/types/src'
 import { DndContext, PointerSensor, type DragEndEvent, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { MarkdownDescriptionEditor } from './markdown-description-editor'
+import { deleteTextAction, formControlMd, theme } from '../lib/theme'
 
 async function compressImageForTask(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
   const imageUrl = URL.createObjectURL(file)
@@ -358,7 +359,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => void handleArchiveTask()} style={secondaryBtn}>Archive</button>
-            <button type="button" onClick={() => void handleDeleteTask()} style={dangerBtn}>Delete</button>
+            <button type="button" onClick={() => void handleDeleteTask()} style={deleteTextAction}>Delete</button>
             <Link href={closeHref} style={closeBtn}>Close</Link>
           </div>
         </div>
@@ -368,8 +369,8 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
         {task ? (
           <>
             <input defaultValue={task.title} onBlur={(e) => void save({ title: e.target.value })} style={{ width: '100%', fontSize: 28, fontWeight: 800, lineHeight: 1.15, border: 'none', outline: 'none', background: 'transparent' }} />
-            <div style={{ marginTop: 8, color: '#64748b' }}>
-              <Link href={`/projects/${task.project.id}`} style={{ color: '#64748b', textDecoration: 'none', fontWeight: 700 }}>{task.project.name}</Link>
+            <div style={{ marginTop: 8, color: 'var(--text-muted)' }}>
+              <Link href={`/projects/${task.project.id}`} style={{ color: 'var(--text-muted)', textDecoration: 'none', fontWeight: 700 }}>{task.project.name}</Link>
             </div>
 
             <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
@@ -408,7 +409,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
             <div style={{ marginTop: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={sectionLabel}>Description</div>
-                <div style={{ color: '#64748b', fontSize: 12 }}>{descriptionBusy ? 'Saving…' : ''}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{descriptionBusy ? 'Saving…' : ''}</div>
               </div>
               <div style={{ marginTop: 8 }}>
                 <MarkdownDescriptionEditor
@@ -440,13 +441,13 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
                 </div>
                 <input type="date" value={timeDate} onChange={(e) => setTimeDate(e.target.value)} style={inputStyle} />
                 <input value={timeDescription} onChange={(e) => setTimeDescription(e.target.value)} placeholder="What was done" style={inputStyle} />
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#475569', fontSize: 14 }}><input type="checkbox" checked={timeBillable} onChange={(e) => setTimeBillable(e.target.checked)} /> Billable</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 14 }}><input type="checkbox" checked={timeBillable} onChange={(e) => setTimeBillable(e.target.checked)} /> Billable</label>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ color: '#64748b', fontSize: 13 }}>Total {task.timesheetSummary.totalMinutes} min · Billable {task.timesheetSummary.billableMinutes} min</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Total {task.timesheetSummary.totalMinutes} min · Billable {task.timesheetSummary.billableMinutes} min</div>
                   <button onClick={() => void submitTime()} disabled={timeBusy || !timeMinutes} style={secondaryBtn}>{timeBusy ? 'Saving…' : 'Add time'}</button>
                 </div>
-                <div style={{ color: '#94a3b8', fontSize: 12 }}>Click a row to edit. Changes save when you click away.</div>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#475569', fontSize: 13 }}><input type="checkbox" checked={showValidatedTimesheets} onChange={(e) => setShowValidatedTimesheets(e.target.checked)} /> Show validated entries ({validatedCount})</label>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Click a row to edit. Changes save when you click away.</div>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={showValidatedTimesheets} onChange={(e) => setShowValidatedTimesheets(e.target.checked)} /> Show validated entries ({validatedCount})</label>
                 {project ? (
                   <datalist id="drawer-task-options">
                     {project.recentTasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
@@ -456,11 +457,11 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
                   {visibleTimesheets.length ? visibleTimesheets.map((entry) => (
                     <div
                       key={entry.id}
-                      style={{ border: editingTimesheetId === entry.id ? '1px solid #0f172a' : '1px solid #e2e8f0', borderRadius: 12, padding: 12, background: '#fff', cursor: editingTimesheetId ? 'default' : 'pointer' }}
+                      style={{ border: editingTimesheetId === entry.id ? '1px solid var(--form-border-focus)' : '1px solid var(--panel-border)', borderRadius: 12, padding: 12, background: 'var(--form-bg)', cursor: editingTimesheetId ? 'default' : 'pointer' }}
                       onClick={() => { if (!editingTimesheetId) startTimesheetEdit(entry) }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><div style={{ fontWeight: 700 }}>{entry.userName}</div><div style={{ color: '#64748b', fontSize: 13 }}>{entry.minutes} min · {new Date(entry.date).toLocaleDateString()}</div></div>
-                      {entry.description ? <div style={{ marginTop: 6, color: '#334155' }}>{entry.description}</div> : null}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><div style={{ fontWeight: 700 }}>{entry.userName}</div><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{entry.minutes} min · {new Date(entry.date).toLocaleDateString()}</div></div>
+                      {entry.description ? <div style={{ marginTop: 6, color: 'rgba(209, 250, 229, 0.72)' }}>{entry.description}</div> : null}
                       {editingTimesheetId === entry.id ? (
                         <div
                           style={{ marginTop: 10, display: 'grid', gap: 8 }}
@@ -476,15 +477,15 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
                           </div>
                           <input list="drawer-task-options" value={editingTimesheetForm.taskId} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, taskId: e.target.value }))} placeholder="Task ID (leave blank for project only)" style={inputStyle} />
                           <input value={editingTimesheetForm.description} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, description: e.target.value }))} placeholder="What was done" style={inputStyle} />
-                          <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#475569', fontSize: 14 }}><input type="checkbox" checked={editingTimesheetForm.billable} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, billable: e.target.checked }))} /> Billable</label>
-                          <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#475569', fontSize: 14 }}><input type="checkbox" checked={editingTimesheetForm.validated} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, validated: e.target.checked }))} /> Validated</label>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><div style={{ color: '#94a3b8', fontSize: 12 }}>Changes save on blur.</div><button type="button" onClick={() => void deleteTimesheet(entry.id)} style={dangerTextBtn}>Delete entry</button></div>
+                          <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 14 }}><input type="checkbox" checked={editingTimesheetForm.billable} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, billable: e.target.checked }))} /> Billable</label>
+                          <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 14 }}><input type="checkbox" checked={editingTimesheetForm.validated} onChange={(e) => setEditingTimesheetForm((prev) => ({ ...prev, validated: e.target.checked }))} /> Validated</label>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}><div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Changes save on blur.</div><button type="button" onClick={() => void deleteTimesheet(entry.id)} style={deleteTextAction}>Delete</button></div>
                         </div>
                       ) : (
-                        <div style={{ marginTop: 10, color: '#94a3b8', fontSize: 12 }}>Billable: {entry.billable ? 'Yes' : 'No'}{entry.validated ? ' · Validated' : ''} · Click to edit</div>
+                        <div style={{ marginTop: 10, color: 'var(--text-muted)', fontSize: 12 }}>Billable: {entry.billable ? 'Yes' : 'No'}{entry.validated ? ' · Validated' : ''} · Click to edit</div>
                       )}
                     </div>
-                  )) : <div style={{ color: '#64748b' }}>{validatedCount ? 'All entries are validated. Toggle “Show validated entries” to review.' : 'No time logged yet.'}</div>}
+                  )) : <div style={{ color: 'var(--text-muted)' }}>{validatedCount ? 'All entries are validated. Toggle “Show validated entries” to review.' : 'No time logged yet.'}</div>}
                 </div>
               </div>
             </div>
@@ -492,13 +493,13 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
             <div style={{ marginTop: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={sectionLabel}>Todos</div>
-                <div style={{ color: '#64748b', fontSize: 13 }}>{todoProgress || '0/0'}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{todoProgress || '0/0'}</div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, marginTop: 8 }}>
                 <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void addTodo() }} placeholder="Add a checklist item" style={inputStyle} />
                 <button onClick={() => void addTodo()} disabled={todoBusy || !newTodo.trim()} style={secondaryBtn}>{todoBusy ? 'Saving…' : 'Add'}</button>
               </div>
-              <div style={{ marginTop: 8, color: '#64748b', fontSize: 12 }}>Drag to reorder.</div>
+              <div style={{ marginTop: 8, color: 'var(--text-muted)', fontSize: 12 }}>Drag to reorder.</div>
               <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
                 {todoItems.length ? (
                   <DndContext sensors={sensors} onDragEnd={(event) => { void handleTodoDragEnd(event) }}>
@@ -508,7 +509,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
                       </div>
                     </SortableContext>
                   </DndContext>
-                ) : <div style={{ color: '#64748b' }}>No checklist items yet.</div>}
+                ) : <div style={{ color: 'var(--text-muted)' }}>No checklist items yet.</div>}
               </div>
             </div>
 
@@ -516,11 +517,11 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
               <div style={sectionLabel}>Comments</div>
               <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
                 {task.comments.length ? task.comments.map((comment) => (
-                  <div key={comment.id} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 12 }}>
+                  <div key={comment.id} style={{ border: '1px solid rgba(16, 185, 129, 0.12)', borderRadius: 12, padding: 12 }}>
                     <div style={{ fontWeight: 700 }}>{comment.author}</div>
                     <div style={{ marginTop: 6 }}>{comment.body}</div>
                   </div>
-                )) : <div style={{ color: '#64748b' }}>No comments yet.</div>}
+                )) : <div style={{ color: 'var(--text-muted)' }}>No comments yet.</div>}
               </div>
               <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
                 <textarea value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Add a comment" style={{ ...inputStyle, minHeight: 90, resize: 'vertical' }} />
@@ -530,7 +531,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
               </div>
             </div>
           </>
-        ) : isLoading ? <div style={{ color: '#64748b' }}>Loading task…</div> : null}
+        ) : isLoading ? <div style={{ color: 'var(--text-muted)' }}>Loading task…</div> : null}
       </aside>
     </div>
   )
@@ -539,11 +540,11 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
 function SortableTodoRow({ todo, todoBusy, onToggle, onRename, onDelete }: { todo: TodoItem; todoBusy: boolean; onToggle: () => void; onRename: (text: string) => void; onDelete: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   return (
-    <div ref={setNodeRef} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', gap: 12, alignItems: 'center', padding: '10px 12px', background: isDragging ? '#f8fafc' : '#fff', border: '1px solid #e2e8f0', borderRadius: 12, boxShadow: isDragging ? '0 4px 12px rgba(15,23,42,0.08)' : 'none', opacity: isDragging ? 0.9 : 1, transform: CSS.Transform.toString(transform), transition }}>
+    <div ref={setNodeRef} style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', gap: 12, alignItems: 'center', padding: '10px 12px', background: isDragging ? 'rgba(250, 204, 21, 0.06)' : 'var(--form-bg)', border: '1px solid var(--panel-border)', borderRadius: 12, boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.22)' : 'none', opacity: isDragging ? 0.9 : 1, transform: CSS.Transform.toString(transform), transition }}>
       <button type="button" aria-label="Drag to reorder" {...attributes} {...listeners} disabled={todoBusy} style={dragHandleBtn}>⋮⋮</button>
       <input type="checkbox" checked={todo.done} onChange={onToggle} style={todoCheckbox} />
-      <input defaultValue={todo.text} onBlur={(e) => onRename(e.target.value)} style={{ ...todoInputStyle, textDecoration: todo.done ? 'line-through' : 'none', color: todo.done ? '#94a3b8' : '#0f172a' }} />
-      <button onClick={onDelete} style={trashBtn} aria-label="Delete todo">🗑</button>
+      <input defaultValue={todo.text} onBlur={(e) => onRename(e.target.value)} style={{ ...todoInputStyle, textDecoration: todo.done ? 'line-through' : 'none', color: todo.done ? '#94a3b8' : theme.color.formText, opacity: todo.done ? 0.55 : 1 }} />
+      <button onClick={onDelete} style={deleteTextAction} aria-label="Delete todo">Delete</button>
     </div>
   )
 }
@@ -554,17 +555,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 50 }
 const backdrop: React.CSSProperties = { position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.28)', pointerEvents: 'auto' }
-const drawer: React.CSSProperties = { position: 'absolute', right: 0, top: 0, bottom: 0, width: 460, maxWidth: '92vw', background: '#fff', borderLeft: '1px solid #e2e8f0', padding: 22, overflowY: 'auto', pointerEvents: 'auto', boxShadow: '0 10px 30px rgba(15,23,42,0.15)' }
-const closeBtn: React.CSSProperties = { textDecoration: 'none', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 10, padding: '9px 12px', fontWeight: 700 }
-const sectionLabel: React.CSSProperties = { color: '#64748b', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }
-const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 12px', background: '#fff' }
+const drawer: React.CSSProperties = { position: 'absolute', right: 0, top: 0, bottom: 0, width: 460, maxWidth: '92vw', background: 'var(--panel-bg)', borderLeft: '1px solid var(--panel-border)', padding: 22, overflowY: 'auto', pointerEvents: 'auto', boxShadow: '0 10px 30px rgba(15,23,42,0.15)' }
+const closeBtn: React.CSSProperties = { textDecoration: 'none', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '9px 12px', fontWeight: 700 }
+const sectionLabel: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }
+const inputStyle: React.CSSProperties = formControlMd
 const chipButton: React.CSSProperties = { border: 'none', cursor: 'pointer', fontWeight: 700 }
-const primaryBtn: React.CSSProperties = { background: '#0f172a', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }
-const secondaryBtn: React.CSSProperties = { background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }
-const dragHandleBtn: React.CSSProperties = { background: 'transparent', color: '#94a3b8', border: 'none', padding: '4px 2px', fontWeight: 700, cursor: 'grab', lineHeight: 1, fontSize: 16 }
-const todoCheckbox: React.CSSProperties = { width: 18, height: 18, accentColor: '#0f172a', cursor: 'pointer' }
-const todoInputStyle: React.CSSProperties = { width: '100%', border: 'none', borderRadius: 0, padding: '8px 0', background: 'transparent', outline: 'none', boxShadow: 'none', fontSize: 14 }
-const trashBtn: React.CSSProperties = { background: 'transparent', color: '#94a3b8', border: 'none', padding: '4px 2px', fontSize: 15, cursor: 'pointer', lineHeight: 1 }
-const dangerBtn: React.CSSProperties = { background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 10, padding: '9px 12px', fontWeight: 700, cursor: 'pointer' }
-const dangerTextBtn: React.CSSProperties = { background: 'transparent', color: '#b91c1c', border: 'none', fontWeight: 600, cursor: 'pointer' }
+const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }
+const secondaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }
+const dragHandleBtn: React.CSSProperties = { background: 'transparent', color: 'var(--text-muted)', border: 'none', padding: '4px 2px', fontWeight: 700, cursor: 'grab', lineHeight: 1, fontSize: 16 }
+const todoCheckbox: React.CSSProperties = { width: 16, height: 16, borderRadius: 0, cursor: 'pointer', flex: '0 0 auto' }
+const todoInputStyle: React.CSSProperties = { width: '100%', border: 'none', borderRadius: 0, padding: '8px 0', background: 'transparent', outline: 'none', boxShadow: 'none', fontSize: 13 }
 const starIconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 24, cursor: 'pointer', lineHeight: 1 }

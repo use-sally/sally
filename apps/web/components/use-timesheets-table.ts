@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { TimesheetReportEntry } from '@automatethis-pm/types/src'
+import type { TimesheetReportEntry } from '@sally/types/src'
 import { createTimesheetEntry, deleteTimesheetEntry, updateTimesheetEntry } from '../lib/api'
 import { qk, useClientsQuery, useProjectsQuery, useTimesheetReportQuery, useTimesheetUsersQuery } from '../lib/query'
 import type { ActiveCell, EditableField } from './timesheets-table-rows'

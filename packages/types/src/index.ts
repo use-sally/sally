@@ -69,6 +69,38 @@ export type TodoItem = {
 
 export type TodoProgress = string | null
 
+export type NotificationActor = {
+  id: string
+  name: string | null
+  email: string
+  avatarUrl?: string | null
+}
+
+export type Notification = {
+  id: string
+  type: string
+  title: string
+  body: string
+  readAt: string | null
+  createdAt: string
+  projectId?: string | null
+  taskId?: string | null
+  actor: NotificationActor | null
+}
+
+export type MentionableUser = {
+  accountId: string
+  name: string | null
+  email: string
+  avatarUrl?: string | null
+}
+
+export type NotificationPreference = {
+  eventType: string
+  inAppEnabled: boolean
+  emailEnabled: boolean
+}
+
 export type TimesheetUser = {
   id: string
   name: string
@@ -187,7 +219,7 @@ export type TaskDetail = {
   timesheets: TimesheetEntry[]
   timesheetUsers: TimesheetUser[]
   project: { id: string; name: string; client: { id: string; name: string } | null }
-  comments: { id: string; author: string; body: string; createdAt: string }[]
+  comments: { id: string; author: string; authorAvatarUrl?: string | null; body: string; createdAt: string }[]
 }
 
 export type WorkspaceInfo = {
@@ -218,6 +250,10 @@ export type ProjectMember = {
   accountId: string
   name: string | null
   email: string
+  avatarUrl?: string | null
   role: string
   createdAt: string
+  locked?: boolean
+  workspaceRole?: string | null
+  platformRole?: string | null
 }

@@ -21,10 +21,10 @@ export default function ProjectTasksPage({ params }: { params: Promise<{ project
       subtitle={project ? `All tasks in ${project.name}.` : 'Task list for this project.'}
     >
       {projectId ? <ProjectTabs projectId={projectId} current="tasks" /> : null}
-      {error ? <div style={{ color: '#991b1b', marginBottom: 16 }}>{error instanceof Error ? error.message : 'Failed to load project'}</div> : null}
+      {error ? <div style={{ color: 'var(--danger-text)', marginBottom: 16 }}>{error instanceof Error ? error.message : 'Failed to load project'}</div> : null}
 
       <div style={panel}>
-        {projectId ? <ProjectTasksTable projectId={projectId} /> : <div style={{ color: '#64748b' }}>Loading tasks…</div>}
+        {projectId ? <ProjectTasksTable projectId={projectId} /> : <div style={{ color: 'var(--text-muted)' }}>Loading tasks…</div>}
       </div>
 
     </AppShell>

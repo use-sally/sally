@@ -57,21 +57,21 @@ export default function ClientsPage() {
             </div>
           </div>
           {clients.map((client) => (
-            <div key={client.id} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 160px', padding: '14px 18px', borderBottom: '1px solid #eef2f7', color: '#0f172a', alignItems: 'center' }}>
-              <Link href={`/clients/${client.id}`} style={{ fontWeight: 700, textDecoration: 'none', color: '#0f172a' }}>{client.name}</Link>
-              <div style={{ color: '#475569' }}>{client.notes || '—'}</div>
-              <div style={{ color: '#475569', fontWeight: 600 }}>{client.projectCount}</div>
+            <div key={client.id} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 160px', padding: '14px 18px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-primary)', alignItems: 'center' }}>
+              <Link href={`/clients/${client.id}`} style={{ fontWeight: 700, textDecoration: 'none', color: 'var(--text-primary)' }}>{client.name}</Link>
+              <div style={{ color: 'var(--text-secondary)' }}>{client.notes || '—'}</div>
+              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{client.projectCount}</div>
             </div>
           ))}
-          {!clients.length && !error ? <div style={{ padding: 18, color: '#64748b' }}>No clients yet.</div> : null}
-          {error ? <div style={{ padding: 18, color: '#991b1b' }}>{error instanceof Error ? error.message : 'Failed to load clients'}</div> : null}
+          {!clients.length && !error ? <div style={{ padding: 18, color: 'var(--text-muted)' }}>No clients yet.</div> : null}
+          {error ? <div style={{ padding: 18, color: 'var(--danger-text)' }}>{error instanceof Error ? error.message : 'Failed to load clients'}</div> : null}
         </div>
       </div>
     </AppShell>
   )
 }
 
-const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: '#334155' }
-const input: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 12px', background: '#fff', fontWeight: 500 }
-const primaryBtn: React.CSSProperties = { background: '#0f172a', color: '#fff', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
-const panelHeader: React.CSSProperties = { padding: '16px 18px', fontWeight: 750, fontSize: 14, borderBottom: '1px solid #eef2f7', color: '#64748b' }
+const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: 'var(--text-secondary)' }
+const input: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', background: 'var(--form-bg)', color: 'var(--form-text)', fontWeight: 500 }
+const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
+const panelHeader: React.CSSProperties = { padding: '16px 18px', fontWeight: 750, fontSize: 14, borderBottom: '1px solid rgba(16, 185, 129, 0.10)', color: 'var(--text-muted)' }

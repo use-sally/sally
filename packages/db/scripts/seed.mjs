@@ -3,17 +3,17 @@ import { PrismaClient, TaskPriority, TaskStatusType } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
-  const existing = await prisma.workspace.findFirst({ where: { slug: 'automatethis' } })
+  const existing = await prisma.workspace.findFirst({ where: { slug: 'sally' } })
   if (existing) return
 
   const workspace = await prisma.workspace.create({
     data: {
-      name: 'AutomateThis',
-      slug: 'automatethis',
+      name: 'sally_',
+      slug: 'sally',
       projects: {
         create: [
           {
-            name: 'AutomateThis Core',
+            name: 'sally core',
             slug: 'automate-this-core',
             description: 'Core product and ops workflows',
             statuses: { create: [

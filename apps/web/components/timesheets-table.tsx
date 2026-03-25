@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { useProjectTasksQuery } from '../lib/query'
+import { sortableHeaderButton } from '../lib/theme'
 import { TimesheetsFiltersBar, TimesheetsSummaryBar } from './timesheets-table-chrome'
 import { TimesheetsAddRow, TimesheetsEntryRow } from './timesheets-table-rows'
 import { useTimesheetsTable } from './use-timesheets-table'
@@ -87,6 +88,7 @@ export function TimesheetsTable({
   const effectiveShowUserColumn = showUserColumn
   const effectiveShowTaskColumn = showTaskColumn ?? !lockedTaskId
   const effectiveShowValidationColumn = showValidationColumn ?? !lockedTaskId
+  const compactLockedTaskEntry = !!lockedTaskId
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
@@ -143,11 +145,11 @@ export function TimesheetsTable({
     if (effectiveShowCustomerColumn) parts.push('1.2fr')
     if (effectiveShowProjectColumn) parts.push('1.2fr')
     if (effectiveShowUserColumn) parts.push('0.9fr')
-    parts.push('100px', '100px')
+    parts.push('100px')
     if (effectiveShowTaskColumn) parts.push('1.1fr')
     parts.push('1.8fr')
     if (effectiveShowValidationColumn) parts.push('72px')
-    parts.push('84px')
+    parts.push('100px', '84px')
     return parts.join(' ')
   }, [effectiveShowCustomerColumn, effectiveShowProjectColumn, effectiveShowUserColumn, effectiveShowTaskColumn, effectiveShowValidationColumn])
 
@@ -185,45 +187,34 @@ export function TimesheetsTable({
         onExport={exportCsv}
       />
 
-      <TimesheetsFiltersBar
-        from={from}
-        to={to}
-        projectId={projectId}
-        clientId={clientId}
-        userId={userId}
-        taskId={taskId}
-        projects={filteredProjects.map((project) => ({ id: project.id, name: project.name }))}
-        clients={clients.map((client) => ({ id: client.id, name: client.name }))}
-        users={users.map((user) => ({ id: user.id, name: user.name }))}
-        taskOptions={showTaskFilter ? resolvedTaskOptions : []}
-        lockedProjectId={lockedProjectId}
-        showTaskFilter={showTaskFilter}
-        onFromChange={setFrom}
-        onToChange={setTo}
-        onProjectChange={setProjectId}
-        onClientChange={setClientId}
-        onUserChange={setUserId}
-        onTaskChange={setTaskId}
-        showValidated={showValidated}
-        onShowValidatedChange={setShowValidated}
-      />
+      {!compactLockedTaskEntry ? (
+        <TimesheetsFiltersBar
+          from={from}
+          to={to}
+          projectId={projectId}
+          clientId={clientId}
+          userId={userId}
+          taskId={taskId}
+          projects={filteredProjects.map((project) => ({ id: project.id, name: project.name }))}
+          clients={clients.map((client) => ({ id: client.id, name: client.name }))}
+          users={users.map((user) => ({ id: user.id, name: user.name }))}
+          taskOptions={showTaskFilter ? resolvedTaskOptions : []}
+          lockedProjectId={lockedProjectId}
+          showTaskFilter={showTaskFilter}
+          onFromChange={setFrom}
+          onToChange={setTo}
+          onProjectChange={setProjectId}
+          onClientChange={setClientId}
+          onUserChange={setUserId}
+          onTaskChange={setTaskId}
+          showValidated={showValidated}
+          onShowValidatedChange={setShowValidated}
+        />
+      ) : null}
 
 
       <div style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: 10, alignItems: 'center', padding: '0 4px', color: '#64748b', fontSize: 13, fontWeight: 700 }}>
-          <button onClick={() => toggleSort('date')} style={headerBtn(sortKey === 'date')}>Date{indicator('date')}</button>
-          {effectiveShowCustomerColumn ? <button onClick={() => toggleSort('customer')} style={headerBtn(sortKey === 'customer')}>Customer{indicator('customer')}</button> : null}
-          {effectiveShowProjectColumn ? <button onClick={() => toggleSort('project')} style={headerBtn(sortKey === 'project')}>Project{indicator('project')}</button> : null}
-          {effectiveShowUserColumn ? <button onClick={() => toggleSort('user')} style={headerBtn(sortKey === 'user')}>User{indicator('user')}</button> : null}
-          <button onClick={() => toggleSort('minutes')} style={headerBtn(sortKey === 'minutes')}>Minutes{indicator('minutes')}</button>
-          <button onClick={() => toggleSort('billable')} style={headerBtn(sortKey === 'billable')}>Billable{indicator('billable')}</button>
-          {effectiveShowTaskColumn ? <button onClick={() => toggleSort('task')} style={headerBtn(sortKey === 'task')}>Task{indicator('task')}</button> : null}
-          <button onClick={() => toggleSort('description')} style={headerBtn(sortKey === 'description')}>Description{indicator('description')}</button>
-          {effectiveShowValidationColumn ? <div>Validate</div> : null}
-          <div></div>
-        </div>
-
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fcfcfd' }}>
+        <div style={compactLockedTaskEntry ? { overflow: 'visible', background: 'transparent' } : { border: '1px solid var(--panel-border)', borderRadius: 16, overflow: 'hidden', background: 'var(--panel-bg)' }}>
           <TimesheetsAddRow
           gridColumns={gridColumns}
           newDate={newDate}
@@ -255,14 +246,28 @@ export function TimesheetsTable({
           onValidatedChange={setNewValidated}
           onProjectChange={setProjectId}
           onSubmit={() => void submitNewEntry()}
+          compact={compactLockedTaskEntry}
           />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: 10, alignItems: 'center', padding: '0 4px', color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>
+          <button onClick={() => toggleSort('date')} style={headerBtn(sortKey === 'date')}>Date{indicator('date')}</button>
+          {effectiveShowCustomerColumn ? <button onClick={() => toggleSort('customer')} style={headerBtn(sortKey === 'customer')}>Customer{indicator('customer')}</button> : null}
+          {effectiveShowProjectColumn ? <button onClick={() => toggleSort('project')} style={headerBtn(sortKey === 'project')}>Project{indicator('project')}</button> : null}
+          {effectiveShowUserColumn ? <button onClick={() => toggleSort('user')} style={headerBtn(sortKey === 'user')}>User{indicator('user')}</button> : null}
+          <button onClick={() => toggleSort('minutes')} style={headerBtn(sortKey === 'minutes')}>Minutes{indicator('minutes')}</button>
+          {effectiveShowTaskColumn ? <button onClick={() => toggleSort('task')} style={headerBtn(sortKey === 'task')}>Task{indicator('task')}</button> : null}
+          <button onClick={() => toggleSort('description')} style={headerBtn(sortKey === 'description')}>Description{indicator('description')}</button>
+          {effectiveShowValidationColumn ? <div>Validate</div> : null}
+          <button onClick={() => toggleSort('billable')} style={headerBtn(sortKey === 'billable')}>Billable{indicator('billable')}</button>
+          <div></div>
         </div>
 
         {sortedEntries.length ? sortedEntries.map((entry) => {
           const activeField = activeCell?.entryId === entry.id ? activeCell.field : null
           const isBusy = busyCell?.entryId === entry.id
           return (
-            <div key={entry.id} style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
+            <div key={entry.id} style={{ border: '1px solid var(--panel-border)', borderRadius: 16, overflow: 'hidden', background: 'var(--form-bg)' }}>
               <TimesheetsEntryRow
               entry={entry}
               gridColumns={gridColumns}
@@ -285,10 +290,10 @@ export function TimesheetsTable({
               />
             </div>
           )
-        }) : <div style={{ padding: 18, color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 16, background: '#fff' }}>{error ? (error instanceof Error ? error.message : 'Failed to load timesheets') : 'No timesheet entries match the current filters.'}</div>}
+        }) : <div style={{ padding: 18, color: 'var(--text-muted)', border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)' }}>{error ? (error instanceof Error ? error.message : 'Failed to load timesheets') : 'No timesheet entries match the current filters.'}</div>}
       </div>
     </div>
   )
 }
 
-function headerBtn(active: boolean): React.CSSProperties { return { background: 'transparent', border: 'none', textAlign: 'left', color: active ? '#0f172a' : '#64748b', fontSize: 13, fontWeight: active ? 800 : 700, padding: 0, cursor: 'pointer' } }
+function headerBtn(active: boolean): React.CSSProperties { return sortableHeaderButton(active) }

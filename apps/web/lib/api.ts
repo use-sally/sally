@@ -1,4 +1,4 @@
-import type { BoardColumn, Client, ClientDetail, Health, Project, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@automatethis-pm/types/src'
+import type { BoardColumn, Client, ClientDetail, Health, MentionableUser, Notification, NotificationPreference, Project, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000'
@@ -38,6 +38,17 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function getHealth(): Promise<Health> { return getJson('/health') }
+export function getNotifications(params?: { unreadOnly?: boolean; limit?: number }): Promise<Notification[]> {
+  const search = new URLSearchParams()
+  if (params?.unreadOnly) search.set('unreadOnly', 'true')
+  if (params?.limit) search.set('limit', String(params.limit))
+  const q = search.toString()
+  return getJson(`/notifications${q ? `?${q}` : ''}`)
+}
+export function readNotification(notificationId: string): Promise<{ ok: boolean }> { return getJson(`/notifications/${notificationId}/read`, { method: 'POST', body: JSON.stringify({}) }) }
+export function readAllNotifications(): Promise<{ ok: boolean }> { return getJson('/notifications/read-all', { method: 'POST', body: JSON.stringify({}) }) }
+export function getNotificationPreferences(): Promise<NotificationPreference[]> { return getJson('/notifications/preferences') }
+export function updateNotificationPreferences(preferences: NotificationPreference[]): Promise<{ ok: boolean }> { return getJson('/notifications/preferences', { method: 'PUT', body: JSON.stringify({ preferences }) }) }
 export function getProjectsSummary(): Promise<ProjectsSummary> { return getJson('/projects/summary') }
 export function getProjects(filters?: { archived?: boolean }): Promise<Project[]> {
   const params = new URLSearchParams()
@@ -55,7 +66,7 @@ export function updateProject(projectId: string, payload: { name?: string; descr
 export function archiveProject(projectId: string, archived = true): Promise<{ ok: boolean }> { return getJson(`/projects/${projectId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
 export function deleteProject(projectId: string): Promise<{ ok: boolean }> { return getJson(`/projects/${projectId}`, { method: 'DELETE' }) }
 export function getProjectMembers(projectId: string): Promise<ProjectMember[]> { return getJson(`/projects/${projectId}/members`) }
-export function getProjectActivity(projectId: string): Promise<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; createdAt: string }[]> { return getJson(`/projects/${projectId}/activity`) }
+export function getProjectActivity(projectId: string): Promise<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; details: string[]; createdAt: string }[]> { return getJson(`/projects/${projectId}/activity`) }
 export function addProjectMember(projectId: string, payload: { accountId?: string; email?: string; name?: string; role?: string }): Promise<{ ok: boolean; membershipId: string; existing?: boolean }> {
   return getJson(`/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(payload) })
 }
@@ -120,7 +131,11 @@ export function updateTask(taskId: string, payload: { title?: string; descriptio
 export function archiveTask(taskId: string, archived = true): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
 export function deleteTask(taskId: string): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}`, { method: 'DELETE' }) }
 export function createTask(payload: { projectId: string; title: string; assignee?: string; description?: string; priority?: 'P1'|'P2'|'P3'; status?: string; statusId?: string; dueDate?: string | null; labels?: string[]; todos?: { text: string }[] }): Promise<{ ok: boolean; taskId: string }> { return getJson('/tasks', { method: 'POST', body: JSON.stringify(payload) }) }
-export function createComment(taskId: string, payload: { body: string; author?: string }): Promise<{ ok: boolean; commentId: string }> { return getJson(`/tasks/${taskId}/comments`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function createComment(taskId: string, payload: { body: string; author?: string; mentions?: string[] }): Promise<{ ok: boolean; commentId: string }> { return getJson(`/tasks/${taskId}/comments`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function getMentionableUsers(projectId: string, query: string): Promise<MentionableUser[]> {
+  const search = new URLSearchParams({ projectId, query })
+  return getJson(`/mentionable-users?${search.toString()}`)
+}
 export function createProjectLabel(projectId: string, payload: { name: string }): Promise<{ ok: boolean; labelId: string }> { return getJson(`/projects/${projectId}/labels`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function updateTaskLabels(taskId: string, labels: string[]): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/labels`, { method: 'PATCH', body: JSON.stringify({ labels }) }) }
 export function createTaskTodo(taskId: string, payload: { text: string }): Promise<{ ok: boolean; todoId: string }> { return getJson(`/tasks/${taskId}/todos`, { method: 'POST', body: JSON.stringify(payload) }) }
@@ -163,6 +178,7 @@ export function getMe(): Promise<{ ok: boolean; account: { id: string; name: str
 }
 
 export function getWorkspaces(): Promise<WorkspaceInfo[]> { return getJson('/workspaces') }
+export function createWorkspace(payload: { name: string; slug?: string }): Promise<{ ok: boolean; workspaceId: string }> { return getJson('/workspaces', { method: 'POST', body: JSON.stringify(payload) }) }
 export function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> { return getJson(`/workspaces/${workspaceId}/members`) }
 export function addWorkspaceMember(workspaceId: string, payload: { email?: string; name?: string; role?: string; accountId?: string }): Promise<{ ok: boolean; membershipId: string; existing?: boolean }> {
   return getJson(`/workspaces/${workspaceId}/members`, { method: 'POST', body: JSON.stringify(payload) })

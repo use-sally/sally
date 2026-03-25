@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ProjectTaskListItem, StatusOption } from '@automatethis-pm/types/src'
+import type { ProjectTaskListItem, StatusOption } from '@sally/types/src'
 import { createProjectLabel, updateTask, updateTaskLabels } from '../lib/api'
 import { qk, useTimesheetUsersQuery } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
 import { AssigneeAvatar } from './assignee-avatar'
 import { statusChipStyle } from '../lib/status-colors'
+import { taskTitleText } from '../lib/theme'
 
 type ActiveField = 'title' | 'assignee' | 'dueDate' | 'status' | 'labels' | null
 
@@ -113,7 +114,7 @@ export function EditableTaskRow({
 
   return (
     <div>
-      <div onClick={() => { if (!expanded) onActivate() }} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', background: expanded ? '#f8fafc' : '#fff' }}>
+      <div onClick={() => { if (!expanded) onActivate() }} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', background: expanded ? 'var(--task-row-active-bg)' : 'var(--panel-bg)', boxShadow: expanded ? 'inset 0 0 0 1px rgba(250, 204, 21, 0.18)' : 'none' }}>
         <div onClick={handleFieldClick('title')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
           {activeField === 'title' ? (
             <input
@@ -125,11 +126,11 @@ export function EditableTaskRow({
               style={inputStyle}
             />
           ) : (
-            <div style={{ fontWeight: 700, color: '#0f172a' }}>{task.title}</div>
+            <div style={{ ...taskTitleText, fontWeight: 700 }}>{task.title}</div>
           )}
         </div>
 
-        <div onClick={handleFieldClick('assignee')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#475569' }}>
+        <div onClick={handleFieldClick('assignee')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
           {activeField === 'assignee' ? (
             <select
               value={assignee}
@@ -156,7 +157,7 @@ export function EditableTaskRow({
                 key={rating}
                 type="button"
                 onClick={(event) => { event.stopPropagation(); setPriority(value); if (!expanded) { onActivate(); return } if (value !== task.priority) void saveTask({ priority: value }) }}
-                style={{ ...starBtn, color: filled ? '#f59e0b' : '#cbd5e1' }}
+                style={{ ...starBtn, color: filled ? '#f59e0b' : 'var(--text-muted)' }}
               >
                 ★
               </button>
@@ -176,7 +177,7 @@ export function EditableTaskRow({
               style={inputStyle}
             />
           ) : (
-            due ? <span style={pill(due.bg, due.color)}>{due.label}</span> : <span style={{ color: '#94a3b8' }}>—</span>
+            due ? <span style={pill(due.bg, due.color)}>{due.label}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>
           )}
         </div>
 
@@ -192,7 +193,7 @@ export function EditableTaskRow({
               {statuses.map((status) => <option key={status.id} value={status.id}>{status.name}</option>)}
             </select>
           ) : (
-            <span style={statusChipStyle(activeStatus?.color || task.statusColor)}>{activeStatus?.name || task.status}</span>
+            <span className="status-chip" style={statusChipStyle(activeStatus?.color || task.statusColor)}>{activeStatus?.name || task.status}</span>
           )}
         </div>
 
@@ -212,7 +213,7 @@ export function EditableTaskRow({
               {task.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}
             </div>
           ) : (
-            <div style={{ color: '#94a3b8' }}>—</div>
+            <div style={{ color: 'var(--text-muted)' }}>—</div>
           )}
         </div>
 
@@ -221,5 +222,5 @@ export function EditableTaskRow({
   )
 }
 
-const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 10, padding: '8px 10px', background: '#fff', fontSize: 14 }
+const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontSize: 14 }
 const starBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 22, cursor: 'pointer', lineHeight: 1 }

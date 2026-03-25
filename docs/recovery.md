@@ -1,4 +1,4 @@
-# AutomateThis PM backup / recovery basics
+# sally_ backup / recovery basics
 
 ## What gets backed up
 - PostgreSQL database (`database.dump`)
@@ -6,39 +6,39 @@
 - Backup manifest (`manifest.txt`)
 
 ## Backup location on VPS
-- Root: `/var/backups/automatethis-pm`
-- Latest symlink: `/var/backups/automatethis-pm/latest`
+- Root: `/var/backups/sally`
+- Latest symlink: `/var/backups/sally/latest`
 
 ## Manual backup
 ```bash
-sudo /opt/automatethis-pm/ops/backup.sh
+sudo /opt/sally/ops/backup.sh
 ```
 
 ## Restore procedure
 
 ### 1. Stop app services
 ```bash
-sudo systemctl stop automatethis-web
-sudo systemctl stop automatethis-api
+sudo systemctl stop sally-web
+sudo systemctl stop sally-api
 ```
 
 ### 2. Restore database
 ```bash
-export DATABASE_URL=$(grep '^DATABASE_URL=' /opt/automatethis-pm/apps/api/.env | cut -d= -f2-)
-pg_restore --clean --if-exists --no-owner --no-privileges --dbname="$DATABASE_URL" /var/backups/automatethis-pm/latest/database.dump
+export DATABASE_URL=$(grep '^DATABASE_URL=' /opt/sally/apps/api/.env | cut -d= -f2-)
+pg_restore --clean --if-exists --no-owner --no-privileges --dbname="$DATABASE_URL" /var/backups/sally/latest/database.dump
 ```
 
 ### 3. Restore uploads
 ```bash
-mkdir -p /opt/automatethis-pm/apps/api/uploads
-rm -rf /opt/automatethis-pm/apps/api/uploads/*
-tar -C /opt/automatethis-pm/apps/api/uploads -xzf /var/backups/automatethis-pm/latest/uploads.tar.gz
+mkdir -p /opt/sally/apps/api/uploads
+rm -rf /opt/sally/apps/api/uploads/*
+tar -C /opt/sally/apps/api/uploads -xzf /var/backups/sally/latest/uploads.tar.gz
 ```
 
 ### 4. Start services
 ```bash
-sudo systemctl start automatethis-api
-sudo systemctl start automatethis-web
+sudo systemctl start sally-api
+sudo systemctl start sally-web
 ```
 
 ### 5. Verify

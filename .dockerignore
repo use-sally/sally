@@ -1,0 +1,12 @@
+node_modules
+.git
+.next
+dist
+coverage
+pnpm-store
+apps/*/node_modules
+apps/*/.next
+apps/*/dist
+packages/*/node_modules
+packages/*/dist
+memory

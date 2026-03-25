@@ -1,7 +1,7 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactNode, useState } from 'react'
+import { ReactNode, Suspense, useState } from 'react'
 import { AuthGate } from './auth-gate'
 
 export function AppQueryProvider({ children }: { children: ReactNode }) {
@@ -19,7 +19,9 @@ export function AppQueryProvider({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <AuthGate>{children}</AuthGate>
+      <Suspense fallback={children}>
+        <AuthGate>{children}</AuthGate>
+      </Suspense>
     </QueryClientProvider>
   )
 }

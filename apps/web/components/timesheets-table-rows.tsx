@@ -1,10 +1,12 @@
 'use client'
 
-import type { TimesheetReportEntry } from '@automatethis-pm/types/src'
+import type { TimesheetReportEntry } from '@sally/types/src'
 import { useProjectTasksQuery } from '../lib/query'
+import { deleteTextAction, formControlCell, formControlSm } from '../lib/theme'
 
-const filterInputStyle: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 10, padding: '8px 10px', background: '#fff', fontSize: 14 }
-const cellInputStyle: React.CSSProperties = { width: '100%', border: '1px solid #0f172a', borderRadius: 8, padding: '6px 8px', background: '#fff', fontSize: 14 }
+const filterInputStyle: React.CSSProperties = formControlSm
+const cellInputStyle: React.CSSProperties = { ...formControlCell, margin: 0, minHeight: 32, height: 32, fontSize: 14 }
+const rowCellStyle: React.CSSProperties = { minHeight: 32, display: 'flex', alignItems: 'center', fontSize: 14 }
 
 export type EditableField = 'date' | 'userId' | 'minutes' | 'billable' | 'taskId' | 'description'
 export type ActiveCell = { entryId: string; field: EditableField } | null
@@ -40,6 +42,7 @@ export function TimesheetsAddRow({
   onValidatedChange,
   onProjectChange,
   onSubmit,
+  compact = false,
 }: {
   gridColumns: string
   newDate: string
@@ -71,6 +74,7 @@ export function TimesheetsAddRow({
   onValidatedChange: (value: boolean) => void
   onProjectChange: (value: string) => void
   onSubmit: () => void
+  compact?: boolean
 }) {
   const handleEnterSubmit = (event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (event.key !== 'Enter') return
@@ -78,14 +82,29 @@ export function TimesheetsAddRow({
     onSubmit()
   }
 
+  if (compact) {
+    return (
+      <div style={{ display: 'grid', gap: 4, padding: 0, background: 'transparent', borderBottom: 'none' }}>
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit() }} style={{ display: 'grid', gridTemplateColumns: '132px 96px minmax(0, 1fr) auto auto', gap: 8, alignItems: 'center' }}>
+          <input type="date" value={newDate} onChange={(e) => onDateChange(e.target.value)} onKeyDown={handleEnterSubmit} style={filterInputStyle} />
+          <input value={newMinutes} onChange={(e) => onMinutesChange(e.target.value)} onKeyDown={handleEnterSubmit} inputMode="numeric" placeholder="Minutes" style={filterInputStyle} />
+          <input value={newDescription} onChange={(e) => onDescriptionChange(e.target.value)} onKeyDown={handleEnterSubmit} placeholder="What was done" style={filterInputStyle} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 40, color: 'var(--text-muted)', fontSize: 12 }}><input type="checkbox" checked={newBillable} onChange={(e) => onBillableChange(e.target.checked)} /> Billable</label>
+          <button type="submit" disabled={newBusy} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer' }}>{newBusy ? 'Saving…' : 'Add'}</button>
+        </form>
+        {newEntryError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{newEntryError}</div> : null}
+      </div>
+    )
+  }
+
   return (
-    <div style={{ display: 'grid', gap: 6, padding: '12px 14px', background: '#fcfcfd', borderBottom: '1px solid #eef2f7' }}>
+    <div style={{ display: 'grid', gap: 6, padding: '12px 14px', background: 'var(--panel-bg)', borderBottom: '1px solid var(--panel-border)' }}>
       <form onSubmit={(e) => { e.preventDefault(); onSubmit() }} style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: 10, alignItems: 'center' }}>
       <input type="date" value={newDate} onChange={(e) => onDateChange(e.target.value)} onKeyDown={handleEnterSubmit} style={filterInputStyle} />
-      {showCustomerColumn ? <div style={{ color: '#94a3b8' }}>—</div> : null}
+      {showCustomerColumn ? <div style={{ color: 'var(--text-muted)' }}>—</div> : null}
       {showProjectColumn ? (
         lockedProjectId ? (
-          <div style={{ color: '#475569', fontWeight: 600 }}>{lockedProjectName || projects.find((project) => project.id === projectId)?.name || 'Select project'}</div>
+          <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{lockedProjectName || projects.find((project) => project.id === projectId)?.name || 'Select project'}</div>
         ) : (
           <select value={projectId} onChange={(e) => onProjectChange(e.target.value)} onKeyDown={handleEnterSubmit} style={filterInputStyle}>
             <option value="">Select project</option>
@@ -99,11 +118,10 @@ export function TimesheetsAddRow({
             {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
           </select>
         ) : (
-          <div style={{ color: '#475569', fontWeight: 600 }}>Alex</div>
+          <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Alex</div>
         )
       ) : null}
       <input value={newMinutes} onChange={(e) => onMinutesChange(e.target.value)} onKeyDown={handleEnterSubmit} inputMode="numeric" placeholder="Minutes" style={filterInputStyle} />
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 40 }}><input type="checkbox" checked={newBillable} onChange={(e) => onBillableChange(e.target.checked)} /></label>
       {showTaskColumn ? (
         <select value={newTaskId} onChange={(e) => onTaskIdChange(e.target.value)} onKeyDown={handleEnterSubmit} style={filterInputStyle}>
           <option value="">Project only</option>
@@ -112,9 +130,10 @@ export function TimesheetsAddRow({
       ) : null}
       <input value={newDescription} onChange={(e) => onDescriptionChange(e.target.value)} onKeyDown={handleEnterSubmit} placeholder="What was done" style={filterInputStyle} />
       {showValidationColumn ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><input type="checkbox" checked={newValidated} onChange={(e) => onValidatedChange(e.target.checked)} /></div> : null}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#94a3b8', fontSize: 12 }}>{newBusy ? 'Saving…' : 'Press Enter'}</div>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 40 }}><input type="checkbox" checked={newBillable} onChange={(e) => onBillableChange(e.target.checked)} /></label>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: 'var(--text-muted)', fontSize: 12 }}>{newBusy ? 'Saving…' : 'Press Enter'}</div>
       </form>
-      {newEntryError ? <div style={{ color: '#b91c1c', fontSize: 12 }}>{newEntryError}</div> : null}
+      {newEntryError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{newEntryError}</div> : null}
     </div>
   )
 }
@@ -166,14 +185,14 @@ export function TimesheetsEntryRow({
     inputRef.current = node
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: 10, alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid #eef2f7', background: activeField ? '#f8fafc' : '#fff' }}>
-      <div onClick={() => onStartEdit('date')} style={{ cursor: 'pointer' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: 10, alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--panel-border)', background: activeField ? 'rgba(250, 204, 21, 0.06)' : 'var(--form-bg)' }}>
+      <div onClick={() => onStartEdit('date')} style={{ ...rowCellStyle, cursor: 'pointer' }}>
         {activeField === 'date' ? <input ref={setInputRef} type="date" value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('date')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('date') } }} style={cellInputStyle} /> : String(entry.date).slice(0, 10)}
       </div>
-      {showCustomerColumn ? <div>{entry.clientName || '—'}</div> : null}
-      {showProjectColumn ? <div>{entry.projectName}</div> : null}
+      {showCustomerColumn ? <div style={rowCellStyle}>{entry.clientName || '—'}</div> : null}
+      {showProjectColumn ? <div style={rowCellStyle}>{entry.projectName}</div> : null}
       {showUserColumn ? (
-        <div onClick={() => { if (canEditUser) onStartEdit('userId') }} style={{ cursor: canEditUser ? 'pointer' : 'default' }}>
+        <div onClick={() => { if (canEditUser) onStartEdit('userId') }} style={{ ...rowCellStyle, cursor: canEditUser ? 'pointer' : 'default' }}>
           {activeField === 'userId' && canEditUser ? (
             <select ref={setSelectRef} value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('userId')} style={cellInputStyle}>
               {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
@@ -181,27 +200,29 @@ export function TimesheetsEntryRow({
           ) : entry.userName}
         </div>
       ) : null}
-      <div onClick={() => onStartEdit('minutes')} style={{ cursor: 'pointer' }}>
+      <div onClick={() => onStartEdit('minutes')} style={{ ...rowCellStyle, cursor: 'pointer' }}>
         {activeField === 'minutes' ? <input ref={setInputRef} value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('minutes')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('minutes') } }} style={cellInputStyle} /> : entry.minutes}
       </div>
-      <div onClick={() => onStartEdit('billable')} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'center' }}>
-        {activeField === 'billable' ? <input ref={setInputRef} type="checkbox" checked={Boolean(draftValue)} onChange={(e) => onDraftValueChange(e.target.checked)} onBlur={() => onSave('billable')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('billable') } }} /> : entry.billable ? 'Yes' : 'No'}
-      </div>
       {showTaskColumn ? (
-        <div onClick={() => onStartEdit('taskId')} style={{ cursor: 'pointer' }}>
+        <div onClick={() => onStartEdit('taskId')} style={{ ...rowCellStyle, cursor: 'pointer' }}>
           {activeField === 'taskId' ? (
-            <select value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('taskId')} style={cellInputStyle}>
+            <select ref={setSelectRef} value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('taskId')} style={cellInputStyle}>
               <option value="">Project only</option>
               {projectTasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
             </select>
           ) : entry.taskTitle || '—'}
         </div>
       ) : null}
-      <div onClick={() => onStartEdit('description')} style={{ cursor: 'pointer' }}>
-        {activeField === 'description' ? <input ref={setInputRef} value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('description')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('description') } }} style={cellInputStyle} /> : <div style={{ color: '#475569' }}>{entry.description || '—'}</div>}
+      <div onClick={() => onStartEdit('description')} style={{ ...rowCellStyle, cursor: 'pointer' }}>
+        {activeField === 'description' ? <input ref={setInputRef} value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('description')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('description') } }} style={cellInputStyle} /> : <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{entry.description || '—'}</div>}
       </div>
-      {showValidationColumn ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><input type="checkbox" checked={entry.validated} onChange={(e) => onToggleValidated(e.target.checked)} /></div> : null}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button type="button" onClick={onDelete} disabled={isBusy} aria-label="Delete" title="Delete" style={{ border: 'none', background: 'transparent', cursor: 'pointer', opacity: isBusy ? 0.5 : 1, fontSize: 16, lineHeight: 1 }}>🗑️</button></div>
+      {showValidationColumn ? <div style={{ ...rowCellStyle, justifyContent: 'center' }}><input type="checkbox" checked={entry.validated} onChange={(e) => onToggleValidated(e.target.checked)} /></div> : null}
+      <div onClick={() => onStartEdit('billable')} style={{ ...rowCellStyle, cursor: 'pointer', justifyContent: 'center' }}>
+        {activeField === 'billable'
+          ? <input ref={setInputRef} type="checkbox" checked={Boolean(draftValue)} onChange={(e) => onDraftValueChange(e.target.checked)} onBlur={() => onSave('billable')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('billable') } }} />
+          : <input type="checkbox" checked={entry.billable} readOnly tabIndex={-1} aria-label={entry.billable ? 'Billable' : 'Non-billable'} />}
+      </div>
+      <div style={{ ...rowCellStyle, justifyContent: 'flex-end' }}><button type="button" onClick={onDelete} disabled={isBusy} aria-label="Delete" title="Delete" style={{ ...deleteTextAction, opacity: isBusy ? 0.5 : 1 }}>Delete</button></div>
     </div>
   )
 }

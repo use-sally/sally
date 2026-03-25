@@ -8,7 +8,7 @@ import { promisify } from 'node:util'
 import { hasExactTodoOrder, normalizeTaskLabels, normalizeTaskTodoTexts } from './task-helpers.js'
 import { serveProfileImage, saveProfileImage } from './profile-images.js'
 import { cleanupRemovedDescriptionImages, saveTaskImage, serveTaskImage } from './task-description-images.js'
-import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendPasswordResetEmail } from './mailer.js'
+import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
 
 function loadSimpleEnv(filePath: string) {
   if (!fs.existsSync(filePath)) return
@@ -299,13 +299,106 @@ function canAccessTaskAssignee(scope: { restricted: boolean; allowedAssignees: s
   return scope.allowedAssignees.includes(assignee)
 }
 
-async function logActivity(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; actorName?: string | null; actorEmail?: string | null; type: string; summary: string; payload?: any }) {
-  await prisma.activityLog.create({ data: { workspaceId: input.workspaceId, projectId: input.projectId ?? null, taskId: input.taskId ?? null, actorName: input.actorName ?? null, actorEmail: input.actorEmail ?? null, type: input.type, summary: input.summary, payload: input.payload ?? undefined } })
+async function logActivity(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; actorName?: string | null; actorEmail?: string | null; actorApiKeyLabel?: string | null; type: string; summary: string; payload?: any }) {
+  const payload = input.actorApiKeyLabel
+    ? { ...(input.payload && typeof input.payload === 'object' && !Array.isArray(input.payload) ? input.payload : {}), actorApiKeyLabel: input.actorApiKeyLabel }
+    : input.payload
+  await prisma.activityLog.create({ data: { workspaceId: input.workspaceId, projectId: input.projectId ?? null, taskId: input.taskId ?? null, actorName: input.actorName ?? null, actorEmail: input.actorEmail ?? null, type: input.type, summary: input.summary, payload: payload ?? undefined } })
 }
 
 function actorFromRequest(request: any) {
   const account = (request as any).account as { name?: string | null; email?: string | null } | undefined
-  return { actorName: account?.name ?? null, actorEmail: account?.email ?? null }
+  const apiKey = (request as any).apiKey as { label?: string | null } | undefined
+  return { actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null }
+}
+
+function activityValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '—'
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return String(value)
+}
+
+const NOTIFICATION_EVENT_TYPES = ['comment.mentioned', 'task.assigned'] as const
+
+function activityChange(label: string, before: unknown, after: unknown) {
+  return `${label}: ${activityValue(before)} → ${activityValue(after)}`
+}
+
+async function getEffectiveProjectMembers(workspaceId: string, projectId: string, requesterAccountId?: string | null) {
+  const configuredSuperadminEmail = getConfiguredSuperadminEmail()
+  const [projectMemberships, workspaceOwners, superadminAccount] = await Promise.all([
+    prisma.projectMembership.findMany({ where: { projectId }, orderBy: { createdAt: 'asc' }, include: { account: true } }),
+    prisma.workspaceMembership.findMany({ where: { workspaceId, role: WorkspaceRole.OWNER }, orderBy: { createdAt: 'asc' }, include: { account: true } }),
+    configuredSuperadminEmail
+      ? prisma.account.findFirst({ where: { email: configuredSuperadminEmail } })
+      : requesterAccountId
+        ? prisma.account.findFirst({ where: { id: requesterAccountId } })
+        : Promise.resolve(null),
+  ])
+
+  const members = new Map<string, { id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; createdAt: string; locked?: boolean; workspaceRole?: string | null; platformRole?: string | null }>()
+
+  for (const membership of projectMemberships) {
+    members.set(membership.accountId, {
+      id: membership.id,
+      accountId: membership.accountId,
+      name: membership.account.name,
+      email: membership.account.email,
+      avatarUrl: membership.account.avatarUrl,
+      role: membership.role,
+      createdAt: membership.createdAt.toISOString(),
+      locked: membership.role === PROJECT_ROLE.OWNER,
+      workspaceRole: null,
+      platformRole: membership.account.platformRole,
+    })
+  }
+
+  for (const membership of workspaceOwners) {
+    const existing = members.get(membership.accountId)
+    if (existing) {
+      existing.role = PROJECT_ROLE.OWNER
+      existing.locked = true
+      existing.workspaceRole = membership.role
+      existing.platformRole = existing.platformRole ?? membership.account.platformRole
+      continue
+    }
+    members.set(membership.accountId, {
+      id: `workspace-owner:${membership.id}`,
+      accountId: membership.accountId,
+      name: membership.account.name,
+      email: membership.account.email,
+      avatarUrl: membership.account.avatarUrl,
+      role: PROJECT_ROLE.OWNER,
+      createdAt: membership.createdAt.toISOString(),
+      locked: true,
+      workspaceRole: membership.role,
+      platformRole: membership.account.platformRole,
+    })
+  }
+
+  if (superadminAccount?.platformRole === PlatformRole.SUPERADMIN) {
+    const existing = members.get(superadminAccount.id)
+    if (existing) {
+      existing.locked = true
+      existing.platformRole = PlatformRole.SUPERADMIN
+    } else {
+      members.set(superadminAccount.id, {
+        id: `superadmin:${superadminAccount.id}`,
+        accountId: superadminAccount.id,
+        name: superadminAccount.name,
+        email: superadminAccount.email,
+        avatarUrl: superadminAccount.avatarUrl,
+        role: PROJECT_ROLE.OWNER,
+        createdAt: superadminAccount.createdAt.toISOString(),
+        locked: true,
+        workspaceRole: null,
+        platformRole: PlatformRole.SUPERADMIN,
+      })
+    }
+  }
+
+  return Array.from(members.values())
 }
 
 async function getAssigneeAvatarMap(workspaceId: string, assignees: Array<string | null | undefined>) {
@@ -326,6 +419,162 @@ async function getAssigneeAvatarMap(workspaceId: string, assignees: Array<string
     if (membership.account.email?.trim()) map.set(membership.account.email.trim(), membership.account.avatarUrl ?? null)
   }
   return map
+}
+
+async function resolveWorkspaceAccountMembership(workspaceId: string, identity?: string | null) {
+  const value = identity?.trim()
+  if (!value) return null
+  return prisma.workspaceMembership.findFirst({
+    where: {
+      workspaceId,
+      account: {
+        OR: [
+          { name: value },
+          { email: value.toLowerCase() },
+        ],
+      },
+    },
+    include: { account: true },
+  })
+}
+
+async function ensureProjectMembershipForAssignee(workspaceId: string, projectId: string, assignee?: string | null) {
+  const membership = await resolveWorkspaceAccountMembership(workspaceId, assignee)
+  if (!membership) return null
+  const existing = await prisma.projectMembership.findFirst({ where: { projectId, accountId: membership.accountId } })
+  if (!existing) {
+    await prisma.projectMembership.create({ data: { projectId, accountId: membership.accountId, role: PROJECT_ROLE.MEMBER } })
+  }
+  return membership
+}
+
+async function createNotification(input: { workspaceId: string; recipientAccountId: string; actorAccountId?: string | null; projectId?: string | null; taskId?: string | null; type: string; title: string; body: string; data?: any }) {
+  const preference = await prisma.notificationPreference.findFirst({ where: { accountId: input.recipientAccountId, eventType: input.type } })
+  const inAppEnabled = preference?.inAppEnabled ?? true
+  const emailEnabled = preference?.emailEnabled ?? true
+  if (!inAppEnabled && !emailEnabled) return
+
+  const notification = await prisma.notification.create({
+    data: {
+      workspaceId: input.workspaceId,
+      recipientAccountId: input.recipientAccountId,
+      actorAccountId: input.actorAccountId ?? null,
+      projectId: input.projectId ?? null,
+      taskId: input.taskId ?? null,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      data: input.data ?? undefined,
+      ...(inAppEnabled ? {} : { readAt: new Date() }),
+      deliveries: emailEnabled ? { create: [{ channel: 'email', status: 'pending' }] } : undefined,
+    },
+  })
+  return notification
+}
+
+async function notifyTaskAssignment(input: { workspaceId: string; projectId: string; taskId: string; taskTitle: string; assignee?: string | null; actorAccountId?: string | null }) {
+  const membership = await resolveWorkspaceAccountMembership(input.workspaceId, input.assignee)
+  if (!membership) return
+  if (input.actorAccountId && membership.accountId === input.actorAccountId) return
+  await createNotification({
+    workspaceId: input.workspaceId,
+    recipientAccountId: membership.accountId,
+    actorAccountId: input.actorAccountId ?? null,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    type: 'task.assigned',
+    title: 'You were assigned a task',
+    body: input.taskTitle,
+    data: { assignee: input.assignee, taskTitle: input.taskTitle },
+  })
+}
+
+async function formatNotificationEmail(notification: { type: string; title: string; body: string; data: any; actor?: { name: string | null; email: string } | null; project?: { name: string } | null; task?: { title: string } | null }) {
+  const actorName = notification.actor?.name?.trim() || notification.actor?.email || 'Someone'
+  const projectName = notification.project?.name?.trim() || null
+  const taskTitle = notification.task?.title?.trim() || (typeof notification.data?.taskTitle === 'string' ? notification.data.taskTitle.trim() : '') || notification.body.replace(/^Task:\s*/i, '').trim() || null
+
+  if (notification.type === 'task.assigned') {
+    return {
+      subject: taskTitle ? `Task assigned: ${taskTitle}` : notification.title,
+      title: 'You were assigned a task',
+      intro: `${actorName} assigned a task to you in sally_.`,
+      body: taskTitle ? `Task: ${taskTitle}` : notification.body,
+      eyebrow: 'Task assignment',
+      actionLabel: taskTitle ? `Open task: ${taskTitle}` : 'Open task',
+      meta: [projectName ? `Project: ${projectName}` : '', `Actor: ${actorName}`],
+    }
+  }
+
+  if (notification.type === 'comment.mentioned') {
+    const commentId = typeof notification.data?.commentId === 'string' ? notification.data.commentId : null
+    const comment = commentId ? await prisma.comment.findUnique({ where: { id: commentId } }) : null
+    const commentBody = comment?.body?.trim()
+    return {
+      subject: taskTitle ? `Mentioned in: ${taskTitle}` : notification.title,
+      title: 'You were mentioned in a comment',
+      intro: `${actorName} mentioned you in a task comment.`,
+      body: taskTitle
+        ? `Task: ${taskTitle}${commentBody ? `\n\nComment:\n${commentBody}` : ''}`
+        : commentBody || notification.body,
+      eyebrow: 'Mention',
+      actionLabel: taskTitle ? `Open task: ${taskTitle}` : 'Open task',
+      meta: [projectName ? `Project: ${projectName}` : '', `Actor: ${actorName}`],
+    }
+  }
+
+  return {
+    subject: notification.title,
+    title: notification.title,
+    intro: 'You have a new sally_ notification.',
+    body: `${actorName} · ${notification.body}`,
+    eyebrow: 'Notification',
+    actionLabel: 'Open in sally_',
+    meta: [projectName ? `Project: ${projectName}` : '', taskTitle ? `Task: ${taskTitle}` : ''],
+  }
+}
+
+async function processPendingNotificationDeliveries(limit = 20) {
+  const deliveries = await prisma.notificationDelivery.findMany({
+    where: { channel: 'email', status: 'pending' },
+    orderBy: { createdAt: 'asc' },
+    take: limit,
+    include: {
+      notification: {
+        include: {
+          recipient: true,
+          actor: true,
+          project: true,
+          task: true,
+        },
+      },
+    },
+  })
+
+  const baseUrl = process.env.APP_BASE_URL?.replace(/\/+$/, '')
+
+  for (const delivery of deliveries) {
+    const notification = delivery.notification
+    const workspaceUrl = baseUrl ? `${baseUrl}/?workspaceId=${encodeURIComponent(notification.workspaceId)}` : undefined
+    const actionUrl = notification.taskId && baseUrl ? `${baseUrl}/tasks/${notification.taskId}?workspaceId=${encodeURIComponent(notification.workspaceId)}` : notification.projectId && baseUrl ? `${baseUrl}/projects/${notification.projectId}?workspaceId=${encodeURIComponent(notification.workspaceId)}` : undefined
+    const emailContent = await formatNotificationEmail(notification)
+    const result = await sendNotificationEmail({
+      email: notification.recipient.email,
+      subject: emailContent.subject,
+      title: emailContent.title,
+      intro: emailContent.intro,
+      body: emailContent.body,
+      eyebrow: emailContent.eyebrow,
+      actionLabel: actionUrl ? emailContent.actionLabel : undefined,
+      actionUrl,
+      brandUrl: workspaceUrl,
+      meta: emailContent.meta,
+    })
+    await prisma.notificationDelivery.update({
+      where: { id: delivery.id },
+      data: result.ok ? { status: 'sent', sentAt: new Date(), attempts: { increment: 1 } } : { status: 'failed', lastError: result.reason || 'Failed to send email notification', attempts: { increment: 1 } },
+    })
+  }
 }
 
 async function ensureTimesheetUser(workspaceId: string, account: { id: string; name: string | null; email: string }) {
@@ -403,7 +652,34 @@ function getEmailChangeExpiry() {
   return new Date(Date.now() + 24 * 60 * 60 * 1000)
 }
 
-async function getInitialPlatformRole() {
+function getConfiguredSuperadminEmail() {
+  return process.env.SUPERADMIN_EMAIL?.trim().toLowerCase() || null
+}
+
+function getConfiguredSuperadminPasswordHash() {
+  return process.env.SUPERADMIN_PASSWORD_HASH?.trim() || null
+}
+
+function isConfiguredSuperadminEmail(email?: string | null) {
+  const configuredEmail = getConfiguredSuperadminEmail()
+  return Boolean(configuredEmail && email?.trim().toLowerCase() === configuredEmail)
+}
+
+function superadminPasswordResetDisabled() {
+  const value = process.env.SUPERADMIN_DISABLE_PASSWORD_RESET?.trim().toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes'
+}
+
+async function syncConfiguredSuperadmin() {
+  const configuredEmail = getConfiguredSuperadminEmail()
+  if (!configuredEmail) return
+  await prisma.account.updateMany({ where: { platformRole: PlatformRole.SUPERADMIN, email: { not: configuredEmail } }, data: { platformRole: PlatformRole.NONE } })
+  await prisma.account.updateMany({ where: { email: configuredEmail }, data: { platformRole: PlatformRole.SUPERADMIN } })
+}
+
+async function getInitialPlatformRole(email?: string | null) {
+  const configuredEmail = getConfiguredSuperadminEmail()
+  if (configuredEmail) return email?.trim().toLowerCase() === configuredEmail ? PlatformRole.SUPERADMIN : PlatformRole.NONE
   const accountCount = await prisma.account.count()
   return accountCount === 0 ? PlatformRole.SUPERADMIN : PlatformRole.NONE
 }
@@ -512,8 +788,10 @@ const start = async () => {
       if (!email) return reply.code(400).send({ ok: false, error: 'email is required' })
       if (!password) return reply.code(400).send({ ok: false, error: 'password is required' })
       const account = await prisma.account.findFirst({ where: { email } })
-      if (!account?.passwordHash) return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
-      const valid = await verifyPassword(password, account.passwordHash)
+      const configuredSuperadminPasswordHash = isConfiguredSuperadminEmail(email) ? getConfiguredSuperadminPasswordHash() : null
+      const effectivePasswordHash = configuredSuperadminPasswordHash || account?.passwordHash || null
+      if (!account || !effectivePasswordHash) return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
+      const valid = await verifyPassword(password, effectivePasswordHash)
       if (!valid) return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
@@ -543,6 +821,100 @@ const start = async () => {
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
         memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceName: membership.workspace.name, role: membership.role })),
       }
+    })
+
+    app.get('/notifications', async (request) => {
+      const account = (request as any).account as { id: string }
+      const query = request.query as { unreadOnly?: string; limit?: string }
+      const unreadOnly = query.unreadOnly === 'true'
+      const limit = Math.min(Math.max(Number(query.limit || 20) || 20, 1), 100)
+      const notifications = await prisma.notification.findMany({
+        where: { recipientAccountId: account.id, ...(unreadOnly ? { readAt: null } : {}) },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: { actor: true },
+      })
+      return notifications.map((notification) => ({
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        body: notification.body,
+        readAt: notification.readAt?.toISOString() ?? null,
+        createdAt: notification.createdAt.toISOString(),
+        projectId: notification.projectId,
+        taskId: notification.taskId,
+        actor: notification.actor ? { id: notification.actor.id, name: notification.actor.name, email: notification.actor.email, avatarUrl: notification.actor.avatarUrl ?? null } : null,
+      }))
+    })
+
+    app.post('/notifications/:notificationId/read', async (request, reply) => {
+      const account = (request as any).account as { id: string }
+      const { notificationId } = request.params as { notificationId: string }
+      const notification = await prisma.notification.findFirst({ where: { id: notificationId, recipientAccountId: account.id } })
+      if (!notification) return reply.code(404).send({ ok: false, error: 'Notification not found' })
+      await prisma.notification.delete({ where: { id: notificationId } })
+      return { ok: true }
+    })
+
+    app.post('/notifications/read-all', async (request) => {
+      const account = (request as any).account as { id: string }
+      await prisma.notification.deleteMany({ where: { recipientAccountId: account.id } })
+      return { ok: true }
+    })
+
+    app.get('/notifications/preferences', async (request) => {
+      const account = (request as any).account as { id: string }
+      const rows = await prisma.notificationPreference.findMany({ where: { accountId: account.id } })
+      return NOTIFICATION_EVENT_TYPES.map((eventType) => {
+        const row = rows.find((item) => item.eventType === eventType)
+        return { eventType, inAppEnabled: row?.inAppEnabled ?? true, emailEnabled: row?.emailEnabled ?? true }
+      })
+    })
+
+    app.put('/notifications/preferences', async (request) => {
+      const account = (request as any).account as { id: string }
+      const body = request.body as { preferences?: { eventType: string; inAppEnabled: boolean; emailEnabled: boolean }[] }
+      const preferences = (body.preferences || []).filter((item) => NOTIFICATION_EVENT_TYPES.includes(item.eventType as any))
+      for (const preference of preferences) {
+        await prisma.notificationPreference.upsert({
+          where: { accountId_eventType: { accountId: account.id, eventType: preference.eventType } },
+          update: { inAppEnabled: preference.inAppEnabled, emailEnabled: preference.emailEnabled },
+          create: { accountId: account.id, eventType: preference.eventType, inAppEnabled: preference.inAppEnabled, emailEnabled: preference.emailEnabled },
+        })
+      }
+      return { ok: true }
+    })
+
+    app.post('/notifications/process-deliveries', async (request, reply) => {
+      if (!isSuperadmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      await processPendingNotificationDeliveries()
+      return { ok: true }
+    })
+
+    app.get('/mentionable-users', async (request, reply) => {
+      const workspace = (request as any).workspace
+      const query = request.query as { projectId?: string; query?: string }
+      const projectId = query.projectId?.trim()
+      const search = query.query?.trim() || ''
+      const account = (request as any).account as { id: string } | undefined
+      if (!projectId) return reply.code(400).send({ ok: false, error: 'projectId is required' })
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      const projectMemberships = await prisma.projectMembership.findMany({ where: { projectId }, select: { accountId: true } })
+      const projectMemberIds = new Set(projectMemberships.map((membership) => membership.accountId))
+      const memberships = await prisma.workspaceMembership.findMany({
+        where: {
+          workspaceId: workspace.id,
+          ...(account?.id ? { accountId: { not: account.id } } : {}),
+          account: search
+            ? { OR: [ { name: { contains: search, mode: 'insensitive' } }, { email: { contains: search, mode: 'insensitive' } } ] }
+            : undefined,
+        },
+        include: { account: true },
+        take: 20,
+      })
+      return memberships
+        .sort((a, b) => Number(projectMemberIds.has(b.accountId)) - Number(projectMemberIds.has(a.accountId)))
+        .map((membership) => ({ accountId: membership.accountId, name: membership.account.name, email: membership.account.email, avatarUrl: membership.account.avatarUrl ?? null }))
     })
 
     app.get('/auth/api-keys', async (request, reply) => {
@@ -586,7 +958,7 @@ const start = async () => {
       const profile = await prisma.account.findUnique({ where: { id: account.id } })
       if (!profile) return reply.code(404).send({ ok: false, error: 'Account not found' })
       const pendingEmail = await prisma.emailChangeToken.findFirst({ where: { accountId: profile.id, usedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } })
-      return { ok: true, profile: { id: profile.id, name: profile.name, email: profile.email, avatarUrl: profile.avatarUrl, pendingEmail: pendingEmail?.newEmail ?? null, platformRole: profile.platformRole } }
+      return { ok: true, profile: { id: profile.id, name: profile.name, email: profile.email, avatarUrl: profile.avatarUrl, pendingEmail: pendingEmail?.newEmail ?? null, platformRole: profile.platformRole, emailLocked: isConfiguredSuperadminEmail(profile.email) } }
     })
 
     app.patch('/auth/profile', async (request, reply) => {
@@ -600,6 +972,9 @@ const start = async () => {
       await prisma.account.update({ where: { id: current.id }, data: { name, avatarUrl } })
       let emailChange = null as null | { pendingEmail: string; emailed: boolean; reason?: string }
       const nextEmail = body.email?.trim().toLowerCase()
+      if (isConfiguredSuperadminEmail(current.email) && nextEmail && nextEmail !== current.email) {
+        return reply.code(403).send({ ok: false, error: 'The configured superadmin email can only be changed via .env update and redeploy' })
+      }
       if (nextEmail && nextEmail !== current.email) {
         const existing = await prisma.account.findFirst({ where: { email: nextEmail } })
         if (existing) return reply.code(400).send({ ok: false, error: 'Email is already in use' })
@@ -610,7 +985,7 @@ const start = async () => {
         emailChange = { pendingEmail: nextEmail, emailed: mailResult.ok, ...(mailResult.ok ? {} : { reason: mailResult.reason }) }
       }
       const updated = await prisma.account.findUnique({ where: { id: current.id } })
-      return { ok: true, profile: { id: updated!.id, name: updated!.name, email: updated!.email, avatarUrl: updated!.avatarUrl, platformRole: updated!.platformRole }, emailChange }
+      return { ok: true, profile: { id: updated!.id, name: updated!.name, email: updated!.email, avatarUrl: updated!.avatarUrl, platformRole: updated!.platformRole, emailLocked: isConfiguredSuperadminEmail(updated!.email) }, emailChange }
     })
 
     app.post('/auth/confirm-email-change', async (request, reply) => {
@@ -622,6 +997,7 @@ const start = async () => {
       const existing = await prisma.account.findFirst({ where: { email: pending.newEmail } })
       if (existing && existing.id !== pending.accountId) return reply.code(400).send({ ok: false, error: 'Email is already in use' })
       const updated = await prisma.account.update({ where: { id: pending.accountId }, data: { email: pending.newEmail } })
+      await syncConfiguredSuperadmin()
       await prisma.emailChangeToken.update({ where: { id: pending.id }, data: { usedAt: new Date() } })
       return { ok: true, account: { id: updated.id, name: updated.name, email: updated.email, avatarUrl: updated.avatarUrl, platformRole: updated.platformRole } }
     })
@@ -710,7 +1086,8 @@ const start = async () => {
       if (!invite) return reply.code(400).send({ ok: false, error: 'Invite is invalid or expired' })
       let account = await prisma.account.findFirst({ where: { email: invite.email } })
       if (!account) {
-        account = await prisma.account.create({ data: { email: invite.email, name: body.name?.trim() || null, passwordHash: await hashPassword(password), platformRole: await getInitialPlatformRole() } })
+        account = await prisma.account.create({ data: { email: invite.email, name: body.name?.trim() || null, passwordHash: await hashPassword(password), platformRole: await getInitialPlatformRole(invite.email) } })
+        await syncConfiguredSuperadmin()
       } else {
         if (account.passwordHash) return reply.code(400).send({ ok: false, error: 'Account already activated' })
         account = await prisma.account.update({ where: { id: account.id }, data: { ...(body.name && !account.name ? { name: body.name.trim() } : {}), passwordHash: await hashPassword(password) } })
@@ -738,6 +1115,7 @@ const start = async () => {
       if (!email) return reply.code(400).send({ ok: false, error: 'email is required' })
       const account = await prisma.account.findFirst({ where: { email } })
       if (!account) return { ok: true }
+      if (isConfiguredSuperadminEmail(email) && superadminPasswordResetDisabled()) return { ok: true }
       const resetToken = generateSessionToken()
       const reset = await prisma.passwordReset.create({ data: { accountId: account.id, token: resetToken, expiresAt: getResetExpiry() } })
       const mailResult = await sendPasswordResetEmail({ email, resetToken: reset.token, expiresAt: reset.expiresAt })
@@ -758,6 +1136,9 @@ const start = async () => {
       if (!validateStrongPassword(password)) return reply.code(400).send({ ok: false, error: STRONG_PASSWORD_HINT })
       const reset = await prisma.passwordReset.findFirst({ where: { token, usedAt: null, expiresAt: { gt: new Date() } } })
       if (!reset) return reply.code(400).send({ ok: false, error: 'Reset token is invalid or expired' })
+      const resetAccount = await prisma.account.findFirst({ where: { id: reset.accountId } })
+      if (!resetAccount) return reply.code(404).send({ ok: false, error: 'Account not found' })
+      if (isConfiguredSuperadminEmail(resetAccount.email) && superadminPasswordResetDisabled()) return reply.code(403).send({ ok: false, error: 'Password reset is disabled for the superadmin account' })
       const account = await prisma.account.update({ where: { id: reset.accountId }, data: { passwordHash: await hashPassword(password) } })
       await prisma.passwordReset.update({ where: { id: reset.id }, data: { usedAt: new Date() } })
       const sessionToken = generateSessionToken()
@@ -786,6 +1167,7 @@ const start = async () => {
     })
 
     app.post('/workspaces', async (request, reply) => {
+      if (!isSuperadmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const body = request.body as { name: string; slug?: string }
       const name = body.name?.trim()
       if (!name) return reply.code(400).send({ ok: false, error: 'name is required' })
@@ -829,7 +1211,8 @@ const start = async () => {
       if (!email) return reply.code(400).send({ ok: false, error: 'email is required' })
       const existing = await prisma.account.findFirst({ where: { email } })
       if (existing) return { ok: true, accountId: existing.id, existing: true }
-      const account = await prisma.account.create({ data: { email, name: body.name?.trim() || null, platformRole: await getInitialPlatformRole() } })
+      const account = await prisma.account.create({ data: { email, name: body.name?.trim() || null, platformRole: await getInitialPlatformRole(email) } })
+      await syncConfiguredSuperadmin()
       return { ok: true, accountId: account.id }
     })
 
@@ -933,19 +1316,8 @@ const start = async () => {
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
-      const memberships = await prisma.projectMembership.findMany({
-        where: { projectId },
-        orderBy: { createdAt: 'asc' },
-        include: { account: true },
-      })
-      return memberships.map((membership) => ({
-        id: membership.id,
-        accountId: membership.accountId,
-        name: membership.account.name,
-        email: membership.account.email,
-        role: membership.role,
-        createdAt: membership.createdAt.toISOString(),
-      }))
+      const requesterAccountId = ((request as any).account as { id: string } | undefined)?.id ?? null
+      return getEffectiveProjectMembers(workspace.id, projectId, requesterAccountId)
     })
 
     app.post('/projects/:projectId/members', async (request, reply) => {
@@ -981,6 +1353,7 @@ const start = async () => {
       const existing = await prisma.projectMembership.findFirst({ where: { projectId, accountId } })
       if (existing) return { ok: true, membershipId: existing.id, existing: true }
       const membership = await prisma.projectMembership.create({ data: { projectId, accountId, role } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'project.member.added', summary: `Added account ${accountId} to project as ${role}.`, payload: { accountId, role } })
       return { ok: true, membershipId: membership.id }
     })
 
@@ -1011,7 +1384,7 @@ const start = async () => {
         }
         await prisma.projectMembership.update({ where: { id: membershipId }, data: { role } })
       }
-      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'project.member.updated', summary: `Updated project member role to ${body.role}.`, payload: { membershipId, role: body.role } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'project.member.updated', summary: `Updated project member role to ${body.role}.`, payload: { membershipId, role: body.role } })
       return { ok: true }
     })
 
@@ -1037,7 +1410,7 @@ const start = async () => {
         }
       }
       await prisma.projectMembership.delete({ where: { id: membershipId } })
-      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'project.member.removed', summary: `Removed project member (${membership.accountId}) from project.`, payload: { membershipId } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'project.member.removed', summary: `Removed project member (${membership.accountId}) from project.`, payload: { membershipId } })
       return { ok: true }
     })
 
@@ -1237,9 +1610,10 @@ const start = async () => {
       const taskScope = await getTaskAccessScope(request, task.projectId)
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       const assigneeAvatars = await getAssigneeAvatarMap(workspace.id, [task.assignee])
+      const commentAvatars = await getAssigneeAvatarMap(workspace.id, task.comments.map((comment) => comment.author))
       const timesheetScope = await resolveTimesheetScope(request, workspace.id, task.projectId)
       const visibleTimesheets = timesheetScope.elevated || !timesheetScope.userId ? task.timesheets : task.timesheets.filter((entry) => entry.userId === timesheetScope.userId)
-      return { id: task.id, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, labels: task.labels.map((l) => l.label.name), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, body: c.body, createdAt: c.createdAt })) }
+      return { id: task.id, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, labels: task.labels.map((l) => l.label.name), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
     })
 
     app.post('/tasks/:taskId/todos', async (request, reply) => {
@@ -1256,6 +1630,7 @@ const start = async () => {
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       const maxPos = await prisma.taskTodo.aggregate({ where: { taskId }, _max: { position: true } })
       const todo = await prisma.taskTodo.create({ data: { taskId, text, position: (maxPos._max.position ?? -1) + 1 } })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.todo.created', summary: `Updated checklist for task ${task.title}.`, payload: { todoId: todo.id, details: ['checklist item added'] } })
       return { ok: true, todoId: todo.id }
     })
 
@@ -1271,7 +1646,11 @@ const start = async () => {
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       const todo = await prisma.taskTodo.findFirst({ where: { id: todoId, taskId } })
       if (!todo) return reply.code(404).send({ ok: false, error: 'Todo not found' })
+      const details: string[] = []
+      if (body.text !== undefined && body.text.trim() !== todo.text) details.push('checklist item renamed')
+      if (body.done !== undefined && body.done !== todo.done) details.push(body.done ? 'checklist item completed' : 'checklist item reopened')
       await prisma.taskTodo.update({ where: { id: todoId }, data: { ...(body.text !== undefined ? { text: body.text.trim() } : {}), ...(body.done !== undefined ? { done: body.done } : {}) } })
+      if (details.length) await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.todo.updated', summary: `Updated checklist for task ${task.title}.`, payload: { todoId, details } })
       return { ok: true }
     })
 
@@ -1287,6 +1666,7 @@ const start = async () => {
       const todo = await prisma.taskTodo.findFirst({ where: { id: todoId, taskId } })
       if (!todo) return reply.code(404).send({ ok: false, error: 'Todo not found' })
       await prisma.taskTodo.delete({ where: { id: todoId } })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.todo.deleted', summary: `Updated checklist for task ${task.title}.`, payload: { todoId, details: ['checklist item removed'] } })
       return { ok: true }
     })
 
@@ -1307,6 +1687,7 @@ const start = async () => {
         return reply.code(400).send({ ok: false, error: 'orderedTodoIds must exactly match task todos' })
       }
       await prisma.$transaction(body.orderedTodoIds.map((id, index) => prisma.taskTodo.update({ where: { id }, data: { position: index } })))
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.todo.reordered', summary: `Updated checklist for task ${task.title}.`, payload: { details: ['checklist reordered'] } })
       return { ok: true }
     })
 
@@ -1351,8 +1732,19 @@ const start = async () => {
       const workspace = (request as any).workspace
       const { projectId } = request.params as { projectId: string }
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
-      const events = await prisma.activityLog.findMany({ where: { workspaceId: workspace.id, projectId }, orderBy: { createdAt: 'desc' }, take: 50 })
-      return events.map((event) => ({ id: event.id, type: event.type, summary: event.summary, actorName: event.actorName, actorEmail: event.actorEmail, createdAt: event.createdAt.toISOString() }))
+      const events = await prisma.activityLog.findMany({ where: { workspaceId: workspace.id, projectId }, orderBy: { createdAt: 'desc' }, take: 100 })
+      return events.map((event) => ({
+        id: event.id,
+        type: event.type,
+        summary: event.summary,
+        actorName: event.actorName,
+        actorEmail: event.actorEmail,
+        actorApiKeyLabel: event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) ? ((event.payload as Record<string, unknown>).actorApiKeyLabel as string | null | undefined) ?? null : null,
+        details: event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) && Array.isArray((event.payload as Record<string, unknown>).details)
+          ? ((event.payload as Record<string, unknown>).details as unknown[]).filter((value): value is string => typeof value === 'string')
+          : [],
+        createdAt: event.createdAt.toISOString(),
+      }))
     })
 
     app.post('/projects/:projectId/statuses', async (request, reply) => {
@@ -1366,7 +1758,8 @@ const start = async () => {
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const maxPos = await prisma.taskStatus.aggregate({ where: { projectId }, _max: { position: true } })
-      const status = await prisma.taskStatus.create({ data: { projectId, name, type: 'TODO', position: (maxPos._max.position ?? -1) + 1, color: '#cbd5e1' } })
+      const status = await prisma.taskStatus.create({ data: { projectId, name, type: 'TODO', position: (maxPos._max.position ?? -1) + 1, color: '#1F2937' } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.created', summary: `Created status ${name}.`, payload: { statusId: status.id, name } })
       return { ok: true, statusId: status.id }
     })
 
@@ -1378,8 +1771,13 @@ const start = async () => {
       const status = await prisma.taskStatus.findFirst({ where: { id: statusId, projectId, project: { workspaceId: workspace.id } } })
       if (!status) return reply.code(404).send({ ok: false, error: 'Status not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
-      await prisma.taskStatus.update({ where: { id: statusId }, data: { ...(body.name !== undefined ? { name: body.name.trim() } : {}), ...(body.color !== undefined ? { color: body.color.trim() || '#cbd5e1' } : {}) } })
-      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'status.updated', summary: `Updated status ${status.name}.`, payload: { statusId, name: body.name, color: body.color } })
+      const nextName = body.name !== undefined ? body.name.trim() : status.name
+      const nextColor = body.color !== undefined ? (body.color.trim() || '#1F2937') : status.color
+      const details: string[] = []
+      if (nextName !== status.name) details.push(activityChange('name', status.name, nextName))
+      if ((nextColor || null) !== (status.color || null)) details.push(activityChange('color', status.color, nextColor))
+      await prisma.taskStatus.update({ where: { id: statusId }, data: { ...(body.name !== undefined ? { name: nextName } : {}), ...(body.color !== undefined ? { color: nextColor } : {}) } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.updated', summary: `Updated status ${status.name}.`, payload: { statusId, name: body.name, color: body.color, details } })
       return { ok: true }
     })
 
@@ -1408,6 +1806,7 @@ const start = async () => {
         if (taskCount > 0 && targetStatusId) await tx.task.updateMany({ where: { statusId }, data: { statusId: targetStatusId } })
         await tx.taskStatus.delete({ where: { id: statusId } })
       })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.deleted', summary: `Deleted status ${status.name}.`, payload: { statusId, targetStatusId } })
       return { ok: true }
     })
 
@@ -1426,16 +1825,27 @@ const start = async () => {
         nextSlug = slug
       }
       let nextClientId: string | null | undefined = undefined
+      let nextClientName: string | null | undefined = undefined
+      const currentClient = project.clientId ? await prisma.client.findFirst({ where: { id: project.clientId, workspaceId: project.workspaceId } }) : null
       if (body.clientId !== undefined) {
         if (!body.clientId) {
           nextClientId = null
+          nextClientName = null
         } else {
           const client = await prisma.client.findFirst({ where: { id: body.clientId, workspaceId: project.workspaceId } })
           if (!client) return reply.code(404).send({ ok: false, error: 'Client not found' })
           nextClientId = client.id
+          nextClientName = client.name
         }
       }
-      await prisma.project.update({ where: { id: projectId }, data: { ...(body.name !== undefined ? { name: body.name.trim() } : {}), ...(body.description !== undefined ? { description: body.description.trim() || null } : {}), ...(body.clientId !== undefined ? { clientId: nextClientId ?? null } : {}), slug: nextSlug } })
+      const nextName = body.name !== undefined ? body.name.trim() : project.name
+      const nextDescription = body.description !== undefined ? (body.description.trim() || null) : project.description
+      const details: string[] = []
+      if (nextName !== project.name) details.push(activityChange('name', project.name, nextName))
+      if ((nextDescription || null) !== (project.description || null)) details.push('description changed')
+      if (body.clientId !== undefined && (nextClientId || null) !== (project.clientId || null)) details.push(activityChange('client', currentClient?.name || null, nextClientName))
+      await prisma.project.update({ where: { id: projectId }, data: { ...(body.name !== undefined ? { name: nextName } : {}), ...(body.description !== undefined ? { description: nextDescription } : {}), ...(body.clientId !== undefined ? { clientId: nextClientId ?? null } : {}), slug: nextSlug } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'project.updated', summary: `Updated project ${project.name}.`, payload: { projectId, details } })
       return { ok: true }
     })
 
@@ -1478,6 +1888,10 @@ const start = async () => {
         if (!client) return reply.code(404).send({ ok: false, error: 'Client not found' })
         clientId = client.id
       }
+      const workspaceOwners = await prisma.workspaceMembership.findMany({ where: { workspaceId: workspace.id, role: WorkspaceRole.OWNER }, select: { accountId: true } })
+      const configuredSuperadminEmail = getConfiguredSuperadminEmail()
+      const configuredSuperadmin = configuredSuperadminEmail ? await prisma.account.findFirst({ where: { email: configuredSuperadminEmail, platformRole: PlatformRole.SUPERADMIN }, select: { id: true } }) : null
+      const defaultOwnerIds = Array.from(new Set([...(account ? [account.id] : []), ...workspaceOwners.map((membership) => membership.accountId), ...(configuredSuperadmin ? [configuredSuperadmin.id] : [])]))
       const project = await prisma.project.create({
         data: {
           workspaceId: workspace.id,
@@ -1486,12 +1900,12 @@ const start = async () => {
           slug,
           description: body.description?.trim() || null,
           statuses: { create: [
-            { name: 'Backlog', type: 'BACKLOG', position: 0, color: '#94a3b8' },
-            { name: 'In Progress', type: 'IN_PROGRESS', position: 1, color: '#60a5fa' },
-            { name: 'Review', type: 'REVIEW', position: 2, color: '#fbbf24' },
-            { name: 'Done', type: 'DONE', position: 3, color: '#34d399' },
+            { name: 'Backlog', type: 'BACKLOG', position: 0, color: '#1F2937' },
+            { name: 'In Progress', type: 'IN_PROGRESS', position: 1, color: '#172554' },
+            { name: 'Review', type: 'REVIEW', position: 2, color: '#422006' },
+            { name: 'Done', type: 'DONE', position: 3, color: '#14532D' },
           ] },
-          ...(account ? { memberships: { create: { accountId: account.id, role: PROJECT_ROLE.OWNER } } } : {}),
+          ...(defaultOwnerIds.length ? { memberships: { create: defaultOwnerIds.map((accountId) => ({ accountId, role: PROJECT_ROLE.OWNER })) } } : {}),
         },
       })
       return { ok: true, projectId: project.id }
@@ -1534,6 +1948,9 @@ const start = async () => {
         }
         return createdTask
       })
+      await ensureProjectMembershipForAssignee(workspace.id, task.projectId, task.assignee)
+      await notifyTaskAssignment({ workspaceId: workspace.id, projectId: task.projectId, taskId: task.id, taskTitle: task.title, assignee: task.assignee, actorAccountId: ((request as any).account as { id: string } | undefined)?.id ?? null })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId: task.id, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.created', summary: `Created task ${task.title}.`, payload: { taskId: task.id } })
       return { ok: true, taskId: task.id }
     })
 
@@ -1547,14 +1964,33 @@ const start = async () => {
       if (!(await requireProjectRole(request, reply, existing.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, existing.projectId)
       if (!canAccessTaskAssignee(taskScope, existing.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
+      const currentStatus = await prisma.taskStatus.findFirst({ where: { id: existing.statusId }, select: { id: true, name: true } })
+      let targetStatusName: string | null = null
       if (body.statusId) {
         const targetStatus = await prisma.taskStatus.findFirst({ where: { id: body.statusId, projectId: existing.projectId } })
         if (!targetStatus) return reply.code(404).send({ ok: false, error: 'Target status not found for task project' })
+        targetStatusName = targetStatus.name
       }
+      const nextTitle = body.title !== undefined ? body.title : existing.title
       const nextDescription = body.description !== undefined ? body.description : existing.description
+      const nextAssignee = body.assignee !== undefined ? body.assignee : existing.assignee
+      const nextPriority = body.priority !== undefined ? body.priority : existing.priority
+      const nextDueDate = body.dueDate !== undefined ? toIsoOrNull(body.dueDate) : existing.dueDate
+      const nextStatusId = body.statusId !== undefined ? body.statusId : existing.statusId
+      const details: string[] = []
+      if (nextTitle !== existing.title) details.push(activityChange('title', existing.title, nextTitle))
+      if ((nextDescription || null) !== (existing.description || null)) details.push('description changed')
+      if ((nextAssignee || null) !== (existing.assignee || null)) details.push(activityChange('assignee', existing.assignee, nextAssignee))
+      if (nextPriority !== existing.priority) details.push(activityChange('priority', existing.priority, nextPriority))
+      if ((nextDueDate || null)?.toString() !== (existing.dueDate || null)?.toString()) details.push(activityChange('due date', existing.dueDate, nextDueDate))
+      if (nextStatusId !== existing.statusId) details.push(activityChange('status', currentStatus?.name || existing.statusId, targetStatusName || nextStatusId))
       await prisma.task.update({ where: { id: params.taskId }, data: { ...(body.title !== undefined ? { title: body.title } : {}), ...(body.description !== undefined ? { description: body.description } : {}), ...(body.assignee !== undefined ? { assignee: body.assignee } : {}), ...(body.priority !== undefined ? { priority: body.priority } : {}), ...(body.dueDate !== undefined ? { dueDate: toIsoOrNull(body.dueDate) } : {}), ...(body.statusId !== undefined ? { statusId: body.statusId } : {}) } })
+      await ensureProjectMembershipForAssignee(workspace.id, existing.projectId, nextAssignee)
+      if (nextAssignee !== existing.assignee) {
+        await notifyTaskAssignment({ workspaceId: workspace.id, projectId: existing.projectId, taskId: existing.id, taskTitle: nextTitle, assignee: nextAssignee, actorAccountId: ((request as any).account as { id: string } | undefined)?.id ?? null })
+      }
       if (body.description !== undefined) cleanupRemovedDescriptionImages(existing.description, nextDescription)
-      await logActivity({ workspaceId: workspace.id, projectId: existing.projectId, taskId: existing.id, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'task.updated', summary: `Updated task ${existing.title}.`, payload: { taskId: existing.id } })
+      await logActivity({ workspaceId: workspace.id, projectId: existing.projectId, taskId: existing.id, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.updated', summary: `Updated task ${existing.title}.`, payload: { taskId: existing.id, details } })
       return { ok: true }
     })
 
@@ -1570,7 +2006,7 @@ const start = async () => {
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       const archived = body.archived !== false
       await prisma.task.update({ where: { id: taskId }, data: { archivedAt: archived ? new Date() : null } })
-      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: archived ? 'task.archived' : 'task.unarchived', summary: `${archived ? 'Archived' : 'Unarchived'} task ${task.title}.`, payload: { taskId } })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: archived ? 'task.archived' : 'task.unarchived', summary: `${archived ? 'Archived' : 'Unarchived'} task ${task.title}.`, payload: { taskId } })
       return { ok: true }
     })
 
@@ -1765,7 +2201,7 @@ const start = async () => {
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { timesheetId } = request.params as { timesheetId: string }
       const body = request.body as { minutes?: number; description?: string | null; date?: string; billable?: boolean; validated?: boolean; taskId?: string | null; userId?: string }
-      const entry = await prisma.timesheetEntry.findFirst({ where: { id: timesheetId, project: { workspaceId: workspace.id } }, select: { id: true, projectId: true, userId: true, taskId: true, minutes: true } })
+      const entry = await prisma.timesheetEntry.findFirst({ where: { id: timesheetId, project: { workspaceId: workspace.id } }, select: { id: true, projectId: true, userId: true, taskId: true, minutes: true, description: true, date: true, billable: true, validated: true } })
       if (!entry) return reply.code(404).send({ ok: false, error: 'Timesheet entry not found' })
       if (!(await requireProjectRole(request, reply, entry.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const scope = await resolveTimesheetScope(request, workspace.id, entry.projectId)
@@ -1787,24 +2223,47 @@ const start = async () => {
       }
       if (body.billable !== undefined) data.billable = body.billable
       if (body.validated !== undefined) data.validated = body.validated
+      let nextUserName: string | null = null
+      let previousUserName: string | null = null
       if (body.userId !== undefined) {
         if (!body.userId) return reply.code(400).send({ ok: false, error: 'userId is required' })
         const user = await prisma.user.findFirst({ where: { id: body.userId, workspaceId: workspace.id } })
         if (!user) return reply.code(404).send({ ok: false, error: 'User not found for workspace' })
         data.userId = user.id
+        nextUserName = user.name
       }
+      let nextTaskTitle: string | null = null
+      let previousTaskTitle: string | null = null
       if (body.taskId !== undefined) {
         if (!body.taskId) {
           data.taskId = null
+          nextTaskTitle = null
         } else {
           const task = await prisma.task.findFirst({ where: { id: body.taskId, projectId: entry.projectId } })
           if (!task) return reply.code(404).send({ ok: false, error: 'Task not found for entry project' })
           data.taskId = task.id
+          nextTaskTitle = task.title
         }
       }
       if (!Object.keys(data).length) return reply.code(400).send({ ok: false, error: 'No editable fields provided' })
+      if (body.userId !== undefined || entry.userId) {
+        const currentUser = await prisma.user.findFirst({ where: { id: entry.userId, workspaceId: workspace.id } })
+        previousUserName = currentUser?.name ?? null
+      }
+      if (body.taskId !== undefined || entry.taskId) {
+        const currentTask = entry.taskId ? await prisma.task.findFirst({ where: { id: entry.taskId, projectId: entry.projectId } }) : null
+        previousTaskTitle = currentTask?.title ?? null
+      }
+      const details: string[] = []
+      if (data.minutes !== undefined && data.minutes !== entry.minutes) details.push(activityChange('minutes', entry.minutes, data.minutes))
+      if (data.description !== undefined && (data.description || null) !== (entry.description || null)) details.push('description changed')
+      if (data.date !== undefined && String(data.date) !== String(entry.date)) details.push(activityChange('date', entry.date, data.date))
+      if (data.billable !== undefined && data.billable !== entry.billable) details.push(activityChange('billable', entry.billable, data.billable))
+      if (data.validated !== undefined && data.validated !== entry.validated) details.push(activityChange('validated', entry.validated, data.validated))
+      if (data.userId !== undefined && data.userId !== entry.userId) details.push(activityChange('user', previousUserName, nextUserName))
+      if (data.taskId !== undefined && (data.taskId || null) !== (entry.taskId || null)) details.push(activityChange('task', previousTaskTitle, nextTaskTitle))
       await prisma.timesheetEntry.update({ where: { id: timesheetId }, data })
-      await logActivity({ workspaceId: workspace.id, projectId: entry.projectId, taskId: entry.taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'timesheet.updated', summary: `Updated timesheet entry (${entry.minutes} minutes).`, payload: { timesheetId } })
+      await logActivity({ workspaceId: workspace.id, projectId: entry.projectId, taskId: entry.taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'timesheet.updated', summary: `Updated timesheet entry (${entry.minutes} minutes).`, payload: { timesheetId, details } })
       return { ok: true }
     })
 
@@ -1818,7 +2277,7 @@ const start = async () => {
       const scope = await resolveTimesheetScope(request, workspace.id, entry.projectId)
       if (!scope.elevated && scope.userId && entry.userId !== scope.userId) return reply.code(403).send({ ok: false, error: 'Timesheet access denied' })
       await prisma.timesheetEntry.delete({ where: { id: timesheetId } })
-      await logActivity({ workspaceId: workspace.id, projectId: entry.projectId, taskId: entry.taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, type: 'timesheet.deleted', summary: `Deleted a timesheet entry (${entry.minutes} minutes).`, payload: { timesheetId } })
+      await logActivity({ workspaceId: workspace.id, projectId: entry.projectId, taskId: entry.taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'timesheet.deleted', summary: `Deleted a timesheet entry (${entry.minutes} minutes).`, payload: { timesheetId } })
       return { ok: true }
     })
 
@@ -1826,7 +2285,7 @@ const start = async () => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { taskId } = request.params as { taskId: string }
-      const body = request.body as { body: string; author?: string }
+      const body = request.body as { body: string; author?: string; mentions?: string[] }
       const commentBody = body.body?.trim()
       if (!commentBody) return reply.code(400).send({ ok: false, error: 'comment body is required' })
       const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } } })
@@ -1834,7 +2293,19 @@ const start = async () => {
       if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, task.projectId)
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
-      const comment = await prisma.comment.create({ data: { taskId, body: commentBody, author: body.author?.trim() || 'Alex' } })
+      const authorAccount = (request as any).account as { id: string; name?: string | null; email?: string | null } | undefined
+      const comment = await prisma.comment.create({ data: { taskId, body: commentBody, author: body.author?.trim() || authorAccount?.name || authorAccount?.email || 'Alex', authorAccountId: authorAccount?.id ?? null } })
+      const mentionedIds = Array.from(new Set((body.mentions || []).filter(Boolean)))
+      if (mentionedIds.length) {
+        const validMentions = await prisma.workspaceMembership.findMany({ where: { workspaceId: workspace.id, accountId: { in: mentionedIds } }, select: { accountId: true } })
+        const validMentionIds = validMentions.map((membership) => membership.accountId).filter((accountId) => accountId !== authorAccount?.id)
+        if (validMentionIds.length) {
+          await prisma.commentMention.createMany({ data: validMentionIds.map((mentionedAccountId) => ({ commentId: comment.id, mentionedAccountId })), skipDuplicates: true })
+          for (const mentionedAccountId of validMentionIds) {
+            await createNotification({ workspaceId: workspace.id, recipientAccountId: mentionedAccountId, actorAccountId: authorAccount?.id ?? null, projectId: task.projectId, taskId, type: 'comment.mentioned', title: 'You were mentioned in a task comment', body: task.title, data: { commentId: comment.id, taskTitle: task.title } })
+          }
+        }
+      }
       return { ok: true, commentId: comment.id }
     })
 
@@ -1877,6 +2348,11 @@ const start = async () => {
       return { ok: true }
     })
 
+    await syncConfiguredSuperadmin()
+    void processPendingNotificationDeliveries().catch((err) => app.log.error(err))
+    setInterval(() => {
+      void processPendingNotificationDeliveries().catch((err) => app.log.error(err))
+    }, 60_000)
     await app.listen({ port: 4000, host: '0.0.0.0' })
   } catch (err) {
     app.log.error(err)

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "bootstrap:install": "tsx src/bootstrap.ts",
     "test": "tsx --test src/**/*.test.ts",
     "lint": "echo 'no lint yet'"
   },

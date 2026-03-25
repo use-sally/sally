@@ -42,7 +42,7 @@ export function startTelegram(prisma: PrismaClient) {
 
       if (text === '/start' || text === '/help') {
         await bot?.sendMessage(chatId, [
-          'AutomateThis PM bot',
+          'sally_ bot',
           '',
           '/projects - list projects',
           '/summary - project summary',

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { formControlMd } from '../lib/theme'
 import { createTask } from '../lib/api'
 import { tagStyle } from './app-shell'
 
@@ -91,7 +92,7 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
             <div style={hintText}>{parsedTodos.length ? `Will create ${parsedTodos.length} checklist item${parsedTodos.length === 1 ? '' : 's'}.` : 'One checklist item per line.'}</div>
           </label>
         </div>
-        {error ? <div style={{ color: '#991b1b', marginTop: 12 }}>{error}</div> : null}
+        {error ? <div style={{ color: 'var(--danger-text)', marginTop: 12 }}>{error}</div> : null}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
           <button onClick={onClose} style={ghostBtn}>Cancel</button>
           <button onClick={submit} style={primaryBtn} disabled={saving || !title.trim() || !projectId}>{saving ? 'Creating…' : 'Create task'}</button>
@@ -102,10 +103,10 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
 }
 
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.35)', display: 'grid', placeItems: 'center', padding: 24 }
-const modal: React.CSSProperties = { width: '100%', maxWidth: 560, background: '#fff', borderRadius: 20, padding: 22, boxShadow: '0 20px 50px rgba(15,23,42,0.18)' }
-const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: '#334155' }
-const input: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 12, padding: '10px 12px', background: '#fff', fontWeight: 500 }
-const hintText: React.CSSProperties = { color: '#64748b', fontSize: 12, fontWeight: 500 }
+const modal: React.CSSProperties = { width: '100%', maxWidth: 560, background: 'var(--form-bg)', borderRadius: 20, padding: 22, boxShadow: '0 20px 50px rgba(15,23,42,0.18)' }
+const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: 'rgba(209, 250, 229, 0.72)' }
+const input: React.CSSProperties = { ...formControlMd, fontWeight: 500 }
+const hintText: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }
 const starIconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 24, cursor: 'pointer', lineHeight: 1 }
-const primaryBtn: React.CSSProperties = { background: '#0f172a', color: '#fff', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
-const ghostBtn: React.CSSProperties = { background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
+const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
+const ghostBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }

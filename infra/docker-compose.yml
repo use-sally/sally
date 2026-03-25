@@ -1,14 +1,14 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: automatethis-pm-postgres
+    container_name: sally-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: automatethis_pm
+      POSTGRES_DB: sally
     ports:
       - '5432:5432'
     volumes:
-      - automatethis-pm-postgres:/var/lib/postgresql/data
+      - sally-postgres:/var/lib/postgresql/data
 volumes:
-  automatethis-pm-postgres:
+  sally-postgres:

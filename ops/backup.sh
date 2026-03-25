@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR=${APP_DIR:-/opt/automatethis-pm}
+APP_DIR=${APP_DIR:-/opt/sally}
 API_ENV_FILE=${API_ENV_FILE:-$APP_DIR/apps/api/.env}
-BACKUP_ROOT=${BACKUP_ROOT:-/var/backups/automatethis-pm}
+BACKUP_ROOT=${BACKUP_ROOT:-/var/backups/sally}
 RETENTION_DAYS=${RETENTION_DAYS:-14}
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 TARGET_DIR="$BACKUP_ROOT/$STAMP"
@@ -23,7 +23,7 @@ if [ -z "$DATABASE_URL" ]; then
 fi
 
 PG_DUMP_URL=${DATABASE_URL%%\?schema=*}
-export PGAPPNAME=automatethis-backup
+export PGAPPNAME=sally-backup
 
 pg_dump --clean --if-exists --no-owner --no-privileges --format=custom --file="$TARGET_DIR/database.dump" "$PG_DUMP_URL"
 

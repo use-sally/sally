@@ -1,30 +1,70 @@
-const STATUS_COLOR_PRESETS = [
-  { bg: '#FDE2E4', text: '#7F1D1D' },
-  { bg: '#FEEBC8', text: '#7C2D12' },
-  { bg: '#FEF3C7', text: '#78350F' },
-  { bg: '#DCFCE7', text: '#166534' },
-  { bg: '#D1FAE5', text: '#065F46' },
-  { bg: '#DBEAFE', text: '#1E3A8A' },
-  { bg: '#E0E7FF', text: '#3730A3' },
-  { bg: '#F3E8FF', text: '#6B21A8' },
-  { bg: '#FCE7F3', text: '#9D174D' },
-  { bg: '#E2E8F0', text: '#334155' },
-] as const
+import type { CSSProperties } from 'react'
 
-export function statusTextColor(bg?: string | null) {
-  return STATUS_COLOR_PRESETS.find((preset) => preset.bg.toLowerCase() === (bg || '').toLowerCase())?.text || '#334155'
+export type StatusColorPair = {
+  id: string
+  darkBg: string
+  darkText: string
+  lightBg: string
+  lightText: string
 }
 
-export function statusChipStyle(bg?: string | null): React.CSSProperties {
-  const background = bg || '#f8fafc'
+export const STATUS_COLOR_PAIRS: StatusColorPair[] = [
+  { id: 'slate', darkBg: '#111827', darkText: '#D1D5DB', lightBg: '#E5E7EB', lightText: '#374151' },
+  { id: 'gray', darkBg: '#1F2937', darkText: '#E5E7EB', lightBg: '#E2E8F0', lightText: '#334155' },
+  { id: 'blue', darkBg: '#172554', darkText: '#93C5FD', lightBg: '#DBEAFE', lightText: '#1D4ED8' },
+  { id: 'teal', darkBg: '#0F766E', darkText: '#99F6E4', lightBg: '#CCFBF1', lightText: '#0F766E' },
+  { id: 'green', darkBg: '#14532D', darkText: '#86EFAC', lightBg: '#DCFCE7', lightText: '#166534' },
+  { id: 'emerald', darkBg: '#064E3B', darkText: '#A7F3D0', lightBg: '#D1FAE5', lightText: '#047857' },
+  { id: 'amber', darkBg: '#422006', darkText: '#FCD34D', lightBg: '#FEF3C7', lightText: '#B45309' },
+  { id: 'orange', darkBg: '#713F12', darkText: '#FDE68A', lightBg: '#FFEDD5', lightText: '#C2410C' },
+  { id: 'rose', darkBg: '#4C0519', darkText: '#FDA4AF', lightBg: '#FFE4E6', lightText: '#BE123C' },
+  { id: 'zinc', darkBg: '#3F3F46', darkText: '#E4E4E7', lightBg: '#E4E4E7', lightText: '#3F3F46' },
+]
+
+export function canonicalStatusColor(color?: string | null) {
+  if (!color) return null
+  const normalized = color.trim().toUpperCase()
+  const pair = STATUS_COLOR_PAIRS.find((entry) => entry.darkBg.toUpperCase() === normalized || entry.lightBg.toUpperCase() === normalized)
+  return pair?.darkBg ?? normalized
+}
+
+export function resolveStatusPair(color?: string | null) {
+  if (!color) return null
+  const normalized = color.trim().toUpperCase()
+  return STATUS_COLOR_PAIRS.find((entry) => entry.darkBg.toUpperCase() === normalized || entry.lightBg.toUpperCase() === normalized) ?? null
+}
+
+export function resolveStatusThemeColors(color?: string | null) {
+  const pair = resolveStatusPair(color)
+  if (pair) {
+    return {
+      dark: { background: pair.darkBg, color: pair.darkText, border: pair.darkBg },
+      light: { background: pair.lightBg, color: pair.lightText, border: pair.lightBg },
+    }
+  }
+
   return {
-    background,
-    color: statusTextColor(bg),
-    borderRadius: 999,
-    padding: '5px 10px',
-    fontSize: 12,
-    fontWeight: 700,
-    display: 'inline-flex',
-    alignItems: 'center',
+    dark: { background: 'var(--form-bg)', color: 'var(--text-primary)', border: 'var(--form-border)' },
+    light: { background: 'var(--form-bg)', color: 'var(--text-primary)', border: 'var(--form-border)' },
+  }
+}
+
+export function statusThemeVars(color?: string | null): CSSProperties {
+  const resolved = resolveStatusThemeColors(color)
+  return {
+    ['--status-bg-dark' as any]: resolved.dark.background,
+    ['--status-text-dark' as any]: resolved.dark.color,
+    ['--status-border-dark' as any]: resolved.dark.border,
+    ['--status-bg-light' as any]: resolved.light.background,
+    ['--status-text-light' as any]: resolved.light.color,
+    ['--status-border-light' as any]: resolved.light.border,
+  }
+}
+
+export function statusChipStyle(color?: string | null): CSSProperties {
+  return {
+    ...statusThemeVars(color),
+    borderWidth: 1,
+    borderStyle: 'solid',
   }
 }

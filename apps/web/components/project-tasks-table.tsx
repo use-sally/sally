@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ProjectMember, ProjectTaskListItem } from '@automatethis-pm/types/src'
+import type { ProjectMember, ProjectTaskListItem } from '@sally/types/src'
 import { archiveTask, createTask, getProjectMembers } from '../lib/api'
 import { qk, useProjectQuery, useProjectTasksQuery } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
@@ -11,8 +11,9 @@ import { AssigneeAvatar } from './assignee-avatar'
 import { statusChipStyle } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
 import { InlineTaskPanel } from './inline-task-panel'
+import { sortableHeaderButton } from '../lib/theme'
 
-const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid #dbe1ea', borderRadius: 10, padding: '8px 10px', background: '#fff', fontSize: 14 }
+const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 10px', background: 'var(--form-bg)', fontSize: 14 }
 
 type SortKey = 'title' | 'assignee' | 'priority' | 'dueDate' | 'status'
 type SortDir = 'asc' | 'desc'
@@ -196,7 +197,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
     }
   }
 
-  if (error) return <div style={{ color: '#991b1b' }}>{error instanceof Error ? error.message : 'Failed to load tasks'}</div>
+  if (error) return <div style={{ color: 'var(--danger-text)' }}>{error instanceof Error ? error.message : 'Failed to load tasks'}</div>
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -220,31 +221,29 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
 
       <div ref={tableRef} style={{ display: 'grid', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
-          <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700 }}>Tasks{showArchived ? ' · Archived' : ''}</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Tasks{showArchived ? ' · Archived' : ''}</div>
           {!archived ? (
-            <button onClick={() => { setShowArchived((prev) => !prev); setExpandedTaskParam(null) }} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 12 }}>
+            <button onClick={() => { setShowArchived((prev) => !prev); setExpandedTaskParam(null) }} style={{ background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 12 }}>
               {showArchived ? 'Hide archived' : 'Show archived'}
             </button>
           ) : <div />}
         </div>
 
         {!showArchived ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', padding: '14px 16px', gap: 10, alignItems: 'center', background: '#fcfcfd', border: '1px solid #e2e8f0', borderRadius: 16 }}>
-            <input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addTask() } }}
-              placeholder={creating ? 'Creating task…' : 'Add task title and press Enter'}
-              disabled={creating || !projectId}
-              style={inputStyle}
-            />
-          </div>
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addTask() } }}
+            placeholder={creating ? 'Creating task…' : 'Add task title and press Enter'}
+            disabled={creating || !projectId}
+            style={{ ...inputStyle, padding: '14px 16px', borderRadius: 16 }}
+          />
         ) : null}
 
         {sortedTasks.map((task) => {
           if (showArchived) {
             return (
-              <div key={task.id} style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
+              <div key={task.id} style={{ border: '1px solid var(--panel-border)', borderRadius: 16, overflow: 'hidden', background: 'var(--form-bg)' }}>
                 <ArchivedTaskRow task={task} restoring={restoringId === task.id} onRestore={() => void restoreTask(task.id)} />
               </div>
             )
@@ -252,13 +251,23 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
 
           const expanded = expandedTaskId === task.id
           return (
-            <div key={task.id} ref={(node) => { rowRefs.current[task.id] = node }} style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
+            <div
+              key={task.id}
+              ref={(node) => { rowRefs.current[task.id] = node }}
+              style={{
+                border: expanded ? '1px solid color-mix(in srgb, var(--form-border-focus) 55%, var(--panel-border))' : '1px solid var(--panel-border)',
+                borderRadius: 16,
+                overflow: 'hidden',
+                background: expanded ? 'color-mix(in srgb, var(--panel-bg) 92%, white)' : 'var(--form-bg)',
+                boxShadow: expanded ? '0 10px 24px rgba(16, 185, 129, 0.07)' : 'none',
+              }}
+            >
               <EditableTaskRow task={task} projectId={projectId} statuses={project?.statuses || []} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} />
               {expanded ? <InlineTaskPanel taskId={task.id} projectId={projectId} /> : null}
             </div>
           )
         })}
-        {!sortedTasks.length ? <div style={{ padding: 18, color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 16, background: '#fff' }}>No tasks match the current filters.</div> : null}
+        {!sortedTasks.length ? <div style={{ padding: 18, color: 'rgba(209, 250, 229, 0.58)', border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)' }}>No tasks match the current filters.</div> : null}
       </div>
     </div>
   )
@@ -268,18 +277,18 @@ function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskList
   const dueLabel = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr 110px', gap: 10, padding: '14px 16px', alignItems: 'center', background: '#fff' }}>
-      <div style={{ fontWeight: 700, color: '#0f172a' }}>{task.title}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr 110px', gap: 10, padding: '14px 16px', alignItems: 'center', background: 'var(--form-bg)' }}>
+      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{task.title}</div>
       <div style={{ display: 'flex', alignItems: 'center' }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} /></div>
-      <div style={{ color: '#94a3b8' }}>{priorityStars(task.priority)}</div>
-      <div>{task.dueDate ? <span style={pill('#eef2ff', '#3730a3')}>{dueLabel}</span> : <span style={{ color: '#94a3b8' }}>—</span>}</div>
-      <div><span style={statusChipStyle(task.statusColor)}>{task.status}</span></div>
+      <div style={{ color: 'rgba(209, 250, 229, 0.34)' }}>{priorityStars(task.priority)}</div>
+      <div>{task.dueDate ? <span style={pill('#eef2ff', '#3730a3')}>{dueLabel}</span> : <span style={{ color: 'rgba(209, 250, 229, 0.34)' }}>—</span>}</div>
+      <div><span className="status-chip" style={statusChipStyle(task.statusColor)}>{task.status}</span></div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {task.labels?.length ? task.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>) : <span style={{ color: '#94a3b8' }}>—</span>}
+        {task.labels?.length ? task.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>) : <span style={{ color: 'rgba(209, 250, 229, 0.34)' }}>—</span>}
       </div>
-      <button onClick={onRestore} disabled={restoring} style={{ background: '#fff', color: '#0f172a', border: '1px solid #dbe1ea', borderRadius: 10, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }}>{restoring ? 'Restoring…' : 'Restore'}</button>
+      <button onClick={onRestore} disabled={restoring} style={{ background: 'rgba(250, 204, 21, 0.12)', color: '#fde68a', border: '1px solid rgba(250, 204, 21, 0.28)', borderRadius: 10, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }}>{restoring ? 'Restoring…' : 'Restore'}</button>
     </div>
   )
 }
 
-function headerBtn(active: boolean): React.CSSProperties { return { background: 'transparent', border: 'none', textAlign: 'left', color: active ? '#0f172a' : '#64748b', fontSize: 13, fontWeight: active ? 800 : 700, padding: 0, cursor: 'pointer' } }
+function headerBtn(active: boolean): React.CSSProperties { return sortableHeaderButton(active) }

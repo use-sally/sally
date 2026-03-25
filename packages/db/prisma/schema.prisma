@@ -51,6 +51,7 @@ model Workspace {
   memberships  WorkspaceMembership[]
   invites      AccountInvite[]
   activityLogs ActivityLog[]
+  notifications Notification[]
 }
 
 model Account {
@@ -69,6 +70,11 @@ model Account {
   emailChanges EmailChangeToken[]
   invites     AccountInvite[]
   passwordResets PasswordReset[]
+  authoredComments Comment[]
+  sentNotifications Notification[] @relation("NotificationActor")
+  receivedNotifications Notification[] @relation("NotificationRecipient")
+  notificationPreferences NotificationPreference[]
+  commentMentions CommentMention[]
 }
 
 model AccountInvite {
@@ -133,6 +139,70 @@ model ActivityLog {
   @@index([workspaceId, createdAt])
   @@index([projectId, createdAt])
   @@index([taskId, createdAt])
+}
+
+model Notification {
+  id                 String   @id @default(cuid())
+  workspaceId        String
+  projectId          String?
+  taskId             String?
+  actorAccountId     String?
+  recipientAccountId String
+  type               String
+  title              String
+  body               String
+  data               Json?
+  readAt             DateTime?
+  createdAt          DateTime @default(now())
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project            Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task               Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor              Account? @relation("NotificationActor", fields: [actorAccountId], references: [id], onDelete: SetNull)
+  recipient          Account @relation("NotificationRecipient", fields: [recipientAccountId], references: [id], onDelete: Cascade)
+  deliveries         NotificationDelivery[]
+
+  @@index([recipientAccountId, readAt, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
+model NotificationPreference {
+  id           String   @id @default(cuid())
+  accountId    String
+  eventType    String
+  inAppEnabled Boolean  @default(true)
+  emailEnabled Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, eventType])
+}
+
+model NotificationDelivery {
+  id             String   @id @default(cuid())
+  notificationId String
+  channel        String
+  status         String   @default("pending")
+  attempts       Int      @default(0)
+  lastError      String?
+  sentAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([channel, status, createdAt])
+}
+
+model CommentMention {
+  id                 String   @id @default(cuid())
+  commentId          String
+  mentionedAccountId String
+  createdAt          DateTime @default(now())
+  comment            Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentionedAccount   Account  @relation(fields: [mentionedAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, mentionedAccountId])
+  @@index([mentionedAccountId, createdAt])
 }
 
 model WorkspaceMembership {
@@ -235,6 +305,7 @@ model Project {
   timesheets  TimesheetEntry[]
   memberships ProjectMembership[]
   activityLogs ActivityLog[]
+  notifications Notification[]
 
   @@unique([workspaceId, slug])
 }
@@ -272,15 +343,19 @@ model Task {
   todos       TaskTodo[]
   timesheets  TimesheetEntry[]
   activityLogs ActivityLog[]
+  notifications Notification[]
 }
 
 model Comment {
-  id        String   @id @default(cuid())
-  taskId    String
-  body      String
-  author    String
-  createdAt DateTime @default(now())
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  taskId          String
+  body            String
+  author          String
+  authorAccountId String?
+  createdAt       DateTime @default(now())
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorAccount   Account? @relation(fields: [authorAccountId], references: [id], onDelete: SetNull)
+  mentions        CommentMention[]
 }
 
 model Label {

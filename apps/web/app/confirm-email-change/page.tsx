@@ -6,6 +6,26 @@ import { confirmEmailChange } from '../../lib/api'
 
 type Status = 'working' | 'done' | 'error'
 
+const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
+const pageStyle: React.CSSProperties = {
+  minHeight: '100vh',
+  display: 'grid',
+  placeItems: 'center',
+  background: `radial-gradient(circle at 20% 0%, rgba(16,185,129,0.12), transparent 28%), radial-gradient(circle at 100% 0%, rgba(250,204,21,0.06), transparent 20%), linear-gradient(rgba(16,185,129,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.04) 1px, transparent 1px), var(--page-bg)`,
+  backgroundSize: 'auto, auto, 32px 32px, 32px 32px, auto',
+  color: '#d1fae5',
+  fontFamily: monoFont,
+  padding: 24,
+}
+const cardStyle: React.CSSProperties = {
+  width: 460,
+  background: 'rgba(3, 7, 18, 0.94)',
+  border: '1px solid rgba(16, 185, 129, 0.14)',
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: '0 0 0 1px rgba(16,185,129,0.04), 0 20px 60px rgba(0,0,0,0.35)',
+}
+
 function ConfirmEmailChangeInner() {
   const params = useSearchParams()
   const token = useMemo(() => params.get('token') ?? '', [params])
@@ -35,9 +55,26 @@ function ConfirmEmailChangeInner() {
     return () => { cancelled = true }
   }, [token])
 
-  return <div style={{ width: 460, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 20, padding: 24, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.06)' }}><div style={{ fontSize: 20, fontWeight: 700 }}>{status === 'done' ? 'Email confirmed' : status === 'error' ? 'Confirmation failed' : 'Confirming email change'}</div><div style={{ marginTop: 10, color: status === 'error' ? '#991b1b' : '#475569', fontSize: 14 }}>{message}</div></div>
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+        <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / email</div>
+      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>
+        {status === 'done' ? 'Email confirmed' : status === 'error' ? 'Confirmation failed' : 'Confirming email change'}
+      </div>
+      <div style={{ marginTop: 10, color: status === 'error' ? '#fca5a5' : 'rgba(209, 250, 229, 0.68)', fontSize: 14, lineHeight: 1.6 }}>{message}</div>
+    </div>
+  )
 }
 
 export default function ConfirmEmailChangePage() {
-  return <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f5f7fb', color: '#0f172a', fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}><Suspense fallback={<div style={{ color: '#64748b', fontSize: 14 }}>Loading…</div>}><ConfirmEmailChangeInner /></Suspense></div>
+  return (
+    <div style={pageStyle}>
+      <Suspense fallback={<div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Loading…</div>}>
+        <ConfirmEmailChangeInner />
+      </Suspense>
+    </div>
+  )
 }

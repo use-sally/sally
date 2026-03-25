@@ -1,7 +1,7 @@
 export const workspaceRoleOptions = [
-  { value: 'OWNER', label: 'Workspace owner', help: 'Full control inside this workspace. Can see every project in this workspace.' },
-  { value: 'MEMBER', label: 'Workspace member', help: 'Regular workspace access. Only sees projects they are part of.' },
-  { value: 'VIEWER', label: 'Workspace viewer', help: 'Read-only workspace access. Only sees projects they are part of.' },
+  { value: 'OWNER', label: 'Owner', help: 'Full control inside this workspace. Can see every project in this workspace.' },
+  { value: 'MEMBER', label: 'Member', help: 'Regular workspace access. Only sees projects they are part of.' },
+  { value: 'VIEWER', label: 'Viewer', help: 'Read-only workspace access. Only sees projects they are part of.' },
 ] as const
 
 export function platformRoleLabel(role?: string | null) {
@@ -9,9 +9,9 @@ export function platformRoleLabel(role?: string | null) {
 }
 
 export const projectRoleOptions = [
-  { value: 'OWNER', label: 'Project owner', help: 'Owns and manages this specific project.' },
-  { value: 'MEMBER', label: 'Project member', help: 'Works inside this specific project.' },
-  { value: 'VIEWER', label: 'Project viewer', help: 'Read-only access to this specific project.' },
+  { value: 'OWNER', label: 'Owner', help: 'Owns and manages this specific project.' },
+  { value: 'MEMBER', label: 'Member', help: 'Works inside this specific project.' },
+  { value: 'VIEWER', label: 'Viewer', help: 'Read-only access to this specific project.' },
 ] as const
 
 export function workspaceRoleLabel(role?: string | null) {

@@ -1,6 +1,6 @@
-# automatethis-pm
+# sally
 
-Modern internal PM product for AutomateThis.
+Modern internal PM product for sally_.
 
 ## Stack
 - Next.js

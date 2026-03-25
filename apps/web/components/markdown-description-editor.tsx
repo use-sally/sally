@@ -73,7 +73,7 @@ export function MarkdownDescriptionEditor({
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false }),
       Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }),
       Image.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: 'No description yet.' }),
+      Placeholder.configure({ placeholder: 'Use markdown here: # heading 1, ## heading 2, - list item, drag & drop images, paste screenshots, and write structured notes.' }),
     ],
     content: markdownToEditorHtml(value || ''),
     autofocus: false,
@@ -125,15 +125,29 @@ export function MarkdownDescriptionEditor({
 
   if (!mounted) return <div style={editorShellStyle} />
 
-  return <EditorContent editor={editor} />
+  return (
+    <div className="markdown-description-editor">
+      <style>{`
+        .markdown-description-editor .ProseMirror img {
+          display: block;
+          max-width: 100%;
+          width: auto;
+          height: auto;
+          border-radius: 12px;
+        }
+      `}</style>
+      <EditorContent editor={editor} />
+    </div>
+  )
 }
 
 const editorContentStyle = [
   'width:100%',
-  'border:1px solid #dbe1ea',
+  'border:1px solid var(--form-border)',
   'border-radius:12px',
   'padding:12px 14px',
-  'background:#fff',
+  'background:var(--form-bg)',
+  'color:var(--form-text)',
   'min-height:180px',
   'font:inherit',
   'line-height:1.6',
@@ -141,4 +155,4 @@ const editorContentStyle = [
 ].join(';')
 
 
-const editorShellStyle: React.CSSProperties = { minHeight: 180, border: '1px solid #dbe1ea', borderRadius: 12, background: '#fff' }
+const editorShellStyle: React.CSSProperties = { minHeight: 180, border: '1px solid var(--form-border)', borderRadius: 12, background: 'var(--form-bg)' }
