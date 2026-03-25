@@ -1,7 +1,7 @@
 import type { BoardColumn, Client, ClientDetail, Health, MentionableUser, Notification, NotificationPreference, Project, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
 const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN
 const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID
 const WORKSPACE_SLUG = process.env.NEXT_PUBLIC_WORKSPACE_SLUG

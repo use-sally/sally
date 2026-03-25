@@ -73,6 +73,18 @@ volumes:
 
 function composeForExistingInfra() {
   return `services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sally-postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${'${POSTGRES_USER}'}
+      POSTGRES_PASSWORD: ${'${POSTGRES_PASSWORD}'}
+      POSTGRES_DB: ${'${POSTGRES_DB}'}
+    volumes:
+      - sally-postgres:/var/lib/postgresql/data
+
   api:
     image: ${'${SALLY_API_IMAGE}'}
     container_name: sally-api
@@ -80,6 +92,8 @@ function composeForExistingInfra() {
     env_file: .env
     ports:
       - "4000:4000"
+    depends_on:
+      - postgres
 
   web:
     image: ${'${SALLY_WEB_IMAGE}'}
@@ -90,6 +104,9 @@ function composeForExistingInfra() {
       - "3000:3000"
     depends_on:
       - api
+
+volumes:
+  sally-postgres:
 `
 }
 
@@ -222,10 +239,22 @@ async function waitForHealth(url: string, label: string, attempts = 30, delayMs 
   throw new Error(`${label} did not become healthy at ${url}`)
 }
 
+async function waitForPostgres(targetDir: string, attempts = 30, delayMs = 2000) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await runCommand('docker', ['compose', 'exec', '-T', 'postgres', 'pg_isready', '-U', 'postgres'], targetDir)
+      return
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+  throw new Error('Postgres did not become ready in time')
+}
+
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string) {
   await runCommand('docker', ['compose', 'up', '-d'], targetDir)
-  await runCommand('docker', ['compose', 'exec', '-T', 'api', 'sh', '-lc', 'pnpm --filter @sally/db prisma db push --schema packages/db/prisma/schema.prisma'], targetDir)
-  await runCommand('docker', ['compose', 'exec', '-T', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir)
+  await waitForPostgres(targetDir)
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma db push --schema prisma/schema.prisma'], targetDir)
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir)
   if (mode === 'managed-simple') {
     await waitForHealth(`${appUrl}/api/health`, 'API')
     await waitForHealth(appUrl, 'Web app')

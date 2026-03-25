@@ -31,10 +31,11 @@ Trigger options:
 2. generate secrets/config
 3. write stack files
 4. run `docker compose up -d`
-5. run DB push
-6. run bootstrap
-7. verify API/web health
-8. print login credentials + next steps
+5. wait for Postgres readiness
+6. run DB push
+7. run bootstrap
+8. verify API/web health
+9. print login credentials + next steps
 
 ## Current bootstrap command
 
@@ -52,3 +53,4 @@ It upserts:
 ## Caveat
 
 The installer is scaffolded, but full end-to-end install still depends on the published images being available first.
+nstaller is scaffolded, but full end-to-end install still depends on the published images being available first.

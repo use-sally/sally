@@ -32,6 +32,8 @@ Installer defaults:
 - image registry namespace: `ghcr.io/use-sally`
 - database name: `sally`
 - workspace slug: `sally`
+- frontend API base fallback: `/api`
+- `existing-infra` still includes a local Postgres service by default unless that mode is later expanded to ask explicitly for an external DB
 
 ## Important dependency
 
