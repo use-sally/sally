@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import type { Membership } from '../lib/auth'
 import { loadSession } from '../lib/auth'
 import { apiUrl, createApiKey, createMcpKey, getApiKeys, getMcpKeys, revokeApiKey, revokeMcpKey } from '../lib/api'
+import { deleteTextAction } from '../lib/theme'
 import { panel } from './app-shell'
 
 type KeyItem = {
@@ -204,6 +205,9 @@ function KeySection({
   beforeForm?: ReactNode
 }) {
   const [revokingId, setRevokingId] = useState<string | null>(null)
+  const submitIfReady = () => {
+    if (!loading && createLabel.trim()) void onCreate()
+  }
 
   return (
     <div style={{ ...panel, display: 'grid', gap: 12 }}>
@@ -215,29 +219,59 @@ function KeySection({
       {secret ? (
         <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 14, background: 'var(--panel-bg)', border: '1px solid var(--panel-border)' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{secretTitle}</div>
-          <code style={{ wordBreak: 'break-all', fontSize: 13 }}>{secret}</code>
-          <div>
-            <button onClick={onCopy} style={smallButton}>{copied ? 'Copied' : 'Copy key'}</button>
+          <button type="button" onClick={onCopy} style={{ ...copySurface, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }} title="Click to copy">
+            <code style={{ wordBreak: 'break-all', fontSize: 13 }}>{secret}</code>
+          </button>
+          <div style={{ color: copied ? 'var(--success-text)' : 'var(--text-muted)', fontSize: 12 }}>
+            {copied ? 'Copied' : 'Click the key to copy it'}
           </div>
         </div>
       ) : null}
-      <form onSubmit={(event) => { event.preventDefault(); if (createLabel.trim()) void onCreate() }} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+      <form onSubmit={(event) => { event.preventDefault(); if (createLabel.trim()) void onCreate() }} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {beforeForm}
         <label style={{ display: 'grid', gap: 6, minWidth: 260, flex: 1 }}>
           <span style={fieldLabel}>Label</span>
-          <input value={createLabel} onChange={(event) => setCreateLabel(event.target.value)} placeholder={placeholder} style={inputStyle} />
+          <input
+            value={createLabel}
+            onChange={(event) => setCreateLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                submitIfReady()
+              }
+            }}
+            placeholder={placeholder}
+            style={inputStyle}
+          />
         </label>
-        <button type="submit" disabled={loading || !createLabel.trim()} style={primaryButton}>{loading ? 'Creating…' : createButton}</button>
       </form>
+      <div style={{ color: loading ? 'var(--text-muted)' : 'var(--text-secondary)', fontSize: 12 }}>
+        {loading ? 'Creating…' : 'Press Enter in the label field to create the key'}
+      </div>
       <div style={{ display: 'grid', gap: 8 }}>
         {items.map((key) => (
           <div key={key.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '12px', borderBottom: '1px solid var(--panel-border)' }}>
             <div style={{ display: 'grid', gap: 4 }}>
-              <div style={{ fontWeight: 600 }}>{key.label}</div>
+              <div style={{ fontWeight: 600, color: 'var(--task-title)' }}>{key.label}</div>
               <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{renderMeta(key)}</div>
             </div>
-            <button onClick={() => void (async () => { if (!window.confirm('Revoke this key? Any connected tool will stop working immediately.')) return; setRevokingId(key.id); try { await onRevoke(key.id) } finally { setRevokingId(null) } })()} disabled={revokingId === key.id || !!key.revokedAt} style={smallButton}>
-              {key.revokedAt ? 'Revoked' : revokingId === key.id ? 'Revoking…' : 'Revoke'}
+            <button
+              onClick={() => void (async () => {
+                const message = key.revokedAt
+                  ? 'Delete this revoked key permanently?'
+                  : 'Revoke this key? Any connected tool will stop working immediately.'
+                if (!window.confirm(message)) return
+                setRevokingId(key.id)
+                try {
+                  await onRevoke(key.id)
+                } finally {
+                  setRevokingId(null)
+                }
+              })()}
+              disabled={revokingId === key.id}
+              style={{ ...deleteTextAction, opacity: revokingId === key.id ? 0.5 : 1 }}
+            >
+              {revokingId === key.id ? (key.revokedAt ? 'Deleting…' : 'Revoking…') : (key.revokedAt ? 'Delete' : 'Revoke')}
             </button>
           </div>
         ))}
@@ -251,9 +285,11 @@ function CopyRow({ label, value, copied, onCopy }: { label: string; value: strin
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       <div style={fieldLabel}>{label}</div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <code style={{ ...copySurface, flex: 1 }}>{value}</code>
-        <button type="button" onClick={onCopy} style={smallButton}>{copied ? 'Copied' : 'Copy'}</button>
+      <button type="button" onClick={onCopy} style={{ ...copySurface, width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }} title="Click to copy">
+        <code>{value}</code>
+      </button>
+      <div style={{ color: copied ? 'var(--success-text)' : 'var(--text-muted)', fontSize: 12 }}>
+        {copied ? 'Copied' : 'Click the field to copy'}
       </div>
     </div>
   )
@@ -263,11 +299,11 @@ function CopyBlock({ label, value, copied, onCopy }: { label: string; value: str
   return (
     <div style={{ display: 'grid', gap: 6 }}>
       <div style={fieldLabel}>{label}</div>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <pre style={{ ...copySurface, margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{value}</pre>
-        <div>
-          <button type="button" onClick={onCopy} style={smallButton}>{copied ? 'Copied' : 'Copy config'}</button>
-        </div>
+      <button type="button" onClick={onCopy} style={{ ...copySurface, width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }} title="Click to copy">
+        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{value}</pre>
+      </button>
+      <div style={{ color: copied ? 'var(--success-text)' : 'var(--text-muted)', fontSize: 12 }}>
+        {copied ? 'Copied' : 'Click the field to copy'}
       </div>
     </div>
   )
@@ -281,10 +317,13 @@ const fieldLabel: CSSProperties = {
 }
 
 const inputStyle: CSSProperties = {
+  height: 42,
+  boxSizing: 'border-box',
   padding: '10px 12px',
   borderRadius: 12,
   border: '1px solid var(--form-border)',
   fontSize: 14,
+  lineHeight: '20px',
   background: 'var(--form-bg)',
   color: 'var(--form-text)',
 }

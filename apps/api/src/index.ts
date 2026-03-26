@@ -1,6 +1,9 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { PrismaClient, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole } from '@prisma/client'
+import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -778,6 +781,15 @@ async function getBoardData(request: any, workspaceId: string, projectId?: strin
 }
 
 type McpTool = { name: string; description: string; inputSchema: Record<string, unknown> }
+type HostedMcpSession = {
+  server: McpProtocolServer
+  transport: StreamableHTTPServerTransport
+  account: { id: string; name: string | null; email: string }
+  mcpKey: { id: string; label: string; workspaceId: string | null; workspaceSlug: string | null }
+  authorization: string
+}
+
+const hostedMcpSessions = new Map<string, HostedMcpSession>()
 
 const hostedMcpTools: McpTool[] = [
   { name: 'workspace.list', description: 'List accessible workspaces.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
@@ -795,6 +807,11 @@ const hostedMcpTools: McpTool[] = [
   { name: 'project.status.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'name'], additionalProperties: false } },
   { name: 'project.status.update', description: 'Update a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, name: { type: 'string' }, color: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
   { name: 'project.status.delete', description: 'Delete a project status, optionally moving tasks to a replacement status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, targetStatusId: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
+  { name: 'workspace.invite', description: 'Invite a user into a workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, email: { type: 'string' }, role: { type: 'string' } }, required: ['email', 'role'], additionalProperties: false } },
+  { name: 'project.member.list', description: 'List project members.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' } }, required: ['projectId'], additionalProperties: false } },
+  { name: 'project.member.add', description: 'Add a member to a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, accountId: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, role: { type: 'string' } }, required: ['projectId', 'role'], additionalProperties: false } },
+  { name: 'project.member.update', description: 'Update a project member role.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, membershipId: { type: 'string' }, role: { type: 'string' } }, required: ['projectId', 'membershipId', 'role'], additionalProperties: false } },
+  { name: 'project.member.remove', description: 'Remove a member from a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, membershipId: { type: 'string' } }, required: ['projectId', 'membershipId'], additionalProperties: false } },
   { name: 'task.list', description: 'List tasks for a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, status: { type: 'string' }, assignee: { type: 'string' }, search: { type: 'string' }, label: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'task.get', description: 'Get full task details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.create', description: 'Create a task in a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, title: { type: 'string' }, assignee: { type: 'string' }, description: { type: 'string' }, priority: { type: 'string' }, status: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] }, labels: { type: 'array', items: { type: 'string' } }, todos: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } } }, required: ['projectId', 'title'], additionalProperties: false } },
@@ -845,7 +862,7 @@ function mcpError(id: unknown, code: number, message: string) { return { jsonrpc
 
 function mcpHeaders(request: any, args: Record<string, any>) {
   return {
-    authorization: readHeader(request, 'authorization') || '',
+    authorization: readHeader(request, 'authorization') || request.authorization || '',
     'x-workspace-id': args.workspaceId || '',
     'x-workspace-slug': args.workspaceSlug || '',
   }
@@ -902,6 +919,16 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}/statuses/${args.statusId}`, args, payload: { name: args.name, color: args.color } })
     case 'project.status.delete':
       return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses/${args.statusId}/delete`, args, payload: { targetStatusId: args.targetStatusId } })
+    case 'workspace.invite':
+      return await injectJson(request, { method: 'POST', url: '/auth/invite', args, payload: { email: args.email, role: args.role } })
+    case 'project.member.list':
+      return { items: await injectJson(request, { method: 'GET', url: `/projects/${args.projectId}/members`, args }) }
+    case 'project.member.add':
+      return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/members`, args, payload: { accountId: args.accountId, email: args.email, name: args.name, role: args.role } })
+    case 'project.member.update':
+      return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}/members/${args.membershipId}`, args, payload: { role: args.role } })
+    case 'project.member.remove':
+      return await injectJson(request, { method: 'DELETE', url: `/projects/${args.projectId}/members/${args.membershipId}`, args })
     case 'task.list': {
       const params = new URLSearchParams()
       for (const key of ['status', 'assignee', 'search', 'label']) if (args[key]) params.set(key, String(args[key]))
@@ -966,13 +993,65 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
   }
 }
 
+function createHostedMcpServer(session: { account: { id: string; name: string | null; email: string }; mcpKey: { id: string; label: string; workspaceId: string | null; workspaceSlug: string | null }; authorization: string }) {
+  const server = new McpProtocolServer(
+    { name: 'sally-hosted-mcp', version: '0.1.0' },
+    { capabilities: { tools: {} } },
+  )
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: hostedMcpTools }))
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    try {
+      const args = (request.params.arguments || {}) as Record<string, any>
+      const result = await callHostedMcpTool({ account: session.account, mcpKey: session.mcpKey, authorization: session.authorization }, request.params.name, args)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result }
+    } catch (error) {
+      return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }
+    }
+  })
+
+  return server
+}
+
+async function ensureHostedMcpSession(request: any, reply: any) {
+  if (!(await ensureMcpAuth(request, reply))) return null
+  const session = { account: request.account, mcpKey: request.mcpKey, authorization: readHeader(request, 'authorization') || '' }
+  const headerSessionId = readHeader(request, 'mcp-session-id')
+  if (headerSessionId) {
+    const existing = hostedMcpSessions.get(String(headerSessionId))
+    if (!existing) {
+      reply.code(404).send({ ok: false, error: 'MCP session not found' })
+      return null
+    }
+    if (existing.mcpKey.id !== session.mcpKey.id) {
+      reply.code(403).send({ ok: false, error: 'MCP session/key mismatch' })
+      return null
+    }
+    return existing
+  }
+
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+    enableJsonResponse: true,
+    onsessioninitialized: (sessionId) => {
+      hostedMcpSessions.set(sessionId, { server, transport, account: session.account, mcpKey: session.mcpKey, authorization: session.authorization })
+    },
+    onsessionclosed: (sessionId) => {
+      hostedMcpSessions.delete(sessionId)
+    },
+  })
+  const server = createHostedMcpServer(session)
+  await server.connect(transport)
+  return { server, transport, account: session.account, mcpKey: session.mcpKey, authorization: session.authorization }
+}
+
 const start = async () => {
   try {
-    await app.register(cors, { origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'X-Session-Token', 'X-Workspace-Id', 'X-Workspace-Slug'] })
+    await app.register(cors, { origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'X-Session-Token', 'X-Workspace-Id', 'X-Workspace-Slug', 'Mcp-Session-Id'] })
 
     app.addHook('preHandler', async (request, reply) => {
       const url = request.raw.url || ''
-      if (url.startsWith('/health') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/profile-images/')) return
+      if (url.startsWith('/health') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/profile-images/')) return
       if (url.startsWith('/auth/login') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
       if (url.startsWith('/accounts') || url.startsWith('/workspaces') || url.startsWith('/auth')) return
@@ -1163,10 +1242,14 @@ const start = async () => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
       const { apiKeyId } = request.params as { apiKeyId: string }
-      const apiKey = await prisma.accountApiKey.findFirst({ where: { id: apiKeyId, accountId: account.id, revokedAt: null } })
+      const apiKey = await prisma.accountApiKey.findFirst({ where: { id: apiKeyId, accountId: account.id } })
       if (!apiKey) return reply.code(404).send({ ok: false, error: 'API key not found' })
+      if (apiKey.revokedAt) {
+        await prisma.accountApiKey.delete({ where: { id: apiKey.id } })
+        return { ok: true, deleted: true }
+      }
       await prisma.accountApiKey.update({ where: { id: apiKey.id }, data: { revokedAt: new Date() } })
-      return { ok: true }
+      return { ok: true, revoked: true }
     })
 
     app.get('/auth/mcp-keys', async (request, reply) => {
@@ -1197,30 +1280,25 @@ const start = async () => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
       const { mcpKeyId } = request.params as { mcpKeyId: string }
-      const mcpKey = await prisma.accountMcpKey.findFirst({ where: { id: mcpKeyId, accountId: account.id, revokedAt: null } })
+      const mcpKey = await prisma.accountMcpKey.findFirst({ where: { id: mcpKeyId, accountId: account.id } })
       if (!mcpKey) return reply.code(404).send({ ok: false, error: 'MCP key not found' })
+      if (mcpKey.revokedAt) {
+        await prisma.accountMcpKey.delete({ where: { id: mcpKey.id } })
+        return { ok: true, deleted: true }
+      }
       await prisma.accountMcpKey.update({ where: { id: mcpKey.id }, data: { revokedAt: new Date() } })
-      return { ok: true }
+      return { ok: true, revoked: true }
     })
 
-    app.get('/mcp', async (_request, reply) => reply.code(200).send({ ok: true, protocol: 'mcp', transport: 'http-jsonrpc', endpoint: '/mcp' }))
-    app.post('/mcp', async (request, reply) => {
-      if (!(await ensureMcpAuth(request, reply))) return
-      const body = request.body as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, any> }
-      const id = body?.id ?? null
-      if (body?.method === 'initialize') return mcpResult(id, { protocolVersion: '2025-03-26', serverInfo: { name: 'sally-hosted-mcp', version: '0.1.0' }, capabilities: { tools: {} } })
-      if (body?.method === 'notifications/initialized') return reply.code(202).send('')
-      if (body?.method === 'tools/list') return mcpResult(id, { tools: hostedMcpTools })
-      if (body?.method === 'tools/call') {
-        try {
-          const params = body.params || {}
-          const result = await callHostedMcpTool(request, String(params.name || ''), (params.arguments || {}) as Record<string, any>)
-          return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result })
-        } catch (error) {
-          return reply.code(200).send(mcpError(id, -32000, error instanceof Error ? error.message : String(error)))
-        }
-      }
-      return reply.code(200).send(mcpError(id, -32601, 'Method not found'))
+    app.route({
+      method: ['GET', 'POST', 'DELETE'],
+      url: '/mcp',
+      handler: async (request, reply) => {
+        const session = await ensureHostedMcpSession(request, reply)
+        if (!session) return
+        await session.transport.handleRequest(request.raw, reply.raw, request.body)
+        reply.hijack()
+      },
     })
 
     app.get('/auth/profile', async (request, reply) => {
