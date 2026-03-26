@@ -1,11 +1,16 @@
-# sally_ install + first publish path
+# sally_ install + publish path
 
-## Registry target
+## Published artifacts
 
+Container images:
 - `ghcr.io/use-sally/sally-api`
 - `ghcr.io/use-sally/sally-web`
 
-## Publish flow
+npm packages:
+- `create-sally`
+- `sally-mcp`
+
+## GitHub publish flow
 
 The repo includes:
 - production Dockerfiles for API and web
@@ -16,41 +21,67 @@ Trigger options:
 - tag starting with `v`
 - manual workflow dispatch
 
-## First publish checklist
+## Current installer behavior
 
-1. Confirm the repo is hosted under GitHub org/user with GHCR publishing rights
-2. Ensure package publishing permissions are enabled for Actions
-3. Run `publish-images`
-4. Verify images are visible in GHCR
-5. Pull the images once on a clean Linux machine to confirm access
+`create-sally` now supports:
+1. Docker / Docker Compose preflight
+2. automatic Docker install on Linux if missing
+3. install mode selection
+4. domain prompt
+5. immediate DNS verification for `managed-simple`
+6. first workspace naming
+7. SMTP prompt flow using `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `MAIL_FROM`
+8. stack file generation
+9. fresh image pull before startup
+10. Postgres startup + readiness wait
+11. Prisma DB push
+12. bootstrap of first workspace + superadmin
+13. health verification
+14. automatic `sally-mcp` install + scaffold generation
+15. final welcome output with login details
 
-## Installer flow
+## Mailer behavior
 
-`create-sally` should eventually support:
-1. prompt for install mode
-2. generate secrets/config
-3. write stack files
-4. run `docker compose up -d`
-5. wait for Postgres readiness
-6. run DB push
-7. run bootstrap
-8. verify API/web health
-9. print login credentials + next steps
+The API mailer supports:
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASSWORD`
+- `MAIL_FROM`
+- `APP_BASE_URL`
 
-## Current bootstrap command
+`SMTP_URL` is still supported as a compatibility fallback, but the preferred model is the discrete SMTP fields above.
 
-The API now has:
+## MCP behavior
 
-```bash
-pnpm --filter api bootstrap:install
-```
+The MCP package is:
+- `sally-mcp`
 
-It upserts:
-- initial workspace (`sally` / `sally_`)
+Public MCP setup expects:
+- `SALLY_URL`
+- `SALLY_USER_API_KEY`
+
+Optional advanced restriction:
+- `SALLY_WORKSPACE_SLUG`
+
+Installer behavior:
+- `create-sally` installs/scaffolds `sally-mcp`
+- it does **not** mint or configure a user API key
+- each Sally user creates their own API key later and uses it in their own MCP client config
+
+## Bootstrap result
+
+The bootstrap step upserts:
+- first workspace (installer-provided name + derived slug)
 - superadmin account
 - owner membership
 
-## Caveat
+## Release checklist
 
-The installer is scaffolded, but full end-to-end install still depends on the published images being available first.
-nstaller is scaffolded, but full end-to-end install still depends on the published images being available first.
+1. Push to `main`
+2. Confirm `publish-images` succeeds
+3. Publish `sally-mcp` when MCP changes are ready
+4. Publish `create-sally` when installer changes are ready
+5. Test one fresh managed-simple install on a clean Linux host
+6. Test one fresh existing-infra install on a clean Linux host
+7. Verify SMTP, login, invite flow, and MCP scaffold generation

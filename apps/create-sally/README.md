@@ -6,6 +6,9 @@
 npx --yes create-sally@latest
 ```
 
+For a copy-paste Ubuntu / Debian walkthrough, see:
+- [`../../docs/ubuntu-debian-install.md`](../../docs/ubuntu-debian-install.md)
+
 `create-sally` is the official npm installer for **Sally** — the API-first project management system for teams that collaborate with humans and agents.
 
 It is designed to make self-hosting Sally feel simple, clean, and low-noise.
@@ -17,14 +20,18 @@ It is designed to make self-hosting Sally feel simple, clean, and low-noise.
 The installer walks you through the setup and then performs the deployment flow for you.
 
 Depending on the mode, it can:
+- check whether Docker / Docker Compose is available
+- install Docker automatically on Linux if it is missing
 - generate the required instance files
 - verify DNS before setup
+- ask for the first workspace name
 - pull fresh Sally container images
 - start Postgres
 - apply the database schema
-- bootstrap the first superadmin
+- bootstrap the first superadmin and first workspace
 - start the Sally services
 - verify health checks
+- install and scaffold `sally-mcp`
 - print the final login details
 
 ---
@@ -69,6 +76,7 @@ Then the installer will ask for things like:
 - target directory
 - domain
 - Sally version
+- first workspace name
 - superadmin email
 - email delivery settings
 
@@ -121,6 +129,10 @@ It writes instance files such as:
 - `.env`
 - `docker-compose.yml`
 - `Caddyfile` for `managed-simple`
+- `mcp/.env.example`
+- `mcp/run-mcp.sh`
+- `mcp/openclaw.example.json`
+- `mcp/MCP_SETUP.txt`
 
 ---
 
@@ -128,7 +140,10 @@ It writes instance files such as:
 
 - If you use mutable tags like `latest`, the installer pulls fresh images before starting services.
 - Email setup is strongly recommended during install.
+- The installer asks for `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `MAIL_FROM`.
+- Sally's API mailer now supports those SMTP fields directly.
 - You can defer email setup, but Sally will not be able to send invites, password resets, or notifications until SMTP is configured.
+- The installer scaffolds `sally-mcp`, but each user must still create and use their own personal Sally API key afterwards.
 
 ---
 

@@ -48,6 +48,9 @@ The easiest way to install Sally is with the npm installer:
 npx --yes create-sally@latest
 ```
 
+For a copy-paste Ubuntu / Debian walkthrough, see:
+- [`docs/ubuntu-debian-install.md`](./docs/ubuntu-debian-install.md)
+
 The installer guides you through setup and supports two modes:
 
 ### `managed-simple`
@@ -93,12 +96,15 @@ That means:
 ## Typical managed-simple flow
 
 1. Run the installer
-2. Pick a domain
-3. Confirm the domain resolves to the server
-4. Enter superadmin + email settings
-5. Sally writes the instance files
-6. Sally pulls fresh images and boots the stack
-7. You get a final welcome screen with:
+2. Docker is checked and, on Linux, installed automatically if missing
+3. Pick a domain
+4. Confirm the domain resolves to the server
+5. Choose the first workspace name
+6. Enter superadmin + email settings
+7. Sally writes the instance files
+8. Sally pulls fresh images and boots the stack
+9. Sally also installs and scaffolds `sally-mcp`
+10. You get a final welcome screen with:
    - URL
    - USER
    - PASSWORD
@@ -161,6 +167,9 @@ Published images:
 
 Published installer:
 - `create-sally`
+
+Published MCP package:
+- `sally-mcp`
 
 ---
 
