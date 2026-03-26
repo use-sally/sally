@@ -148,6 +148,7 @@ function envFile(args: {
   imageTag: string
   superadminEmail: string
   superadminName: string
+  smtpConfigured: boolean
   smtpHost: string
   smtpPort: string
   smtpUser: string
@@ -193,12 +194,30 @@ SMTP_PASSWORD=${args.smtpPassword}
 MAIL_FROM=${args.mailFrom}
 CADDY_ACME_EMAIL=${args.caddyAcmeEmail ?? ''}
 
+# email setup status from installer
+SMTP_CONFIGURED=${args.smtpConfigured ? 'true' : 'false'}
+
 # optional compatibility / provider-level SMTP URL if needed later
 # SMTP_URL=smtps://${args.smtpUser}:${args.smtpPassword}@${args.smtpHost}:${args.smtpPort}
 `
 }
 
-function setupNotes(mode: InstallMode, bootstrapPassword: string, targetDir: string, appUrl: string) {
+function setupNotes(mode: InstallMode, bootstrapPassword: string, targetDir: string, appUrl: string, smtpConfigured: boolean) {
+  const emailNotes = smtpConfigured
+    ? `Email:
+- SMTP is configured in .env
+`
+    : `Email still required:
+- sally_ will install, but it will not send invites, password resets, or notification emails until you finish email setup.
+- update these .env values:
+  - SMTP_HOST
+  - SMTP_PORT
+  - SMTP_USER
+  - SMTP_PASSWORD
+  - MAIL_FROM
+- then restart the stack with: docker compose up -d
+`
+
   if (mode === 'managed-simple') {
     return `sally_ installer scaffold created.
 
@@ -221,7 +240,8 @@ Managed-simple files:
 - docker-compose.yml
 - Caddyfile
 - .env
-`
+
+${emailNotes}`
   }
 
   return `sally_ installer scaffold created.
@@ -249,7 +269,8 @@ Expected from your infra:
 - reverse proxy routing to web/api
 - TLS termination
 - optional external DB adaptation if you do not want local Postgres
-`
+
+${emailNotes}`
 }
 
 async function runCommand(command: string, args: string[], cwd: string) {
@@ -322,11 +343,38 @@ async function main() {
   const caddyAcmeEmail = mode === 'managed-simple'
     ? await input({ message: 'ACME / TLS contact email', default: superadminEmail })
     : ''
-  const smtpHost = await input({ message: 'SMTP host' })
-  const smtpPort = await input({ message: 'SMTP port', default: '587' })
-  const smtpUser = await input({ message: 'SMTP username' })
-  const smtpPassword = await password({ message: 'SMTP password' })
-  const mailFrom = await input({ message: 'MAIL_FROM address', default: `no-reply@${domain}` })
+
+  const emailSetupMode = await select<'configure-now' | 'configure-later'>({
+    message: 'Email setup is strongly recommended. Without it, sally_ cannot send invites, password resets, or notification emails. How do you want to continue?',
+    choices: [
+      { name: 'Configure email now (recommended)', value: 'configure-now' },
+      { name: 'I will configure email later in .env and restart the stack', value: 'configure-later' },
+    ],
+  })
+
+  let smtpConfigured = emailSetupMode === 'configure-now'
+  let smtpHost = 'smtp.disabled.invalid'
+  let smtpPort = '587'
+  let smtpUser = 'disabled'
+  let smtpPassword = 'disabled'
+  let mailFrom = `no-reply@${domain}`
+
+  if (smtpConfigured) {
+    smtpHost = await input({ message: 'SMTP host' })
+    smtpPort = await input({ message: 'SMTP port', default: '587' })
+    smtpUser = await input({ message: 'SMTP username' })
+    smtpPassword = await password({ message: 'SMTP password' })
+    mailFrom = await input({ message: 'MAIL_FROM address', default: `no-reply@${domain}` })
+  } else {
+    const confirmLater = await confirm({
+      message: 'I understand that invites, password resets, and notification emails will not work until I update SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and MAIL_FROM in .env and restart the stack.',
+      default: false,
+    })
+
+    if (!confirmLater) {
+      throw new Error('Email setup was skipped without confirmation. Restart the installer and configure email now, or confirm the manual-later path.')
+    }
+  }
 
   const postgresPassword = randomSecret(24)
   const sessionSecret = randomSecret(32)
@@ -334,14 +382,14 @@ async function main() {
   const bootstrapPassword = randomSecret(16)
 
   await fs.mkdir(targetDir, { recursive: true })
-  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageRegistry, imageTag, superadminEmail, superadminName, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, caddyAcmeEmail, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
+  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageRegistry, imageTag, superadminEmail, superadminName, smtpConfigured, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, caddyAcmeEmail, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
   await fs.writeFile(path.join(targetDir, 'docker-compose.yml'), mode === 'managed-simple' ? composeForManagedSimple() : composeForExistingInfra())
   if (mode === 'managed-simple') {
     await fs.writeFile(path.join(targetDir, 'Caddyfile'), caddyfile(domain))
   }
-  await fs.writeFile(path.join(targetDir, 'SETUP_NOTES.txt'), setupNotes(mode, bootstrapPassword, targetDir, appUrl))
+  await fs.writeFile(path.join(targetDir, 'SETUP_NOTES.txt'), setupNotes(mode, bootstrapPassword, targetDir, appUrl, smtpConfigured))
 
-  console.log(setupNotes(mode, bootstrapPassword, targetDir, appUrl))
+  console.log(setupNotes(mode, bootstrapPassword, targetDir, appUrl, smtpConfigured))
 
   const runCompose = await confirm({ message: 'Run docker compose setup now?', default: false })
   if (runCompose) {
