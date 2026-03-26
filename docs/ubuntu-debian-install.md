@@ -251,61 +251,53 @@ If invite creation works but email fails, check:
 
 ---
 
-## 9. MCP setup after install
+## 9. Hosted MCP setup after install
 
-The installer now writes a short hosted-MCP note inside:
+Hosted MCP is now the primary path.
 
-```bash
-/opt/sally-instance/mcp
-```
+That means:
+- MCP runs inside Sally itself
+- users do **not** need SSH access to the server
+- users do **not** need to run a local `run-mcp.sh` script on the server
 
-See what was created:
-
-```bash
-ls -la /opt/sally-instance/mcp
-```
-
-You should see files like:
-- `.env.example`
-- `run-mcp.sh`
-- `openclaw.example.json`
-- `MCP_SETUP.txt`
-
-Important:
-- the installer does **not** create an MCP user key for you
-- each user should mint their own API key inside Sally later
-
-### To use MCP
+### To use hosted MCP
 
 1. log into Sally
-2. create a personal API key
-3. copy the MCP env file:
+2. open your profile / API keys area
+3. create a **hosted MCP key**
+4. copy the hosted MCP endpoint and the generated hosted MCP key
+5. paste them into your MCP client config
 
-```bash
-cd /opt/sally-instance/mcp
-cp .env.example .env
-nano .env
-```
+### Hosted MCP endpoint
 
-4. put your own key into:
+Your hosted MCP endpoint will be:
 
 ```text
-SALLY_USER_API_KEY=...
+https://projects.example.com/mcp
 ```
 
-5. start the MCP server:
+### Example hosted MCP client config
 
-```bash
-cd /opt/sally-instance/mcp
-./run-mcp.sh
+```json
+{
+  "mcpServers": {
+    "sally": {
+      "url": "https://projects.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_HOSTED_MCP_KEY"
+      }
+    }
+  }
+}
 ```
 
 Optional advanced restriction:
-- if you want one MCP server pinned to one workspace, set:
+- when creating a hosted MCP key in Sally, you can optionally restrict it to one workspace
+- that restriction is managed inside Sally itself, not by editing server files
 
-```text
-SALLY_WORKSPACE_SLUG=your-workspace-slug
-```
+### Legacy / advanced local MCP
+
+The local `sally-mcp` package still exists for advanced or legacy setups, but it is no longer the primary onboarding path.
 
 ---
 

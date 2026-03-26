@@ -16,6 +16,7 @@ const navItems = [
   { href: '/clients', label: 'Clients' },
   { href: '/timesheets', label: 'Timesheets' },
   { href: '/workspace', label: 'Workspace' },
+  { href: '/docs', label: 'Docs' },
 ]
 
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`

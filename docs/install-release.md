@@ -37,8 +37,8 @@ Trigger options:
 11. Prisma DB push
 12. bootstrap of first workspace + superadmin
 13. health verification
-14. automatic `sally-mcp` install + scaffold generation
-15. final welcome output with login details
+14. final welcome output with login details
+15. post-install path points users toward hosted MCP inside Sally
 
 ## Mailer behavior
 
@@ -54,20 +54,20 @@ The API mailer supports:
 
 ## MCP behavior
 
-The MCP package is:
-- `sally-mcp`
+The primary MCP product path is now hosted MCP inside Sally.
 
-Public MCP setup expects:
-- `SALLY_URL`
-- `SALLY_USER_API_KEY`
+Hosted MCP endpoint:
+- `/mcp`
 
-Optional advanced restriction:
-- `SALLY_WORKSPACE_SLUG`
+Hosted MCP auth model:
+- users create hosted MCP keys inside Sally
+- each key is tied to the Sally user who created it
+- permissions are inherited from that user
+- optional workspace restriction exists at the hosted MCP key level
 
-Installer behavior:
-- `create-sally` installs/scaffolds `sally-mcp`
-- it does **not** mint or configure a user API key
-- each Sally user creates their own API key later and uses it in their own MCP client config
+Local/stdio MCP:
+- `sally-mcp` still exists as an advanced / legacy path
+- it is no longer the default onboarding path
 
 ## Bootstrap result
 
@@ -80,8 +80,8 @@ The bootstrap step upserts:
 
 1. Push to `main`
 2. Confirm `publish-images` succeeds
-3. Publish `sally-mcp` when MCP changes are ready
+3. Publish `sally-mcp` only when the advanced/legacy stdio path changes are ready
 4. Publish `create-sally` when installer changes are ready
 5. Test one fresh managed-simple install on a clean Linux host
 6. Test one fresh existing-infra install on a clean Linux host
-7. Verify SMTP, login, invite flow, and MCP scaffold generation
+7. Verify SMTP, login, invite flow, hosted MCP key UX, and hosted `/mcp` behavior

@@ -2,59 +2,86 @@
 
 **API-first project management for humans and agents.**
 
-Sally is the project management system we built because existing tools felt bloated, soft, and hostile to real automation.
+Sally is a self-hostable PM system built for teams that care about real operational workflows, low-noise UI, and first-class automation.
 
-We wanted one place where:
-- humans can collaborate cleanly
-- agents and automations can interact through a real API
-- teams can self-host and adapt the system to the way they actually work
+We built it because too many project management tools feel bloated, soft, and hostile to APIs, agents, and actual execution.
 
-Sally is designed for teams that already live in terminals, APIs, and operational reality.
+With Sally, the goal is simple:
+- give humans a clean control surface
+- give scripts and agents a real API
+- keep permissions and state grounded in one system
 
 ---
 
 ## Why Sally exists
 
-Most PM tools optimize for SaaS packaging, feature sprawl, and workflow decoration.
+Most PM tools optimize for:
+- SaaS packaging
+- workflow decoration
+- feature sprawl
+- polished demos over operational clarity
 
-Sally is the opposite:
+Sally goes the other direction:
 - **API-first from day one**
-- **low-noise UI for real operators**
 - **self-hostable**
-- **human + agent collaboration in one system**
-- **public source with fair-code protections**
+- **human + agent collaboration**
+- **TypeScript-first monorepo**
+- **low-noise operator UI**
+- **hosted MCP built into the product**
 
 We built it for ourselves first.
-Now we are turning it into something other teams can use too.
+Now we are turning it into something other teams can actually use.
 
 ---
 
 ## What Sally already covers
 
-- workspaces, roles, and memberships
-- projects, tasks, comments, and activity
-- custom statuses and boards
-- clients and timesheets
-- account-level API keys
+Current product surface:
+- workspaces, memberships, invites, and roles
+- projects, project members, statuses, and activity
+- tasks, labels, comments, due dates, and checklists
+- clients and project/client linking
+- timesheets and reporting
+- notifications and notification preferences
+- personal API keys and hosted MCP keys
+- hosted MCP endpoint (`/mcp`)
+- local stdio MCP package (`sally-mcp`)
 - web app + API in one TypeScript-first system
 
 ---
 
-## Quick install
+## Start here
 
-The easiest way to install Sally is with the npm installer:
+### Install Sally
+The easiest path is the installer:
 
 ```bash
 npx --yes create-sally@latest
 ```
 
-For a copy-paste Ubuntu / Debian walkthrough, see:
+Detailed guides:
+- [`docs/index.md`](./docs/index.md)
 - [`docs/ubuntu-debian-install.md`](./docs/ubuntu-debian-install.md)
+- [`docs/install-release.md`](./docs/install-release.md)
 
-The installer guides you through setup and supports two modes:
+### Understand the product
+- [`docs/product-guide.md`](./docs/product-guide.md)
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+
+### Integrate with the API
+- [`docs/api.md`](./docs/api.md)
+- [`docs/tutorials.md`](./docs/tutorials.md)
+
+### Use MCP
+- [`docs/mcp.md`](./docs/mcp.md)
+- [`apps/mcp/README.md`](./apps/mcp/README.md)
+
+---
+
+## Installer modes
 
 ### `managed-simple`
-For the easiest path.
+Best when you want the fastest clean install.
 
 Sally sets up:
 - Docker
@@ -62,68 +89,68 @@ Sally sets up:
 - HTTPS via Caddy
 - web + API containers
 
-Best when you want a clean single-server install quickly.
+Use this when you want a single-server install with sensible defaults.
 
 ### `existing-infra`
-For teams that already have infrastructure.
+Best when you already have hosting and edge decisions.
 
-Use this when you want Sally to fit into:
-- your own reverse proxy
-- your own TLS setup
-- your own hosting layout
-- a more customized deployment flow
-
----
-
-## What the installer is meant to feel like
-
-We want Sally setup to be:
-- fast
-- obvious
-- low-noise
-- safe for non-technical operators
-- good enough for engineers who want control
-
-That means:
-- sensible defaults
-- immediate DNS checks where needed
-- minimal unnecessary questions
-- clean success output
-- no giant walls of technical noise unless something breaks
+Use this when Sally needs to fit into:
+- your existing reverse proxy
+- your TLS setup
+- your deployment conventions
+- a more customized infrastructure layout
 
 ---
 
-## Typical managed-simple flow
+## Hosted MCP at a glance
 
-1. Run the installer
-2. Docker is checked and, on Linux, installed automatically if missing
-3. Pick a domain
-4. Confirm the domain resolves to the server
-5. Choose the first workspace name
-6. Enter superadmin + email settings
-7. Sally writes the instance files
-8. Sally pulls fresh images and boots the stack
-9. Sally points you to the hosted MCP endpoint inside Sally
-10. You get a final welcome screen with:
-   - URL
-   - USER
-   - PASSWORD
+Hosted MCP is now a primary product path.
+
+Typical flow:
+1. create a hosted MCP key inside Sally
+2. point your MCP client at `https://your-domain.com/mcp`
+3. authenticate with `Authorization: Bearer sallymcp_...`
+4. initialize the MCP session
+5. list and call tools
+
+Hosted MCP keys:
+- inherit real Sally permissions
+- can optionally be restricted to a workspace
+- are a better default than telling users to run extra local wrappers
+
+For details and examples:
+- [`docs/mcp.md`](./docs/mcp.md)
+
+---
+
+## Typical use cases
+
+Sally works well for:
+- agency and client operations
+- internal delivery/project execution
+- support and implementation workflows
+- automation-heavy teams
+- agent-assisted planning and updates
+- self-hosted internal tooling
 
 ---
 
 ## Repo structure
 
-- `apps/web` — Sally frontend
-- `apps/api` — Sally API
-- `apps/create-sally` — npm installer package
-- `packages/types` — shared types/contracts
+- `apps/web` — human-facing Next.js app
+- `apps/api` — Fastify API + hosted MCP endpoint
+- `apps/create-sally` — installer/bootstrap package
+- `apps/mcp` — local stdio MCP package
+- `packages/db` — Prisma schema + DB client
+- `packages/ui` — shared UI
+- `packages/types` — shared types
+- `docs` — human + implementation-backed documentation
 
 ---
 
 ## Development
 
 ### Requirements
-
 - Node.js
 - pnpm
 - Docker (for deployment testing)
@@ -146,11 +173,36 @@ pnpm --filter web dev
 pnpm --filter api dev
 ```
 
-### Build the installer
+### Build everything
+
+```bash
+pnpm build
+```
+
+### Build individual packages
 
 ```bash
 pnpm --filter create-sally build
+pnpm --filter mcp build
+pnpm --filter api build
+pnpm --filter web build
 ```
+
+---
+
+## Documentation philosophy
+
+This repo intentionally has two kinds of docs:
+
+### 1. Human-first guides
+These explain workflows, installation, and operations clearly.
+
+### 2. Implementation-backed references
+These track the current code so engineers and LLMs can integrate accurately.
+
+If there is ever a conflict:
+1. trust `docs/api.md`
+2. trust the source code over aspirational copy
 
 ---
 
@@ -159,32 +211,31 @@ pnpm --filter create-sally build
 Sally currently ships as:
 - a web image
 - an API image
-- a simple installer that writes deployment files and runs the setup flow
+- an installer package
+- a local MCP package
 
 Published images:
 - `ghcr.io/use-sally/sally-web`
 - `ghcr.io/use-sally/sally-api`
 
-Published installer:
+Published packages:
 - `create-sally`
-
-Published MCP package:
 - `sally-mcp`
 
 ---
 
 ## Product direction
 
-We want Sally to become the clean control surface for teams that work with:
+We want Sally to become the clean operational core for teams that work with:
 - humans
-- LLMs
-- agents
+- APIs
 - scripts
-- internal operations
-- API-driven workflows
+- agents
+- internal execution
+- project and delivery workflows
 
-Not another bloated productivity layer.
-A real operational system.
+Not another ornamental productivity layer.
+A real system.
 
 ---
 
@@ -200,15 +251,15 @@ You can:
 - use Sally personally
 - self-host Sally
 - use Sally inside your own business
-- adapt Sally for your own internal needs
+- adapt Sally for internal needs
 
 You cannot, without separate permission from **Kraft Fabrik Media Ltd.**:
 - run Sally as a SaaS or managed service for third parties
 - white-label or resell Sally
 - publish a competing production-ready version under another brand
-- remove Sally attribution or support/development messages from the community version
+- remove Sally attribution or community-version support/development messages
 
-See [`LICENSE`](./LICENSE) for the binding terms and [`LICENSING.md`](./LICENSING.md) for the plain-English summary.
+See [`LICENSE`](./LICENSE) for binding terms and [`LICENSING.md`](./LICENSING.md) for the plain-English summary.
 
 ---
 
