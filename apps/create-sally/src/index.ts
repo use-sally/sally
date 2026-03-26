@@ -32,6 +32,11 @@ function composeForManagedSimple() {
       POSTGRES_DB: ${'${POSTGRES_DB}'}
     volumes:
       - sally-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
 
   api:
     image: ${'${SALLY_API_IMAGE}'}
@@ -39,7 +44,8 @@ function composeForManagedSimple() {
     restart: unless-stopped
     env_file: .env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   web:
     image: ${'${SALLY_WEB_IMAGE}'}
@@ -53,6 +59,7 @@ function composeForManagedSimple() {
     image: caddy:2-alpine
     container_name: sally-caddy
     restart: unless-stopped
+    env_file: .env
     ports:
       - "80:80"
       - "443:443"
@@ -84,6 +91,11 @@ function composeForExistingInfra() {
       POSTGRES_DB: ${'${POSTGRES_DB}'}
     volumes:
       - sally-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
 
   api:
     image: ${'${SALLY_API_IMAGE}'}
@@ -93,7 +105,8 @@ function composeForExistingInfra() {
     ports:
       - "4000:4000"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   web:
     image: ${'${SALLY_WEB_IMAGE}'}
@@ -111,7 +124,11 @@ volumes:
 }
 
 function caddyfile(domain: string) {
-  return `${normalizeDomain(domain)} {
+  return `{
+  email {$CADDY_ACME_EMAIL}
+}
+
+${normalizeDomain(domain)} {
   encode gzip zstd
 
   handle_path /api/* {
@@ -136,6 +153,7 @@ function envFile(args: {
   smtpUser: string
   smtpPassword: string
   mailFrom: string
+  caddyAcmeEmail?: string
   postgresPassword: string
   sessionSecret: string
   appEncryptionKey: string
@@ -173,6 +191,7 @@ SMTP_PORT=${args.smtpPort}
 SMTP_USER=${args.smtpUser}
 SMTP_PASSWORD=${args.smtpPassword}
 MAIL_FROM=${args.mailFrom}
+CADDY_ACME_EMAIL=${args.caddyAcmeEmail ?? ''}
 
 # optional compatibility / provider-level SMTP URL if needed later
 # SMTP_URL=smtps://${args.smtpUser}:${args.smtpPassword}@${args.smtpHost}:${args.smtpPort}
@@ -180,7 +199,8 @@ MAIL_FROM=${args.mailFrom}
 }
 
 function setupNotes(mode: InstallMode, bootstrapPassword: string, targetDir: string, appUrl: string) {
-  const common = `sally_ installer scaffold created.
+  if (mode === 'managed-simple') {
+    return `sally_ installer scaffold created.
 
 Location:
 - ${targetDir}
@@ -196,16 +216,31 @@ Generated temporary superadmin password:
 
 Planned login URL:
 - ${appUrl}
-`
-  if (mode === 'managed-simple') {
-    return `${common}
+
 Managed-simple files:
 - docker-compose.yml
 - Caddyfile
 - .env
 `
   }
-  return `${common}
+
+  return `sally_ installer scaffold created.
+
+Location:
+- ${targetDir}
+
+Next steps:
+- review .env
+- start the stack with docker compose
+- run bootstrap + health verification
+- put your reverse proxy / TLS in front of web:3000 and api:4000
+
+Generated temporary superadmin password:
+- ${bootstrapPassword}
+
+Planned public app URL (after your infra is configured):
+- ${appUrl}
+
 Existing-infra files:
 - docker-compose.yml
 - .env
@@ -251,14 +286,17 @@ async function waitForPostgres(targetDir: string, attempts = 30, delayMs = 2000)
 }
 
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string) {
-  await runCommand('docker', ['compose', 'up', '-d'], targetDir)
+  await runCommand('docker', ['compose', 'up', '-d', 'postgres'], targetDir)
   await waitForPostgres(targetDir)
   await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma db push --schema prisma/schema.prisma'], targetDir)
   await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir)
+
   if (mode === 'managed-simple') {
+    await runCommand('docker', ['compose', 'up', '-d', 'api', 'web', 'caddy'], targetDir)
     await waitForHealth(`${appUrl}/api/health`, 'API')
     await waitForHealth(appUrl, 'Web app')
   } else {
+    await runCommand('docker', ['compose', 'up', '-d', 'api', 'web'], targetDir)
     await waitForHealth('http://127.0.0.1:4000/health', 'API')
     await waitForHealth('http://127.0.0.1:3000', 'Web app')
   }
@@ -281,6 +319,9 @@ async function main() {
   const imageTag = await input({ message: 'Container image tag', default: 'latest' })
   const superadminEmail = await input({ message: 'Superadmin email' })
   const superadminName = await input({ message: 'Superadmin name', default: 'Admin' })
+  const caddyAcmeEmail = mode === 'managed-simple'
+    ? await input({ message: 'ACME / TLS contact email', default: superadminEmail })
+    : ''
   const smtpHost = await input({ message: 'SMTP host' })
   const smtpPort = await input({ message: 'SMTP port', default: '587' })
   const smtpUser = await input({ message: 'SMTP username' })
@@ -293,7 +334,7 @@ async function main() {
   const bootstrapPassword = randomSecret(16)
 
   await fs.mkdir(targetDir, { recursive: true })
-  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageRegistry, imageTag, superadminEmail, superadminName, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
+  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageRegistry, imageTag, superadminEmail, superadminName, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, caddyAcmeEmail, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
   await fs.writeFile(path.join(targetDir, 'docker-compose.yml'), mode === 'managed-simple' ? composeForManagedSimple() : composeForExistingInfra())
   if (mode === 'managed-simple') {
     await fs.writeFile(path.join(targetDir, 'Caddyfile'), caddyfile(domain))
@@ -305,7 +346,14 @@ async function main() {
   const runCompose = await confirm({ message: 'Run docker compose setup now?', default: false })
   if (runCompose) {
     await runInstallerCommands(mode, targetDir, appUrl)
-    console.log(`\nsally_ setup completed. Open: ${appUrl}`)
+    if (mode === 'managed-simple') {
+      console.log(`\nsally_ setup completed. Open: ${appUrl}`)
+    } else {
+      console.log(`\nsally_ setup completed.`)
+      console.log(`- Web is listening on: http://127.0.0.1:3000`)
+      console.log(`- API is listening on: http://127.0.0.1:4000`)
+      console.log(`- Public app URL after your reverse proxy / TLS is configured: ${appUrl}`)
+    }
   }
 }
 
