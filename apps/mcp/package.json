@@ -1,12 +1,40 @@
 {
-  "name": "mcp",
-  "private": true,
+  "name": "sally-mcp",
   "version": "0.1.0",
+  "description": "MCP server for Sally",
   "type": "module",
+  "bin": {
+    "sally-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "pnpm build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/use-sally/sally.git",
+    "directory": "apps/mcp"
+  },
+  "keywords": [
+    "sally",
+    "mcp",
+    "model-context-protocol",
+    "agent"
+  ],
+  "author": "use-sally",
+  "license": "SEE LICENSE IN LICENSE",
+  "bugs": {
+    "url": "https://github.com/use-sally/sally/issues"
+  },
+  "homepage": "https://github.com/use-sally/sally/tree/main/apps/mcp",
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.1"

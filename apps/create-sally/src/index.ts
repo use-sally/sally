@@ -44,6 +44,16 @@ function baseUrlFromDomain(domain: string) {
   return `https://${normalizeDomain(domain)}`
 }
 
+function slugifyWorkspaceName(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return slug || 'workspace'
+}
+
 function composeForManagedSimple() {
   return `services:
   postgres:
@@ -170,6 +180,8 @@ function envFile(args: {
   domain: string
   appUrl: string
   imageTag: string
+  workspaceName: string
+  workspaceSlug: string
   superadminEmail: string
   superadminName: string
   smtpConfigured: boolean
@@ -192,7 +204,9 @@ SALLY_INSTALL_MODE=${args.mode}
 SALLY_URL=${args.appUrl}
 APP_BASE_URL=${args.appUrl}
 NEXT_PUBLIC_API_BASE_URL=/api
-NEXT_PUBLIC_WORKSPACE_SLUG=sally
+NEXT_PUBLIC_WORKSPACE_SLUG=${args.workspaceSlug}
+SALLY_WORKSPACE_NAME=${args.workspaceName}
+SALLY_WORKSPACE_SLUG=${args.workspaceSlug}
 
 SALLY_IMAGE_REGISTRY=ghcr.io/use-sally
 SALLY_IMAGE_TAG=${args.imageTag}
@@ -338,6 +352,120 @@ function printWelcome(mode: InstallMode, appUrl: string, superadminEmail: string
   console.log(`${paint('PASSWORD', color.brightYellow)}: ${bootstrapPassword}`)
 }
 
+async function hasCommand(command: string) {
+  try {
+    await runCommandCapture('sh', ['-lc', `command -v ${command}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function ensureDockerInstalled() {
+  const hasDocker = await hasCommand('docker')
+  const hasCompose = hasDocker
+    ? await new Promise<boolean>((resolve) => {
+      const child = spawn('docker', ['compose', 'version'], { stdio: 'ignore', shell: false })
+      child.on('exit', (code) => resolve(code === 0))
+      child.on('error', () => resolve(false))
+    })
+    : false
+
+  if (hasDocker && hasCompose) {
+    console.log(paint('Docker OK', color.green))
+    return
+  }
+
+  if (process.platform !== 'linux') {
+    throw new Error('Docker is missing and automatic installation is only supported by this installer on Linux right now.')
+  }
+
+  section('Installing Docker')
+  console.log(paint('Docker or Docker Compose is missing. Sally will install Docker now.', color.yellow))
+  await runCommand('sh', ['-lc', 'curl -fsSL https://get.docker.com | sh'], process.cwd())
+  await runCommand('sh', ['-lc', 'systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true'], process.cwd())
+
+  const dockerInstalled = await hasCommand('docker')
+  const composeInstalled = dockerInstalled
+    ? await new Promise<boolean>((resolve) => {
+      const child = spawn('docker', ['compose', 'version'], { stdio: 'ignore', shell: false })
+      child.on('exit', (code) => resolve(code === 0))
+      child.on('error', () => resolve(false))
+    })
+    : false
+
+  if (!dockerInstalled || !composeInstalled) {
+    throw new Error('Docker installation did not complete successfully. Install Docker + Docker Compose manually, then rerun create-sally.')
+  }
+
+  console.log(paint('Docker installed successfully', color.green))
+}
+
+async function installAndScaffoldMcp(targetDir: string, appUrl: string) {
+  const mcpDir = path.join(targetDir, 'mcp')
+  await fs.mkdir(mcpDir, { recursive: true })
+
+  section('Installing Sally MCP')
+  await runCommand('npm', ['install', '-g', 'sally-mcp@latest'], targetDir)
+
+  const envExample = `SALLY_URL=${appUrl}
+SALLY_USER_API_KEY=replace-with-your-personal-sally-api-key
+# Optional advanced restriction:
+# SALLY_WORKSPACE_SLUG=your-workspace-slug
+`
+
+  const runScript = `#!/usr/bin/env sh
+set -eu
+
+if [ ! -f "$(dirname "$0")/.env" ]; then
+  echo "Missing $(dirname "$0")/.env"
+  echo "Copy .env.example to .env and add your personal Sally API key first."
+  exit 1
+fi
+
+set -a
+. "$(dirname "$0")/.env"
+set +a
+
+exec sally-mcp
+`
+
+  const openClawConfig = `{
+  "mcpServers": {
+    "sally": {
+      "command": "sally-mcp",
+      "env": {
+        "SALLY_URL": "${appUrl}",
+        "SALLY_USER_API_KEY": "replace-with-your-personal-sally-api-key"
+      }
+    }
+  }
+}
+`
+
+  const setupText = `Sally MCP scaffold created.
+
+Location:
+- ${mcpDir}
+
+Next steps:
+1. copy .env.example to .env
+2. log into Sally
+3. create a personal API key in Sally
+4. paste that key into SALLY_USER_API_KEY
+5. optional: set SALLY_WORKSPACE_SLUG if you want this MCP server pinned to one workspace
+6. run ./run-mcp.sh or use the example client config
+`
+
+  await fs.writeFile(path.join(mcpDir, '.env.example'), envExample)
+  await fs.writeFile(path.join(mcpDir, 'run-mcp.sh'), runScript)
+  await fs.writeFile(path.join(mcpDir, 'openclaw.example.json'), openClawConfig)
+  await fs.writeFile(path.join(mcpDir, 'MCP_SETUP.txt'), setupText)
+  await fs.chmod(path.join(mcpDir, 'run-mcp.sh'), 0o755)
+
+  console.log(paint(`Sally MCP ready at ${mcpDir}`, color.green))
+}
+
 async function waitForHealth(url: string, label: string, attempts = 30, delayMs = 2000) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
@@ -389,6 +517,7 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
 
 async function main() {
   banner()
+  await ensureDockerInstalled()
 
   const mode = await select<InstallMode>({
     message: 'How do you want to install sally_?',
@@ -409,6 +538,8 @@ async function main() {
   }
 
   const imageTag = await input({ message: 'Sally version', default: 'latest' })
+  const workspaceName = await input({ message: 'First workspace name', default: 'Operations' })
+  const workspaceSlug = slugifyWorkspaceName(workspaceName)
   const superadminEmail = await input({ message: 'Superadmin email' })
   const superadminName = await input({ message: 'Superadmin name', default: 'Admin' })
   const caddyAcmeEmail = mode === 'managed-simple'
@@ -453,7 +584,7 @@ async function main() {
   const bootstrapPassword = randomSecret(16)
 
   await fs.mkdir(targetDir, { recursive: true })
-  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageTag, superadminEmail, superadminName, smtpConfigured, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, caddyAcmeEmail, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
+  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageTag, workspaceName, workspaceSlug, superadminEmail, superadminName, smtpConfigured, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, caddyAcmeEmail, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
   await fs.writeFile(path.join(targetDir, 'docker-compose.yml'), mode === 'managed-simple' ? composeForManagedSimple() : composeForExistingInfra())
   if (mode === 'managed-simple') {
     await fs.writeFile(path.join(targetDir, 'Caddyfile'), caddyfile(domain))
@@ -461,6 +592,7 @@ async function main() {
   await fs.writeFile(path.join(targetDir, 'SETUP_NOTES.txt'), setupNotes(mode, bootstrapPassword, targetDir, appUrl, smtpConfigured))
 
   await runInstallerCommands(mode, targetDir, appUrl)
+  await installAndScaffoldMcp(targetDir, appUrl)
   printWelcome(mode, appUrl, superadminEmail, bootstrapPassword)
 }
 

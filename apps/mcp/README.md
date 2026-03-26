@@ -1,41 +1,45 @@
-# sally_ MCP server
+# sally-mcp
 
-A stdio MCP server for `sally_` that talks to a remote or local `sally_` instance over its normal web domain.
+MCP server for **Sally**.
 
-## Auth model
+`sally-mcp` lets MCP-compatible clients talk to a Sally instance over its normal web API using a **personal user API key** minted inside Sally.
 
-Use **user-minted API keys** from `sally_`.
+## Install
 
-That is the intended model because:
-- access rights come from the user behind the key
-- MCP/agent actions inherit normal workspace/project permissions
-- there is no need to share a global master key with agents
+```bash
+npm install -g sally-mcp
+```
 
-## Environment
+## Required environment
 
-Required:
+```bash
+SALLY_URL=https://your-sally-domain.com
+SALLY_USER_API_KEY=your_personal_sally_api_key
+```
 
-- `SALLY_URL` — your `sally_` instance origin, for example:
-  - `https://yourdomain.com`
-  - or `https://yourdomain.com/api`
-- `SALLY_API_KEY` — a user API key created via `sally_` account settings / `/auth/api-keys`
+That is enough for the normal setup.
 
-The MCP server derives the API base automatically:
-- `https://yourdomain.com` -> `https://yourdomain.com/api`
-- `https://yourdomain.com/api` -> unchanged
+Access is defined entirely by the Sally user behind the API key.
 
-Optional:
+## Optional advanced restriction
 
-- `SALLY_WORKSPACE_ID`
-- `SALLY_WORKSPACE_SLUG`
+If you want one MCP server to be pinned to a single workspace, you can also set:
+
+```bash
+SALLY_WORKSPACE_SLUG=your-workspace-slug
+```
+
+That is useful when different agents should be restricted to different workspaces.
+
+No workspace id is needed.
+No global server key is needed.
 
 ## Run locally
 
 ```bash
-cd apps/mcp
-SALLY_URL=https://yourdomain.com \
-SALLY_API_KEY=your_user_pat_here \
-pnpm dev
+SALLY_URL=https://your-sally-domain.com \
+SALLY_USER_API_KEY=your_personal_sally_api_key \
+sally-mcp
 ```
 
 ## OpenClaw / generic stdio MCP config
@@ -44,12 +48,10 @@ pnpm dev
 {
   "mcpServers": {
     "sally": {
-      "command": "pnpm",
-      "args": ["--dir", "/absolute/path/to/projects/automatethis-pm/apps/mcp", "start"],
+      "command": "sally-mcp",
       "env": {
-        "SALLY_URL": "https://yourdomain.com",
-        "SALLY_API_KEY": "your_user_pat_here",
-        "SALLY_WORKSPACE_SLUG": "sally"
+        "SALLY_URL": "https://your-sally-domain.com",
+        "SALLY_USER_API_KEY": "your_personal_sally_api_key"
       }
     }
   }
@@ -62,39 +64,110 @@ pnpm dev
 {
   "mcpServers": {
     "sally": {
-      "command": "node",
-      "args": ["/absolute/path/to/projects/automatethis-pm/apps/mcp/dist/index.js"],
+      "command": "sally-mcp",
       "env": {
-        "SALLY_URL": "https://yourdomain.com",
-        "SALLY_API_KEY": "your_user_pat_here",
-        "SALLY_WORKSPACE_SLUG": "sally"
+        "SALLY_URL": "https://your-sally-domain.com",
+        "SALLY_USER_API_KEY": "your_personal_sally_api_key"
       }
     }
   }
 }
 ```
 
-## Current tools
+## Workspace selection behavior
+
+- Default: no workspace restriction in config.
+- Optional advanced restriction: set `SALLY_WORKSPACE_SLUG` to pin one MCP server to one workspace.
+- If no workspace slug is configured, access is determined entirely by the Sally user and the API key behind it.
+
+## Tool families
+
+### Workspace and account
 
 - `workspace.list`
+- `workspace.members.list`
+- `workspace.members.add`
+- `workspace.members.update`
+- `workspace.members.remove`
+- `workspace.invite`
+- `profile.get`
+- `profile.update`
+- `profile.image_upload`
+- `api_keys.list`
+- `api_keys.create`
+- `api_keys.revoke`
+
+### Notifications
+
+- `notification.list`
+- `notification.read`
+- `notification.read_all`
+- `notification.preferences.get`
+- `notification.preferences.update`
+
+### Clients and discovery
+
+- `mentionable_users.list`
+- `client.list`
+- `client.create`
+- `client.get`
+- `client.update`
+- `client.delete`
+- `project.summary`
+- `board.get`
+
+### Projects
+
 - `project.list`
-- `project.get`
 - `project.create`
+- `project.get`
+- `project.update`
+- `project.archive`
+- `project.delete`
+- `project.members.list`
+- `project.members.add`
+- `project.members.update`
+- `project.members.remove`
+- `project.activity`
+- `project.labels.create`
+- `project.statuses.create`
+- `project.statuses.update`
+- `project.statuses.delete`
+
+### Tasks, comments, labels, todos, uploads
+
 - `task.list`
 - `task.get`
 - `task.create`
 - `task.update`
 - `task.move`
+- `task.reorder`
+- `task.archive`
+- `task.delete`
 - `task.comments`
 - `comment.add`
+- `task.labels.update`
+- `task.todos.create`
+- `task.todos.update`
+- `task.todos.delete`
+- `task.todos.reorder`
+- `task.image_upload`
+
+### Timesheets
+
 - `timesheet.add`
-- `notification.list`
-- `notification.read`
-- `notification.read_all`
+- `timesheet.update`
+- `timesheet.delete`
+- `timesheet.project_list`
+- `timesheet.task_list`
+- `timesheet.users`
+- `timesheet.report`
 
 ## Notes
 
-- The MCP server uses the existing API as the source of truth.
+- `sally-mcp` uses Sally's normal HTTP API as the source of truth.
 - It does not access the database directly.
-- It is intended for LLM/developer workflows first.
-- For external agent access, prefer **user API keys** over any global server-level key.
+- Each user should mint and use their own Sally API key.
+- Permissions are inherited from the real Sally user behind that key.
+- Owner-only operations remain owner-only. The MCP server does not bypass Sally permissions.
+- Login, invite acceptance, password reset, and other email/token flows are intentionally not exposed as MCP tools because they are not practical authenticated agent actions with a minted user API key.
