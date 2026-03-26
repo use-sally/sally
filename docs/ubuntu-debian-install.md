@@ -13,7 +13,7 @@ It will:
 - run the Sally installer
 - let Sally install Docker automatically if needed
 - set up the web app, API, database, and HTTPS
-- install and scaffold `sally-mcp`
+- prepare hosted Sally MCP usage
 
 This guide assumes you want the easiest path:
 - **managed-simple**
@@ -207,7 +207,7 @@ The installer will automatically:
 - apply the database schema
 - bootstrap the first superadmin and workspace
 - start the web app + API + HTTPS
-- install and scaffold `sally-mcp`
+- prepare hosted Sally MCP usage
 
 At the end you will see a welcome block like this:
 
@@ -253,7 +253,7 @@ If invite creation works but email fails, check:
 
 ## 9. MCP setup after install
 
-The installer also creates an MCP scaffold inside:
+The installer now writes a short hosted-MCP note inside:
 
 ```bash
 /opt/sally-instance/mcp

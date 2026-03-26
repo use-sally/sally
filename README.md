@@ -103,7 +103,7 @@ That means:
 6. Enter superadmin + email settings
 7. Sally writes the instance files
 8. Sally pulls fresh images and boots the stack
-9. Sally also installs and scaffolds `sally-mcp`
+9. Sally points you to the hosted MCP endpoint inside Sally
 10. You get a final welcome screen with:
    - URL
    - USER

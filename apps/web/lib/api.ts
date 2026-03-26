@@ -1,4 +1,4 @@
-import type { BoardColumn, Client, ClientDetail, Health, MentionableUser, Notification, NotificationPreference, Project, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
+import type { BoardColumn, Client, ClientDetail, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
@@ -191,3 +191,7 @@ export function removeWorkspaceMember(workspaceId: string, membershipId: string)
 }
 
 export function apiUrl(path: string): string { return `${API_BASE_URL}${path}` }
+
+export function getMcpKeys(): Promise<McpKey[]> { return getJson('/auth/mcp-keys') }
+export function createMcpKey(payload: { label: string; workspaceId?: string | null }): Promise<{ ok: boolean; mcpKeyId: string; token: string; key: string; prefix: string; workspaceId: string | null; workspaceSlug: string | null }> { return getJson('/auth/mcp-keys', { method: 'POST', body: JSON.stringify(payload) }) }
+export function revokeMcpKey(mcpKeyId: string): Promise<{ ok: boolean }> { return getJson(`/auth/mcp-keys/${mcpKeyId}`, { method: 'DELETE' }) }

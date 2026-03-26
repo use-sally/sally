@@ -257,3 +257,15 @@ export type ProjectMember = {
   workspaceRole?: string | null
   platformRole?: string | null
 }
+
+export type McpKey = {
+  id: string
+  label: string
+  prefix: string
+  createdAt: string
+  lastUsedAt: string | null
+  revokedAt: string | null
+  workspaceId: string | null
+  workspaceSlug: string | null
+  workspaceName: string | null
+}

@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { PrismaClient, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -60,6 +61,10 @@ function generateApiKeyToken() {
   return `atpm_${crypto.randomBytes(24).toString('base64url')}`
 }
 
+function generateMcpKeyToken() {
+  return `sallymcp_${crypto.randomBytes(24).toString('base64url')}`
+}
+
 async function ensureAuth(request: any, reply: any) {
   const token = extractAuthToken(request)
   if (token && API_TOKEN && token === API_TOKEN) return true
@@ -83,6 +88,16 @@ async function ensureAuth(request: any, reply: any) {
       ;(request as any).apiKey = { id: apiKey.id, label: apiKey.label }
       return true
     }
+    const mcpKey = await prisma.accountMcpKey.findFirst({
+      where: { tokenHash: hashApiToken(token), revokedAt: null },
+      include: { account: true, workspace: true },
+    })
+    if (mcpKey) {
+      await prisma.accountMcpKey.update({ where: { id: mcpKey.id }, data: { lastUsedAt: new Date() } })
+      ;(request as any).account = mcpKey.account
+      ;(request as any).mcpKey = { id: mcpKey.id, label: mcpKey.label, workspaceId: mcpKey.workspaceId, workspaceSlug: mcpKey.workspace?.slug ?? null }
+      return true
+    }
     reply.code(401).send({ ok: false, error: 'Unauthorized' })
     return false
   }
@@ -99,6 +114,19 @@ async function resolveWorkspace(request: any, reply: any) {
   const workspaceId = readHeader(request, 'x-workspace-id') ?? queryWorkspaceId
   const workspaceSlug = readHeader(request, 'x-workspace-slug') ?? queryWorkspaceSlug
   const account = (request as any).account as { id: string } | undefined
+  const mcpKey = (request as any).mcpKey as { workspaceId?: string | null; workspaceSlug?: string | null } | undefined
+  if (mcpKey?.workspaceId) {
+    const restrictedWorkspace = await prisma.workspace.findUnique({ where: { id: mcpKey.workspaceId } })
+    if (!restrictedWorkspace) {
+      reply.code(403).send({ ok: false, error: 'Restricted workspace not found' })
+      return null
+    }
+    if ((workspaceId && String(workspaceId) !== mcpKey.workspaceId) || (workspaceSlug && String(workspaceSlug) !== restrictedWorkspace.slug)) {
+      reply.code(403).send({ ok: false, error: 'Workspace access denied by MCP key restriction' })
+      return null
+    }
+    return restrictedWorkspace
+  }
   let workspace = null
 
   if (account) {
@@ -749,6 +777,85 @@ async function getBoardData(request: any, workspaceId: string, projectId?: strin
   }))
 }
 
+type McpTool = { name: string; description: string; inputSchema: Record<string, unknown> }
+
+const hostedMcpTools: McpTool[] = [
+  { name: 'workspace.list', description: 'List accessible workspaces.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'project.list', description: 'List projects in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, archived: { type: 'boolean' } }, additionalProperties: false } },
+  { name: 'project.get', description: 'Get full project details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
+  { name: 'task.list', description: 'List tasks for a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, status: { type: 'string' }, assignee: { type: 'string' }, search: { type: 'string' }, label: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
+  { name: 'task.get', description: 'Get full task details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'task.create', description: 'Create a task in a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, title: { type: 'string' }, assignee: { type: 'string' }, description: { type: 'string' }, priority: { type: 'string' }, status: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] } }, required: ['projectId', 'title'], additionalProperties: false } },
+  { name: 'task.update', description: 'Update a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, assignee: { type: 'string' }, priority: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'comment.add', description: 'Add a comment to a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, body: { type: 'string' }, author: { type: 'string' } }, required: ['taskId', 'body'], additionalProperties: false } },
+  { name: 'timesheet.add', description: 'Add a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, taskId: { type: ['string','null'] }, userId: { type: 'string' }, userName: { type: 'string' }, date: { type: 'string' }, minutes: { type: 'number' }, description: { type: 'string' }, billable: { type: 'boolean' }, validated: { type: 'boolean' } }, required: ['projectId', 'minutes'], additionalProperties: false } },
+]
+
+function extractMcpBearerToken(request: any) {
+  const auth = readHeader(request, 'authorization')
+  if (auth && auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim()
+  return readHeader(request, 'x-api-key')
+}
+
+async function ensureMcpAuth(request: any, reply: any) {
+  const token = extractMcpBearerToken(request)
+  if (!token) {
+    reply.code(401).send({ jsonrpc: '2.0', error: { code: -32001, message: 'Missing MCP key' }, id: null })
+    return false
+  }
+  const key = await prisma.accountMcpKey.findFirst({ where: { tokenHash: hashApiToken(token), revokedAt: null }, include: { account: true, workspace: true } })
+  if (!key) {
+    reply.code(401).send({ jsonrpc: '2.0', error: { code: -32001, message: 'Invalid MCP key' }, id: null })
+    return false
+  }
+  await prisma.accountMcpKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } })
+  ;(request as any).account = key.account
+  ;(request as any).mcpKey = { id: key.id, label: key.label, workspaceId: key.workspaceId, workspaceSlug: key.workspace?.slug ?? null }
+  return true
+}
+
+function mcpResult(id: unknown, result: unknown) { return { jsonrpc: '2.0', id: id ?? null, result } }
+function mcpError(id: unknown, code: number, message: string) { return { jsonrpc: '2.0', id: id ?? null, error: { code, message } } }
+
+async function callHostedMcpTool(request: any, name: string, args: Record<string, any>) {
+  switch (name) {
+    case 'workspace.list': {
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const items = memberships
+        .filter((membership) => !request.mcpKey?.workspaceId || membership.workspaceId === request.mcpKey.workspaceId)
+        .map((membership) => ({ id: membership.workspace.id, name: membership.workspace.name, slug: membership.workspace.slug, role: membership.role }))
+      return { tools: items }
+    }
+    case 'project.list':
+      request.query = { workspaceId: args.workspaceId, workspaceSlug: args.workspaceSlug, archived: args.archived ? 'true' : undefined }
+      request.workspace = await resolveWorkspace(request, { code: () => ({ send: () => undefined }), send: () => undefined })
+      return { items: await app.inject({ method: 'GET', url: `/projects${args.archived ? '?archived=true' : ''}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body)) }
+    case 'project.get': {
+      const q = args.archived ? '?archived=true' : ''
+      return await app.inject({ method: 'GET', url: `/projects/${args.projectId}${q}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+    }
+    case 'task.list': {
+      const params = new URLSearchParams()
+      for (const key of ['status','assignee','search','label']) if (args[key]) params.set(key, String(args[key]))
+      if (args.archived) params.set('archived','true')
+      const q = params.toString()
+      return { items: await app.inject({ method: 'GET', url: `/projects/${args.projectId}/tasks${q ? `?${q}` : ''}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body)) }
+    }
+    case 'task.get':
+      return await app.inject({ method: 'GET', url: `/tasks/${args.taskId}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+    case 'task.create':
+      return await app.inject({ method: 'POST', url: '/tasks', payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+    case 'task.update':
+      return await app.inject({ method: 'PATCH', url: `/tasks/${args.taskId}`, payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+    case 'comment.add':
+      return await app.inject({ method: 'POST', url: `/tasks/${args.taskId}/comments`, payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+    case 'timesheet.add':
+      return await app.inject({ method: 'POST', url: '/timesheets', payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+    default:
+      throw new Error(`Unknown tool: ${name}`)
+  }
+}
+
 const start = async () => {
   try {
     await app.register(cors, { origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'X-Session-Token', 'X-Workspace-Id', 'X-Workspace-Slug'] })
@@ -950,6 +1057,60 @@ const start = async () => {
       if (!apiKey) return reply.code(404).send({ ok: false, error: 'API key not found' })
       await prisma.accountApiKey.update({ where: { id: apiKey.id }, data: { revokedAt: new Date() } })
       return { ok: true }
+    })
+
+    app.get('/auth/mcp-keys', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const keys = await prisma.accountMcpKey.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'desc' } })
+      return keys.map((key) => ({ id: key.id, label: key.label, prefix: key.prefix, createdAt: key.createdAt.toISOString(), lastUsedAt: key.lastUsedAt?.toISOString() ?? null, revokedAt: key.revokedAt?.toISOString() ?? null, workspaceId: key.workspaceId, workspaceSlug: key.workspace?.slug ?? null, workspaceName: key.workspace?.name ?? null }))
+    })
+
+    app.post('/auth/mcp-keys', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const body = request.body as { label?: string; workspaceId?: string | null }
+      const label = body.label?.trim()
+      if (!label) return reply.code(400).send({ ok: false, error: 'label is required' })
+      let workspaceId: string | null = null
+      if (body.workspaceId) {
+        const membership = await prisma.workspaceMembership.findFirst({ where: { accountId: account.id, workspaceId: body.workspaceId }, include: { workspace: true } })
+        if (!membership) return reply.code(403).send({ ok: false, error: 'Workspace access denied' })
+        workspaceId = membership.workspaceId
+      }
+      const token = generateMcpKeyToken()
+      const created = await prisma.accountMcpKey.create({ data: { accountId: account.id, workspaceId, label, prefix: token.slice(0, 16), tokenHash: hashApiToken(token) }, include: { workspace: true } })
+      return { ok: true, mcpKeyId: created.id, token, key: token, prefix: created.prefix, workspaceId: created.workspaceId, workspaceSlug: created.workspace?.slug ?? null }
+    })
+
+    app.delete('/auth/mcp-keys/:mcpKeyId', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const { mcpKeyId } = request.params as { mcpKeyId: string }
+      const mcpKey = await prisma.accountMcpKey.findFirst({ where: { id: mcpKeyId, accountId: account.id, revokedAt: null } })
+      if (!mcpKey) return reply.code(404).send({ ok: false, error: 'MCP key not found' })
+      await prisma.accountMcpKey.update({ where: { id: mcpKey.id }, data: { revokedAt: new Date() } })
+      return { ok: true }
+    })
+
+    app.get('/mcp', async (_request, reply) => reply.code(200).send({ ok: true, protocol: 'mcp', transport: 'http-jsonrpc', endpoint: '/mcp' }))
+    app.post('/mcp', async (request, reply) => {
+      if (!(await ensureMcpAuth(request, reply))) return
+      const body = request.body as { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, any> }
+      const id = body?.id ?? null
+      if (body?.method === 'initialize') return mcpResult(id, { protocolVersion: '2025-03-26', serverInfo: { name: 'sally-hosted-mcp', version: '0.1.0' }, capabilities: { tools: {} } })
+      if (body?.method === 'notifications/initialized') return reply.code(202).send('')
+      if (body?.method === 'tools/list') return mcpResult(id, { tools: hostedMcpTools })
+      if (body?.method === 'tools/call') {
+        try {
+          const params = body.params || {}
+          const result = await callHostedMcpTool(request, String(params.name || ''), (params.arguments || {}) as Record<string, any>)
+          return mcpResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], structuredContent: result })
+        } catch (error) {
+          return reply.code(200).send(mcpError(id, -32000, error instanceof Error ? error.message : String(error)))
+        }
+      }
+      return reply.code(200).send(mcpError(id, -32601, 'Method not found'))
     })
 
     app.get('/auth/profile', async (request, reply) => {

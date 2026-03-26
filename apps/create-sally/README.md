@@ -31,7 +31,7 @@ Depending on the mode, it can:
 - bootstrap the first superadmin and first workspace
 - start the Sally services
 - verify health checks
-- install and scaffold `sally-mcp`
+- prepare hosted Sally MCP usage
 - print the final login details
 
 ---
@@ -143,7 +143,7 @@ It writes instance files such as:
 - The installer asks for `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `MAIL_FROM`.
 - Sally's API mailer now supports those SMTP fields directly.
 - You can defer email setup, but Sally will not be able to send invites, password resets, or notifications until SMTP is configured.
-- The installer scaffolds `sally-mcp`, but each user must still create and use their own personal Sally API key afterwards.
+- Hosted MCP is now the primary path. The installer no longer auto-installs local `sally-mcp` scaffolding.
 
 ---
 

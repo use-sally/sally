@@ -10,11 +10,13 @@ MCP server for **Sally**.
 npm install -g sally-mcp
 ```
 
+Hosted MCP inside Sally is now the primary path at `/api/mcp`. The local `sally-mcp` stdio package remains available for advanced or legacy setups.
+
 ## Required environment
 
 ```bash
 SALLY_URL=https://your-sally-domain.com
-SALLY_USER_API_KEY=your_personal_sally_api_key
+SALLY_USER_API_KEY=your_personal_sally_api_key_or_hosted_mcp_key
 ```
 
 That is enough for the normal setup.
@@ -38,7 +40,7 @@ No global server key is needed.
 
 ```bash
 SALLY_URL=https://your-sally-domain.com \
-SALLY_USER_API_KEY=your_personal_sally_api_key \
+SALLY_USER_API_KEY=your_personal_sally_api_key_or_hosted_mcp_key \
 sally-mcp
 ```
 

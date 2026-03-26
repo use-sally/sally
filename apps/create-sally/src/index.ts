@@ -405,69 +405,30 @@ async function ensureDockerInstalled() {
   console.log(paint('Docker installed successfully', color.green))
 }
 
-async function installAndScaffoldMcp(targetDir: string, appUrl: string) {
+async function writeHostedMcpNotes(targetDir: string, appUrl: string) {
   const mcpDir = path.join(targetDir, 'mcp')
   await fs.mkdir(mcpDir, { recursive: true })
 
-  section('Installing Sally MCP')
-  await runCommand('npm', ['install', '-g', 'sally-mcp@latest'], targetDir)
+  section('Hosted Sally MCP')
 
-  const envExample = `SALLY_URL=${appUrl}
-SALLY_USER_API_KEY=replace-with-your-personal-sally-api-key
-# Optional advanced restriction:
-# SALLY_WORKSPACE_SLUG=your-workspace-slug
-`
+  const setupText = `Hosted Sally MCP is now the primary path.
 
-  const runScript = `#!/usr/bin/env sh
-set -eu
-
-if [ ! -f "$(dirname "$0")/.env" ]; then
-  echo "Missing $(dirname "$0")/.env"
-  echo "Copy .env.example to .env and add your personal Sally API key first."
-  exit 1
-fi
-
-set -a
-. "$(dirname "$0")/.env"
-set +a
-
-exec sally-mcp
-`
-
-  const openClawConfig = `{
-  "mcpServers": {
-    "sally": {
-      "command": "sally-mcp",
-      "env": {
-        "SALLY_URL": "${appUrl}",
-        "SALLY_USER_API_KEY": "replace-with-your-personal-sally-api-key"
-      }
-    }
-  }
-}
-`
-
-  const setupText = `Sally MCP scaffold created.
-
-Location:
-- ${mcpDir}
+Sally URL:
+- ${appUrl}
 
 Next steps:
-1. copy .env.example to .env
-2. log into Sally
-3. create a personal API key in Sally
-4. paste that key into SALLY_USER_API_KEY
-5. optional: set SALLY_WORKSPACE_SLUG if you want this MCP server pinned to one workspace
-6. run ./run-mcp.sh or use the example client config
+1. log into Sally
+2. open Settings → API keys
+3. create a Hosted MCP key
+4. point your MCP client at ${appUrl}/api/mcp
+5. authenticate with the Hosted MCP key as Bearer token
+
+Local stdio sally-mcp remains available for advanced setups, but it is no longer scaffolded automatically by create-sally.
 `
 
-  await fs.writeFile(path.join(mcpDir, '.env.example'), envExample)
-  await fs.writeFile(path.join(mcpDir, 'run-mcp.sh'), runScript)
-  await fs.writeFile(path.join(mcpDir, 'openclaw.example.json'), openClawConfig)
   await fs.writeFile(path.join(mcpDir, 'MCP_SETUP.txt'), setupText)
-  await fs.chmod(path.join(mcpDir, 'run-mcp.sh'), 0o755)
 
-  console.log(paint(`Sally MCP ready at ${mcpDir}`, color.green))
+  console.log(paint(`Hosted Sally MCP notes written to ${mcpDir}`, color.green))
 }
 
 async function waitForHealth(url: string, label: string, attempts = 30, delayMs = 2000) {
@@ -596,7 +557,7 @@ async function main() {
   await fs.writeFile(path.join(targetDir, 'SETUP_NOTES.txt'), setupNotes(mode, bootstrapPassword, targetDir, appUrl, smtpConfigured))
 
   await runInstallerCommands(mode, targetDir, appUrl)
-  await installAndScaffoldMcp(targetDir, appUrl)
+  await writeHostedMcpNotes(targetDir, appUrl)
   printWelcome(mode, appUrl, superadminEmail, bootstrapPassword)
 }
 

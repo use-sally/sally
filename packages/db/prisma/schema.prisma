@@ -52,6 +52,7 @@ model Workspace {
   invites      AccountInvite[]
   activityLogs ActivityLog[]
   notifications Notification[]
+  mcpKeys      AccountMcpKey[]
 }
 
 model Account {
@@ -67,6 +68,7 @@ model Account {
   projectMemberships ProjectMembership[]
   sessions    AccountSession[]
   apiKeys     AccountApiKey[]
+  mcpKeys     AccountMcpKey[]
   emailChanges EmailChangeToken[]
   invites     AccountInvite[]
   passwordResets PasswordReset[]
@@ -258,6 +260,24 @@ model AccountApiKey {
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([revokedAt])
+}
+
+model AccountMcpKey {
+  id          String    @id @default(cuid())
+  accountId   String
+  workspaceId String?
+  label       String
+  prefix      String
+  tokenHash   String    @unique
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([workspaceId])
   @@index([revokedAt])
 }
 
