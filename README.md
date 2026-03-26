@@ -1,35 +1,183 @@
-# sally
+# Sally
 
-Modern internal PM product for sally_.
+**API-first project management for humans and agents.**
 
-## Stack
-- Next.js
-- Fastify
+Sally is the project management system we built because existing tools felt bloated, soft, and hostile to real automation.
+
+We wanted one place where:
+- humans can collaborate cleanly
+- agents and automations can interact through a real API
+- teams can self-host and adapt the system to the way they actually work
+
+Sally is designed for teams that already live in terminals, APIs, and operational reality.
+
+---
+
+## Why Sally exists
+
+Most PM tools optimize for SaaS packaging, feature sprawl, and workflow decoration.
+
+Sally is the opposite:
+- **API-first from day one**
+- **low-noise UI for real operators**
+- **self-hostable**
+- **human + agent collaboration in one system**
+- **public source with fair-code protections**
+
+We built it for ourselves first.
+Now we are turning it into something other teams can use too.
+
+---
+
+## What Sally already covers
+
+- workspaces, roles, and memberships
+- projects, tasks, comments, and activity
+- custom statuses and boards
+- clients and timesheets
+- account-level API keys
+- web app + API in one TypeScript-first system
+
+---
+
+## Quick install
+
+The easiest way to install Sally is with the npm installer:
+
+```bash
+npx --yes create-sally@latest
+```
+
+The installer guides you through setup and supports two modes:
+
+### `managed-simple`
+For the easiest path.
+
+Sally sets up:
+- Docker
 - Postgres
-- Prisma
-- Tailwind
-- shadcn/ui
-- pnpm workspaces
+- HTTPS via Caddy
+- web + API containers
 
-## Apps
-- `apps/web` — frontend
-- `apps/api` — API
-- `packages/db` — Prisma schema/client
-- `packages/ui` — shared UI
+Best when you want a clean single-server install quickly.
+
+### `existing-infra`
+For teams that already have infrastructure.
+
+Use this when you want Sally to fit into:
+- your own reverse proxy
+- your own TLS setup
+- your own hosting layout
+- a more customized deployment flow
+
+---
+
+## What the installer is meant to feel like
+
+We want Sally setup to be:
+- fast
+- obvious
+- low-noise
+- safe for non-technical operators
+- good enough for engineers who want control
+
+That means:
+- sensible defaults
+- immediate DNS checks where needed
+- minimal unnecessary questions
+- clean success output
+- no giant walls of technical noise unless something breaks
+
+---
+
+## Typical managed-simple flow
+
+1. Run the installer
+2. Pick a domain
+3. Confirm the domain resolves to the server
+4. Enter superadmin + email settings
+5. Sally writes the instance files
+6. Sally pulls fresh images and boots the stack
+7. You get a final welcome screen with:
+   - URL
+   - USER
+   - PASSWORD
+
+---
+
+## Repo structure
+
+- `apps/web` — Sally frontend
+- `apps/api` — Sally API
+- `apps/create-sally` — npm installer package
 - `packages/types` — shared types/contracts
 
-## Initial product scope
-- auth
-- workspaces
-- projects
-- tasks
-- statuses
-- kanban board
-- comments
-- basic filters
+---
 
-## Auth/workspace notes
-See `docs/auth.md` for the current API token + workspace header setup.
+## Development
+
+### Requirements
+
+- Node.js
+- pnpm
+- Docker (for deployment testing)
+
+### Install dependencies
+
+```bash
+pnpm install
+```
+
+### Run the web app
+
+```bash
+pnpm --filter web dev
+```
+
+### Run the API
+
+```bash
+pnpm --filter api dev
+```
+
+### Build the installer
+
+```bash
+pnpm --filter create-sally build
+```
+
+---
+
+## Deployment model
+
+Sally currently ships as:
+- a web image
+- an API image
+- a simple installer that writes deployment files and runs the setup flow
+
+Published images:
+- `ghcr.io/use-sally/sally-web`
+- `ghcr.io/use-sally/sally-api`
+
+Published installer:
+- `create-sally`
+
+---
+
+## Product direction
+
+We want Sally to become the clean control surface for teams that work with:
+- humans
+- LLMs
+- agents
+- scripts
+- internal operations
+- API-driven workflows
+
+Not another bloated productivity layer.
+A real operational system.
+
+---
 
 ## Licensing
 
@@ -52,3 +200,12 @@ You cannot, without separate permission from **Kraft Fabrik Media Ltd.**:
 - remove Sally attribution or support/development messages from the community version
 
 See [`LICENSE`](./LICENSE) for the binding terms and [`LICENSING.md`](./LICENSING.md) for the plain-English summary.
+
+---
+
+## Links
+
+- Website: https://usesally.com
+- Docs: https://usesally.com/docs
+- GitHub: https://github.com/use-sally/sally
+- Installer package: https://www.npmjs.com/package/create-sally
