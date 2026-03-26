@@ -781,14 +781,40 @@ type McpTool = { name: string; description: string; inputSchema: Record<string, 
 
 const hostedMcpTools: McpTool[] = [
   { name: 'workspace.list', description: 'List accessible workspaces.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'client.list', description: 'List visible clients in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' } }, additionalProperties: false } },
+  { name: 'client.get', description: 'Get full client details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, clientId: { type: 'string' } }, required: ['clientId'], additionalProperties: false } },
+  { name: 'client.create', description: 'Create a client.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, name: { type: 'string' }, notes: { type: 'string' } }, required: ['name'], additionalProperties: false } },
+  { name: 'client.update', description: 'Update a client.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, clientId: { type: 'string' }, name: { type: 'string' }, notes: { type: ['string', 'null'] } }, required: ['clientId'], additionalProperties: false } },
+  { name: 'client.delete', description: 'Delete a client with no linked projects.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, clientId: { type: 'string' } }, required: ['clientId'], additionalProperties: false } },
   { name: 'project.list', description: 'List projects in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, archived: { type: 'boolean' } }, additionalProperties: false } },
   { name: 'project.get', description: 'Get full project details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
+  { name: 'project.create', description: 'Create a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, clientId: { type: ['string', 'null'] } }, required: ['name'], additionalProperties: false } },
+  { name: 'project.update', description: 'Update a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, clientId: { type: ['string', 'null'] } }, required: ['projectId'], additionalProperties: false } },
+  { name: 'project.archive', description: 'Archive or unarchive a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
+  { name: 'project.delete', description: 'Delete a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' } }, required: ['projectId'], additionalProperties: false } },
+  { name: 'project.status.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'name'], additionalProperties: false } },
+  { name: 'project.status.update', description: 'Update a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, name: { type: 'string' }, color: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
+  { name: 'project.status.delete', description: 'Delete a project status, optionally moving tasks to a replacement status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, targetStatusId: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
   { name: 'task.list', description: 'List tasks for a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, status: { type: 'string' }, assignee: { type: 'string' }, search: { type: 'string' }, label: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'task.get', description: 'Get full task details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
-  { name: 'task.create', description: 'Create a task in a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, title: { type: 'string' }, assignee: { type: 'string' }, description: { type: 'string' }, priority: { type: 'string' }, status: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] } }, required: ['projectId', 'title'], additionalProperties: false } },
+  { name: 'task.create', description: 'Create a task in a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, title: { type: 'string' }, assignee: { type: 'string' }, description: { type: 'string' }, priority: { type: 'string' }, status: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] }, labels: { type: 'array', items: { type: 'string' } }, todos: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } } }, required: ['projectId', 'title'], additionalProperties: false } },
   { name: 'task.update', description: 'Update a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, assignee: { type: 'string' }, priority: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] } }, required: ['taskId'], additionalProperties: false } },
-  { name: 'comment.add', description: 'Add a comment to a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, body: { type: 'string' }, author: { type: 'string' } }, required: ['taskId', 'body'], additionalProperties: false } },
+  { name: 'task.archive', description: 'Archive or unarchive a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'task.delete', description: 'Delete a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'task.move', description: 'Move a task by target status name.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, targetStatus: { type: 'string' } }, required: ['taskId', 'targetStatus'], additionalProperties: false } },
+  { name: 'task.reorder', description: 'Move a task into a target status and set the full ordered task list for that column.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, targetStatusId: { type: 'string' }, orderedTaskIds: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'targetStatusId', 'orderedTaskIds'], additionalProperties: false } },
+  { name: 'task.labels.update', description: 'Replace the full label set for a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, labels: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'labels'], additionalProperties: false } },
+  { name: 'task.todo.create', description: 'Add a checklist item to a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, text: { type: 'string' } }, required: ['taskId', 'text'], additionalProperties: false } },
+  { name: 'task.todo.update', description: 'Update a checklist item on a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, todoId: { type: 'string' }, text: { type: 'string' }, done: { type: 'boolean' } }, required: ['taskId', 'todoId'], additionalProperties: false } },
+  { name: 'task.todo.delete', description: 'Delete a checklist item from a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, todoId: { type: 'string' } }, required: ['taskId', 'todoId'], additionalProperties: false } },
+  { name: 'task.todo.reorder', description: 'Reorder task checklist items by providing the full ordered todo id list.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, orderedTodoIds: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'orderedTodoIds'], additionalProperties: false } },
+  { name: 'comment.add', description: 'Add a comment to a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, body: { type: 'string' }, author: { type: 'string' }, mentions: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'body'], additionalProperties: false } },
+  { name: 'timesheet.list', description: 'List timesheets for a project or task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, taskId: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' } }, additionalProperties: false } },
+  { name: 'timesheet.report', description: 'Get a timesheet report across the workspace or a filtered scope.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, projectId: { type: 'string' }, clientId: { type: 'string' }, taskId: { type: 'string' }, userId: { type: 'string' }, showValidated: { type: 'boolean' } }, additionalProperties: false } },
+  { name: 'timesheet.users', description: 'List timesheet users available for the current scope.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' } }, additionalProperties: false } },
   { name: 'timesheet.add', description: 'Add a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, taskId: { type: ['string','null'] }, userId: { type: 'string' }, userName: { type: 'string' }, date: { type: 'string' }, minutes: { type: 'number' }, description: { type: 'string' }, billable: { type: 'boolean' }, validated: { type: 'boolean' } }, required: ['projectId', 'minutes'], additionalProperties: false } },
+  { name: 'timesheet.update', description: 'Update a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' }, minutes: { type: 'number' }, description: { type: ['string', 'null'] }, date: { type: 'string' }, billable: { type: 'boolean' }, validated: { type: 'boolean' }, taskId: { type: ['string', 'null'] }, userId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
+  { name: 'timesheet.delete', description: 'Delete a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
 ]
 
 function extractMcpBearerToken(request: any) {
@@ -817,6 +843,22 @@ async function ensureMcpAuth(request: any, reply: any) {
 function mcpResult(id: unknown, result: unknown) { return { jsonrpc: '2.0', id: id ?? null, result } }
 function mcpError(id: unknown, code: number, message: string) { return { jsonrpc: '2.0', id: id ?? null, error: { code, message } } }
 
+function mcpHeaders(request: any, args: Record<string, any>) {
+  return {
+    authorization: readHeader(request, 'authorization') || '',
+    'x-workspace-id': args.workspaceId || '',
+    'x-workspace-slug': args.workspaceSlug || '',
+  }
+}
+
+async function injectJson(request: any, options: { method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'; url: string; args: Record<string, any>; payload?: Record<string, any> }) {
+  const response = await app.inject({ method: options.method, url: options.url, payload: options.payload, headers: mcpHeaders(request, options.args) })
+  const bodyText = response.body || '{}'
+  const body = JSON.parse(bodyText)
+  if (response.statusCode >= 400) throw new Error(body?.error || body?.message || `Request failed (${response.statusCode})`)
+  return body
+}
+
 async function callHostedMcpTool(request: any, name: string, args: Record<string, any>) {
   switch (name) {
     case 'workspace.list': {
@@ -824,33 +866,101 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       const items = memberships
         .filter((membership) => !request.mcpKey?.workspaceId || membership.workspaceId === request.mcpKey.workspaceId)
         .map((membership) => ({ id: membership.workspace.id, name: membership.workspace.name, slug: membership.workspace.slug, role: membership.role }))
-      return { tools: items }
+      return { items }
     }
-    case 'project.list':
-      request.query = { workspaceId: args.workspaceId, workspaceSlug: args.workspaceSlug, archived: args.archived ? 'true' : undefined }
-      request.workspace = await resolveWorkspace(request, { code: () => ({ send: () => undefined }), send: () => undefined })
-      return { items: await app.inject({ method: 'GET', url: `/projects${args.archived ? '?archived=true' : ''}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body)) }
+    case 'client.list':
+      return { items: await injectJson(request, { method: 'GET', url: '/clients', args }) }
+    case 'client.get':
+      return await injectJson(request, { method: 'GET', url: `/clients/${args.clientId}`, args })
+    case 'client.create':
+      return await injectJson(request, { method: 'POST', url: '/clients', args, payload: { name: args.name, notes: args.notes } })
+    case 'client.update':
+      return await injectJson(request, { method: 'PATCH', url: `/clients/${args.clientId}`, args, payload: { name: args.name, notes: args.notes } })
+    case 'client.delete':
+      return await injectJson(request, { method: 'DELETE', url: `/clients/${args.clientId}`, args })
+    case 'project.list': {
+      const params = new URLSearchParams()
+      if (args.archived) params.set('archived', 'true')
+      const q = params.toString()
+      return { items: await injectJson(request, { method: 'GET', url: `/projects${q ? `?${q}` : ''}`, args }) }
+    }
     case 'project.get': {
       const q = args.archived ? '?archived=true' : ''
-      return await app.inject({ method: 'GET', url: `/projects/${args.projectId}${q}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+      return await injectJson(request, { method: 'GET', url: `/projects/${args.projectId}${q}`, args })
     }
+    case 'project.create':
+      return await injectJson(request, { method: 'POST', url: '/projects', args, payload: { name: args.name, description: args.description, clientId: args.clientId } })
+    case 'project.update':
+      return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}`, args, payload: { name: args.name, description: args.description, clientId: args.clientId } })
+    case 'project.archive':
+      return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/archive`, args, payload: { archived: args.archived } })
+    case 'project.delete':
+      return await injectJson(request, { method: 'DELETE', url: `/projects/${args.projectId}`, args })
+    case 'project.status.create':
+      return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses`, args, payload: { name: args.name } })
+    case 'project.status.update':
+      return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}/statuses/${args.statusId}`, args, payload: { name: args.name, color: args.color } })
+    case 'project.status.delete':
+      return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses/${args.statusId}/delete`, args, payload: { targetStatusId: args.targetStatusId } })
     case 'task.list': {
       const params = new URLSearchParams()
-      for (const key of ['status','assignee','search','label']) if (args[key]) params.set(key, String(args[key]))
-      if (args.archived) params.set('archived','true')
+      for (const key of ['status', 'assignee', 'search', 'label']) if (args[key]) params.set(key, String(args[key]))
+      if (args.archived) params.set('archived', 'true')
       const q = params.toString()
-      return { items: await app.inject({ method: 'GET', url: `/projects/${args.projectId}/tasks${q ? `?${q}` : ''}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body)) }
+      return { items: await injectJson(request, { method: 'GET', url: `/projects/${args.projectId}/tasks${q ? `?${q}` : ''}`, args }) }
     }
     case 'task.get':
-      return await app.inject({ method: 'GET', url: `/tasks/${args.taskId}`, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+      return await injectJson(request, { method: 'GET', url: `/tasks/${args.taskId}`, args })
     case 'task.create':
-      return await app.inject({ method: 'POST', url: '/tasks', payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+      return await injectJson(request, { method: 'POST', url: '/tasks', args, payload: { projectId: args.projectId, title: args.title, assignee: args.assignee, description: args.description, priority: args.priority, status: args.status, statusId: args.statusId, dueDate: args.dueDate, labels: args.labels, todos: args.todos } })
     case 'task.update':
-      return await app.inject({ method: 'PATCH', url: `/tasks/${args.taskId}`, payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+      return await injectJson(request, { method: 'PATCH', url: `/tasks/${args.taskId}`, args, payload: { title: args.title, description: args.description, assignee: args.assignee, priority: args.priority, statusId: args.statusId, dueDate: args.dueDate } })
+    case 'task.archive':
+      return await injectJson(request, { method: 'POST', url: `/tasks/${args.taskId}/archive`, args, payload: { archived: args.archived } })
+    case 'task.delete':
+      return await injectJson(request, { method: 'DELETE', url: `/tasks/${args.taskId}`, args })
+    case 'task.move':
+      return await injectJson(request, { method: 'POST', url: `/tasks/${args.taskId}/move`, args, payload: { targetStatus: args.targetStatus } })
+    case 'task.reorder':
+      return await injectJson(request, { method: 'POST', url: '/tasks/reorder', args, payload: { taskId: args.taskId, targetStatusId: args.targetStatusId, orderedTaskIds: args.orderedTaskIds } })
+    case 'task.labels.update':
+      return await injectJson(request, { method: 'PATCH', url: `/tasks/${args.taskId}/labels`, args, payload: { labels: args.labels } })
+    case 'task.todo.create':
+      return await injectJson(request, { method: 'POST', url: `/tasks/${args.taskId}/todos`, args, payload: { text: args.text } })
+    case 'task.todo.update':
+      return await injectJson(request, { method: 'PATCH', url: `/tasks/${args.taskId}/todos/${args.todoId}`, args, payload: { text: args.text, done: args.done } })
+    case 'task.todo.delete':
+      return await injectJson(request, { method: 'POST', url: `/tasks/${args.taskId}/todos/${args.todoId}/delete`, args, payload: {} })
+    case 'task.todo.reorder':
+      return await injectJson(request, { method: 'POST', url: `/tasks/${args.taskId}/todos/reorder`, args, payload: { orderedTodoIds: args.orderedTodoIds } })
     case 'comment.add':
-      return await app.inject({ method: 'POST', url: `/tasks/${args.taskId}/comments`, payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+      return await injectJson(request, { method: 'POST', url: `/tasks/${args.taskId}/comments`, args, payload: { body: args.body, author: args.author, mentions: args.mentions } })
+    case 'timesheet.list': {
+      const params = new URLSearchParams()
+      if (args.from) params.set('from', String(args.from))
+      if (args.to) params.set('to', String(args.to))
+      const q = params.toString()
+      if (args.taskId) return await injectJson(request, { method: 'GET', url: `/tasks/${args.taskId}/timesheets${q ? `?${q}` : ''}`, args })
+      if (args.projectId) return await injectJson(request, { method: 'GET', url: `/projects/${args.projectId}/timesheets${q ? `?${q}` : ''}`, args })
+      throw new Error('timesheet.list requires projectId or taskId')
+    }
+    case 'timesheet.report': {
+      const params = new URLSearchParams()
+      for (const key of ['from', 'to', 'projectId', 'clientId', 'taskId', 'userId']) if (args[key]) params.set(key, String(args[key]))
+      if (args.showValidated) params.set('showValidated', 'true')
+      const q = params.toString()
+      return await injectJson(request, { method: 'GET', url: `/timesheets/report${q ? `?${q}` : ''}`, args })
+    }
+    case 'timesheet.users': {
+      const q = args.projectId ? `?projectId=${encodeURIComponent(String(args.projectId))}` : ''
+      return { items: await injectJson(request, { method: 'GET', url: `/timesheets/users${q}`, args }) }
+    }
     case 'timesheet.add':
-      return await app.inject({ method: 'POST', url: '/timesheets', payload: args, headers: { authorization: readHeader(request, 'authorization') || '', 'x-workspace-id': args.workspaceId || '', 'x-workspace-slug': args.workspaceSlug || '' } }).then(r => JSON.parse(r.body))
+      return await injectJson(request, { method: 'POST', url: '/timesheets', args, payload: { projectId: args.projectId, taskId: args.taskId, userId: args.userId, userName: args.userName, date: args.date, minutes: args.minutes, description: args.description, billable: args.billable, validated: args.validated } })
+    case 'timesheet.update':
+      return await injectJson(request, { method: 'PATCH', url: `/timesheets/${args.timesheetId}`, args, payload: { minutes: args.minutes, description: args.description, date: args.date, billable: args.billable, validated: args.validated, taskId: args.taskId, userId: args.userId } })
+    case 'timesheet.delete':
+      return await injectJson(request, { method: 'DELETE', url: `/timesheets/${args.timesheetId}`, args })
     default:
       throw new Error(`Unknown tool: ${name}`)
   }
