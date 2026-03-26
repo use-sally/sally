@@ -120,12 +120,32 @@ function renderEmailTemplate(input: { preheader?: string; eyebrow?: string; titl
   return { html, text: textLines.join('\n') }
 }
 
+function hasDiscreteSmtpConfig() {
+  return Boolean(
+    process.env.SMTP_HOST
+    && process.env.SMTP_PORT
+    && process.env.SMTP_USER
+    && process.env.SMTP_PASSWORD,
+  )
+}
+
 export function isMailerConfigured(): boolean {
-  return Boolean(process.env.SMTP_URL && process.env.MAIL_FROM && process.env.APP_BASE_URL)
+  return Boolean((hasDiscreteSmtpConfig() || process.env.SMTP_URL) && process.env.MAIL_FROM && process.env.APP_BASE_URL)
 }
 
 async function sendMail(input: { to: string; subject: string; text: string; html: string }) {
-  const transporter = nodemailer.createTransport(process.env.SMTP_URL!)
+  const transporter = hasDiscreteSmtpConfig()
+    ? nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT),
+        secure: String(process.env.SMTP_PORT).trim() === '465',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD,
+        },
+      })
+    : nodemailer.createTransport(process.env.SMTP_URL!)
+
   await transporter.sendMail({
     from: process.env.MAIL_FROM,
     to: input.to,
@@ -137,7 +157,7 @@ async function sendMail(input: { to: string; subject: string; text: string; html
 
 export async function sendPasswordResetEmail(payload: PasswordResetPayload): Promise<{ ok: boolean; reason?: string }> {
   if (!isMailerConfigured()) {
-    return { ok: false, reason: 'SMTP_URL, MAIL_FROM, and APP_BASE_URL are required to send reset emails.' }
+    return { ok: false, reason: 'SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD (or SMTP_URL), plus MAIL_FROM and APP_BASE_URL, are required to send reset emails.' }
   }
 
   const baseUrl = process.env.APP_BASE_URL!.replace(/\/+$/, '')
@@ -169,7 +189,7 @@ export async function sendPasswordResetEmail(payload: PasswordResetPayload): Pro
 
 export async function sendInviteEmail(payload: InvitePayload): Promise<{ ok: boolean; reason?: string }> {
   if (!isMailerConfigured()) {
-    return { ok: false, reason: 'SMTP_URL, MAIL_FROM, and APP_BASE_URL are required to send invite emails.' }
+    return { ok: false, reason: 'SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD (or SMTP_URL), plus MAIL_FROM and APP_BASE_URL, are required to send invite emails.' }
   }
 
   const baseUrl = process.env.APP_BASE_URL!.replace(/\/+$/, '')
@@ -202,7 +222,7 @@ export async function sendInviteEmail(payload: InvitePayload): Promise<{ ok: boo
 
 export async function sendEmailChangeConfirmationEmail(payload: EmailChangePayload): Promise<{ ok: boolean; reason?: string }> {
   if (!isMailerConfigured()) {
-    return { ok: false, reason: 'SMTP_URL, MAIL_FROM, and APP_BASE_URL are required to send email confirmation emails.' }
+    return { ok: false, reason: 'SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD (or SMTP_URL), plus MAIL_FROM and APP_BASE_URL, are required to send email confirmation emails.' }
   }
 
   const baseUrl = process.env.APP_BASE_URL!.replace(/\/+$/, '')
@@ -234,7 +254,7 @@ export async function sendEmailChangeConfirmationEmail(payload: EmailChangePaylo
 
 export async function sendNotificationEmail(payload: NotificationEmailPayload): Promise<{ ok: boolean; reason?: string }> {
   if (!isMailerConfigured()) {
-    return { ok: false, reason: 'SMTP_URL, MAIL_FROM, and APP_BASE_URL are required to send notification emails.' }
+    return { ok: false, reason: 'SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD (or SMTP_URL), plus MAIL_FROM and APP_BASE_URL, are required to send notification emails.' }
   }
 
   const rendered = renderEmailTemplate({
