@@ -2,10 +2,35 @@
 import { confirm, input, password, select } from '@inquirer/prompts'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 
 type InstallMode = 'managed-simple' | 'existing-infra'
+
+const color = {
+  reset: '\x1b[0m',
+  dim: '\x1b[2m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  brightYellow: '\x1b[93m',
+  brightGreen: '\x1b[92m',
+  red: '\x1b[31m',
+  cyan: '\x1b[36m',
+}
+
+function paint(text: string, tone: string) {
+  return `${tone}${text}${color.reset}`
+}
+
+function section(title: string) {
+  console.log(`\n${paint(title, color.brightYellow)}`)
+}
+
+function banner() {
+  console.log(paint('S A L L Y  :::::::  I N S T A L L E R', color.brightGreen))
+  console.log(paint('clean deploy flow for sally_', color.dim))
+}
 
 function randomSecret(bytes = 24) {
   return crypto.randomBytes(bytes).toString('base64url')
@@ -144,7 +169,6 @@ function envFile(args: {
   mode: InstallMode
   domain: string
   appUrl: string
-  imageRegistry: string
   imageTag: string
   superadminEmail: string
   superadminName: string
@@ -170,10 +194,10 @@ APP_BASE_URL=${args.appUrl}
 NEXT_PUBLIC_API_BASE_URL=/api
 NEXT_PUBLIC_WORKSPACE_SLUG=sally
 
-SALLY_IMAGE_REGISTRY=${args.imageRegistry}
+SALLY_IMAGE_REGISTRY=ghcr.io/use-sally
 SALLY_IMAGE_TAG=${args.imageTag}
-SALLY_API_IMAGE=${args.imageRegistry}/sally-api:${args.imageTag}
-SALLY_WEB_IMAGE=${args.imageRegistry}/sally-web:${args.imageTag}
+SALLY_API_IMAGE=ghcr.io/use-sally/sally-api:${args.imageTag}
+SALLY_WEB_IMAGE=ghcr.io/use-sally/sally-web:${args.imageTag}
 
 POSTGRES_USER=${dbUser}
 POSTGRES_PASSWORD=${args.postgresPassword}
@@ -204,84 +228,114 @@ SMTP_CONFIGURED=${args.smtpConfigured ? 'true' : 'false'}
 
 function setupNotes(mode: InstallMode, bootstrapPassword: string, targetDir: string, appUrl: string, smtpConfigured: boolean) {
   const emailNotes = smtpConfigured
-    ? `Email:
-- SMTP is configured in .env
-`
-    : `Email still required:
-- sally_ will install, but it will not send invites, password resets, or notification emails until you finish email setup.
-- update these .env values:
-  - SMTP_HOST
-  - SMTP_PORT
-  - SMTP_USER
-  - SMTP_PASSWORD
-  - MAIL_FROM
-- then restart the stack with: docker compose up -d
-`
+    ? 'Email is configured in .env.\n'
+    : `Email setup is still required for invites, password resets, and notifications.\nUpdate SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and MAIL_FROM in .env, then run docker compose up -d.\n`
 
   if (mode === 'managed-simple') {
-    return `sally_ installer scaffold created.
-
-Location:
-- ${targetDir}
-
-Next steps:
-- review .env
-- make sure your domain points to this server
-- start the stack with docker compose
-- run bootstrap + health verification
-
-Generated temporary superadmin password:
-- ${bootstrapPassword}
-
-Planned login URL:
-- ${appUrl}
-
-Managed-simple files:
-- docker-compose.yml
-- Caddyfile
-- .env
-
-${emailNotes}`
+    return `Sally instance files:\n- ${targetDir}\n\nManaged-simple files:\n- docker-compose.yml\n- Caddyfile\n- .env\n\nLogin URL:\n- ${appUrl}\n\nSuperadmin password:\n- ${bootstrapPassword}\n\n${emailNotes}`
   }
 
-  return `sally_ installer scaffold created.
-
-Location:
-- ${targetDir}
-
-Next steps:
-- review .env
-- start the stack with docker compose
-- run bootstrap + health verification
-- put your reverse proxy / TLS in front of web:3000 and api:4000
-
-Generated temporary superadmin password:
-- ${bootstrapPassword}
-
-Planned public app URL (after your infra is configured):
-- ${appUrl}
-
-Existing-infra files:
-- docker-compose.yml
-- .env
-
-Expected from your infra:
-- reverse proxy routing to web/api
-- TLS termination
-- optional external DB adaptation if you do not want local Postgres
-
-${emailNotes}`
+  return `Sally instance files:\n- ${targetDir}\n\nExisting-infra files:\n- docker-compose.yml\n- .env\n\nPublic app URL after your reverse proxy / TLS is configured:\n- ${appUrl}\n\nSuperadmin password:\n- ${bootstrapPassword}\n\n${emailNotes}`
 }
 
-async function runCommand(command: string, args: string[], cwd: string) {
+async function runCommand(command: string, args: string[], cwd: string, options?: { quiet?: boolean }) {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: 'inherit', shell: false })
+    const child = spawn(command, args, { cwd, stdio: options?.quiet ? ['ignore', 'pipe', 'pipe'] : 'inherit', shell: false })
+    let stderr = ''
+
+    if (options?.quiet) {
+      child.stdout?.on('data', () => {})
+      child.stderr?.on('data', (chunk) => {
+        stderr += String(chunk)
+      })
+    }
+
     child.on('exit', (code) => {
       if (code === 0) resolve()
-      else reject(new Error(`${command} ${args.join(' ')} failed with exit code ${code ?? 'unknown'}`))
+      else reject(new Error(stderr.trim() || `${command} ${args.join(' ')} failed with exit code ${code ?? 'unknown'}`))
     })
     child.on('error', reject)
   })
+}
+
+async function runCommandCapture(command: string, args: string[], cwd?: string) {
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk)
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk)
+    })
+    child.on('exit', (code) => {
+      if (code === 0) resolve(stdout)
+      else reject(new Error(stderr.trim() || `${command} ${args.join(' ')} failed with exit code ${code ?? 'unknown'}`))
+    })
+    child.on('error', reject)
+  })
+}
+
+async function detectServerIpv4() {
+  const candidates = [
+    ['dig', ['+short', 'myip.opendns.com', '@resolver1.opendns.com']],
+    ['sh', ['-lc', 'curl -4fsSL https://api.ipify.org || curl -4fsSL https://ifconfig.me']],
+  ] as const
+
+  for (const [command, args] of candidates) {
+    try {
+      const output = (await runCommandCapture(command, Array.from(args))).trim().split(/\s+/).find(Boolean)
+      if (output && /^\d+\.\d+\.\d+\.\d+$/.test(output)) return output
+    } catch {}
+  }
+
+  const interfaces = os.networkInterfaces()
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (entry.family === 'IPv4' && !entry.internal) return entry.address
+    }
+  }
+
+  throw new Error('Could not determine the server public IPv4 address for DNS verification.')
+}
+
+async function resolveDomainIpv4(domain: string) {
+  try {
+    const output = await runCommandCapture('dig', ['+short', normalizeDomain(domain), 'A'])
+    return output.split(/\r?\n/).map((line) => line.trim()).filter((line) => /^\d+\.\d+\.\d+\.\d+$/.test(line))
+  } catch {
+    return []
+  }
+}
+
+async function verifyManagedDomainPointsHere(domain: string) {
+  const serverIp = await detectServerIpv4()
+  const resolvedIps = await resolveDomainIpv4(domain)
+
+  if (resolvedIps.length === 0) {
+    throw new Error(`Domain check failed: ${domain} does not currently resolve to an A record. Point it to ${serverIp} and run the installer again.`)
+  }
+
+  if (!resolvedIps.includes(serverIp)) {
+    throw new Error(`Domain check failed: ${domain} resolves to ${resolvedIps.join(', ')}, but this server is ${serverIp}. Point the domain to this server first, then rerun the installer.`)
+  }
+
+  console.log(paint(`DNS OK  ${domain} -> ${serverIp}`, color.green))
+}
+
+function printWelcome(mode: InstallMode, appUrl: string, superadminEmail: string, bootstrapPassword: string) {
+  console.log('')
+  console.log(paint('W E L C O M E  :::::::  T O  :::::::  S A L L Y', color.brightGreen))
+  if (mode === 'managed-simple') {
+    console.log(`${paint('URL', color.brightYellow)}: ${appUrl}`)
+  } else {
+    console.log(`${paint('URL', color.brightYellow)}: ${appUrl} ${paint('(after your reverse proxy / TLS is configured)', color.dim)}`)
+    console.log(`${paint('LOCAL', color.brightYellow)}: http://127.0.0.1:3000`)
+    console.log(`${paint('API', color.brightYellow)}: http://127.0.0.1:4000`)
+  }
+  console.log(`${paint('USER', color.brightYellow)}: ${superadminEmail}`)
+  console.log(`${paint('PASSWORD', color.brightYellow)}: ${bootstrapPassword}`)
 }
 
 async function waitForHealth(url: string, label: string, attempts = 30, delayMs = 2000) {
@@ -307,23 +361,35 @@ async function waitForPostgres(targetDir: string, attempts = 30, delayMs = 2000)
 }
 
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string) {
+  section('Pulling fresh Sally images')
+  await runCommand('docker', ['compose', 'pull', 'api', 'web'], targetDir)
+
+  section('Starting database')
   await runCommand('docker', ['compose', 'up', '-d', 'postgres'], targetDir)
   await waitForPostgres(targetDir)
+
+  section('Applying database schema')
   await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma db push --schema prisma/schema.prisma'], targetDir)
-  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir)
+
+  section('Bootstrapping superadmin')
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir, { quiet: true })
 
   if (mode === 'managed-simple') {
-    await runCommand('docker', ['compose', 'up', '-d', 'api', 'web', 'caddy'], targetDir)
+    section('Starting Sally services')
+    await runCommand('docker', ['compose', 'up', '-d', '--force-recreate', 'api', 'web', 'caddy'], targetDir)
     await waitForHealth(`${appUrl}/api/health`, 'API')
     await waitForHealth(appUrl, 'Web app')
   } else {
-    await runCommand('docker', ['compose', 'up', '-d', 'api', 'web'], targetDir)
+    section('Starting Sally services')
+    await runCommand('docker', ['compose', 'up', '-d', '--force-recreate', 'api', 'web'], targetDir)
     await waitForHealth('http://127.0.0.1:4000/health', 'API')
     await waitForHealth('http://127.0.0.1:3000', 'Web app')
   }
 }
 
 async function main() {
+  banner()
+
   const mode = await select<InstallMode>({
     message: 'How do you want to install sally_?',
     choices: [
@@ -332,12 +398,17 @@ async function main() {
     ],
   })
 
-  const defaultDir = path.resolve(process.cwd(), 'sally-instance')
+  const defaultDir = '/opt/sally-instance'
   const targetDir = path.resolve(await input({ message: 'Where should the installer write the instance files?', default: defaultDir }))
   const domain = normalizeDomain(await input({ message: 'Domain for this sally_ instance (example: sally.example.com)' }))
   const appUrl = baseUrlFromDomain(domain)
-  const imageRegistry = await input({ message: 'Container image registry / namespace', default: 'ghcr.io/use-sally' })
-  const imageTag = await input({ message: 'Container image tag', default: 'latest' })
+
+  if (mode === 'managed-simple') {
+    section('Checking DNS')
+    await verifyManagedDomainPointsHere(domain)
+  }
+
+  const imageTag = await input({ message: 'Sally version', default: 'latest' })
   const superadminEmail = await input({ message: 'Superadmin email' })
   const superadminName = await input({ message: 'Superadmin name', default: 'Admin' })
   const caddyAcmeEmail = mode === 'managed-simple'
@@ -382,27 +453,15 @@ async function main() {
   const bootstrapPassword = randomSecret(16)
 
   await fs.mkdir(targetDir, { recursive: true })
-  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageRegistry, imageTag, superadminEmail, superadminName, smtpConfigured, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, caddyAcmeEmail, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
+  await fs.writeFile(path.join(targetDir, '.env'), envFile({ mode, domain, appUrl, imageTag, superadminEmail, superadminName, smtpConfigured, smtpHost, smtpPort, smtpUser, smtpPassword, mailFrom, caddyAcmeEmail, postgresPassword, sessionSecret, appEncryptionKey, bootstrapPassword }))
   await fs.writeFile(path.join(targetDir, 'docker-compose.yml'), mode === 'managed-simple' ? composeForManagedSimple() : composeForExistingInfra())
   if (mode === 'managed-simple') {
     await fs.writeFile(path.join(targetDir, 'Caddyfile'), caddyfile(domain))
   }
   await fs.writeFile(path.join(targetDir, 'SETUP_NOTES.txt'), setupNotes(mode, bootstrapPassword, targetDir, appUrl, smtpConfigured))
 
-  console.log(setupNotes(mode, bootstrapPassword, targetDir, appUrl, smtpConfigured))
-
-  const runCompose = await confirm({ message: 'Run docker compose setup now?', default: false })
-  if (runCompose) {
-    await runInstallerCommands(mode, targetDir, appUrl)
-    if (mode === 'managed-simple') {
-      console.log(`\nsally_ setup completed. Open: ${appUrl}`)
-    } else {
-      console.log(`\nsally_ setup completed.`)
-      console.log(`- Web is listening on: http://127.0.0.1:3000`)
-      console.log(`- API is listening on: http://127.0.0.1:4000`)
-      console.log(`- Public app URL after your reverse proxy / TLS is configured: ${appUrl}`)
-    }
-  }
+  await runInstallerCommands(mode, targetDir, appUrl)
+  printWelcome(mode, appUrl, superadminEmail, bootstrapPassword)
 }
 
 main().catch((error) => {
