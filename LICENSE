@@ -1,21 +1,50 @@
-MIT License
+Business Source License 1.1
 
-Copyright (c) 2026 use-sally
+Parameters
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Licensor: Kraft Fabrik Media Ltd.
+Licensed Work: Sally, including all source code, documentation, assets, configuration, and related materials in this repository.
+Additional Use Grant: You may use, modify, and self-host the Licensed Work in production for your own personal use or for the internal operations of your own organization and its Affiliates, including through your employees and contractors acting on your behalf. You may deploy the Licensed Work for your own internal teams, projects, and business processes without charge.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+You may not, without prior written permission from the Licensor:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. offer, operate, host, manage, or make the Licensed Work available to third parties as a service, including any SaaS, managed service, service bureau, hosted offering, or shared/multi-tenant platform;
+2. sublicense, resell, redistribute, OEM, white-label, or commercialize the Licensed Work, or any modified version of it, for third-party use;
+3. use the Licensed Work to provide a product or service whose value materially derives from Sally itself being made available to third parties;
+4. remove, hide, or replace Sally branding, copyright notices, attribution notices, or default in-product support/development messages included by the Licensor, except under a separate commercial license from the Licensor;
+5. publish or distribute a modified production-ready version of Sally for use by others under a different brand or as a competing implementation.
+
+For this Additional Use Grant, “Affiliate” means an entity that controls, is controlled by, or is under common control with you. “Contractors acting on your behalf” may use the Licensed Work only to support your permitted internal use and not for their own independent offering.
+
+Change Date: 2029-03-24
+Change License: Apache License, Version 2.0
+
+For complete license text, see the Business Source License 1.1 below.
+
+---
+
+Business Source License 1.1
+
+Terms of the Business Source License 1.1
+
+Copyright (C) 2026 Kraft Fabrik Media Ltd.
+
+Everyone is granted the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work, subject to the conditions in this License.
+
+The Licensor hereby grants You the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant, above, permitting limited production use.
+
+Effective on the Change Date, or the fourth anniversary of the first public distribution of the Licensed Work under this License, whichever comes first, the Licensor hereby grants You rights under the terms of the Change License, and the rights granted in the paragraph above terminate.
+
+If your use of the Licensed Work does not comply with the requirements currently in effect as described in this License, you must purchase a commercial license from the Licensor, its affiliated entities, or authorized resellers, or you must refrain from using the Licensed Work.
+
+All copies of the original and modified Licensed Work, and derivative works of the Licensed Work, are subject to this License. This License applies separately for each version of the Licensed Work and the Change Date may vary for each version of the Licensed Work released under this License.
+
+You must conspicuously display this License on each original or modified copy of the Licensed Work. If you receive the Licensed Work in original or modified form from a third party, the terms and conditions set forth in this License apply to your use of that work.
+
+Any use of the Licensed Work in violation of this License will automatically terminate your rights under this License for the current and all other versions of the Licensed Work.
+
+This License does not grant you any right in any trademark or logo of Licensor or its affiliates (provided that you may use a trademark or logo of Licensor as expressly required by this License). You must preserve all copyright, patent, trademark, and attribution notices in the Licensed Work.
+
+DISCLAIMER: THE LICENSED WORK IS PROVIDED "AS IS". LICENSOR DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
+
+LIMITATION OF LIABILITY: IN NO EVENT WILL LICENSOR BE LIABLE FOR ANY DAMAGES, INCLUDING DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, ARISING OUT OF OR RELATED TO THIS LICENSE OR THE USE OF THE LICENSED WORK, TO THE MAXIMUM EXTENT PERMITTED BY LAW.
