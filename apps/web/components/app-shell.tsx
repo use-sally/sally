@@ -17,7 +17,6 @@ const navItems = [
   { href: '/clients', label: 'Clients' },
   { href: '/timesheets', label: 'Timesheets' },
   { href: '/workspace', label: 'Workspace' },
-  { href: '/docs', label: 'Docs' },
 ]
 
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
@@ -272,54 +271,68 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           </div>
 
           <div style={{ display: 'grid', gap: 12, marginTop: 'auto' }}>
-            <a
-              href="https://usesally.com/sponsorships"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '10px 12px',
-                borderRadius: 14,
-                color: '#f9a8d4',
-                fontWeight: 700,
-                fontSize: 13,
-                textDecoration: 'none',
-                background: 'var(--panel-bg)',
-                border: '1px solid rgba(244, 114, 182, 0.22)',
-                cursor: 'pointer',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style={{ display: 'block', flex: '0 0 auto' }}>
-                <rect x="2" y="1" width="2" height="2" fill="#f472b6" />
-                <rect x="4" y="1" width="2" height="2" fill="#f472b6" />
-                <rect x="8" y="1" width="2" height="2" fill="#f472b6" />
-                <rect x="10" y="1" width="2" height="2" fill="#f472b6" />
-                <rect x="1" y="3" width="2" height="2" fill="#f472b6" />
-                <rect x="3" y="3" width="2" height="2" fill="#f472b6" />
-                <rect x="5" y="3" width="2" height="2" fill="#f472b6" />
-                <rect x="7" y="3" width="2" height="2" fill="#f472b6" />
-                <rect x="9" y="3" width="2" height="2" fill="#f472b6" />
-                <rect x="11" y="3" width="2" height="2" fill="#f472b6" />
-                <rect x="2" y="5" width="2" height="2" fill="#f472b6" />
-                <rect x="4" y="5" width="2" height="2" fill="#f472b6" />
-                <rect x="6" y="5" width="2" height="2" fill="#f472b6" />
-                <rect x="8" y="5" width="2" height="2" fill="#f472b6" />
-                <rect x="10" y="5" width="2" height="2" fill="#f472b6" />
-                <rect x="3" y="7" width="2" height="2" fill="#f472b6" />
-                <rect x="5" y="7" width="2" height="2" fill="#f472b6" />
-                <rect x="7" y="7" width="2" height="2" fill="#f472b6" />
-                <rect x="9" y="7" width="2" height="2" fill="#f472b6" />
-                <rect x="4" y="9" width="2" height="2" fill="#f472b6" />
-                <rect x="6" y="9" width="2" height="2" fill="#f472b6" />
-                <rect x="8" y="9" width="2" height="2" fill="#f472b6" />
-                <rect x="5" y="11" width="2" height="2" fill="#f472b6" />
-                <rect x="7" y="11" width="2" height="2" fill="#f472b6" />
-              </svg>
-              support sally
-            </a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingLeft: 2 }}>
+              <a
+                href="https://usesally.com/sponsorships"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  color: '#f472b6',
+                  fontWeight: 400,
+                  fontSize: 13,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style={{ display: 'block', flex: '0 0 auto' }}>
+                  <rect x="2" y="1" width="2" height="2" fill="#f472b6" />
+                  <rect x="4" y="1" width="2" height="2" fill="#f472b6" />
+                  <rect x="8" y="1" width="2" height="2" fill="#f472b6" />
+                  <rect x="10" y="1" width="2" height="2" fill="#f472b6" />
+                  <rect x="1" y="3" width="2" height="2" fill="#f472b6" />
+                  <rect x="3" y="3" width="2" height="2" fill="#f472b6" />
+                  <rect x="5" y="3" width="2" height="2" fill="#f472b6" />
+                  <rect x="7" y="3" width="2" height="2" fill="#f472b6" />
+                  <rect x="9" y="3" width="2" height="2" fill="#f472b6" />
+                  <rect x="11" y="3" width="2" height="2" fill="#f472b6" />
+                  <rect x="2" y="5" width="2" height="2" fill="#f472b6" />
+                  <rect x="4" y="5" width="2" height="2" fill="#f472b6" />
+                  <rect x="6" y="5" width="2" height="2" fill="#f472b6" />
+                  <rect x="8" y="5" width="2" height="2" fill="#f472b6" />
+                  <rect x="10" y="5" width="2" height="2" fill="#f472b6" />
+                  <rect x="3" y="7" width="2" height="2" fill="#f472b6" />
+                  <rect x="5" y="7" width="2" height="2" fill="#f472b6" />
+                  <rect x="7" y="7" width="2" height="2" fill="#f472b6" />
+                  <rect x="9" y="7" width="2" height="2" fill="#f472b6" />
+                  <rect x="4" y="9" width="2" height="2" fill="#f472b6" />
+                  <rect x="6" y="9" width="2" height="2" fill="#f472b6" />
+                  <rect x="8" y="9" width="2" height="2" fill="#f472b6" />
+                  <rect x="5" y="11" width="2" height="2" fill="#f472b6" />
+                  <rect x="7" y="11" width="2" height="2" fill="#f472b6" />
+                </svg>
+                <span>sally</span>
+              </a>
+
+              <a
+                href="https://usesally.com/docs"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  color: '#6ee7b7',
+                  fontWeight: 400,
+                  fontSize: 13,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                Docs
+              </a>
+            </div>
 
             <Link
               href="/profile"
