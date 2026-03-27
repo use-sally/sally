@@ -9,6 +9,7 @@ import { apiUrl, getNotifications, readAllNotifications, readNotification } from
 import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
 import type { ThemeMode } from '../lib/theme'
+import { appBuildTime, appVersionLabel } from '../lib/version'
 
 const navItems = [
   { href: '/', label: 'Overview' },
@@ -163,6 +164,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
               sally<span style={{ color: '#34d399', animation: 'sally-cursor-blink 1s steps(1, end) infinite' }}>_</span>
             </div>
             <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Minimal control surface for projects, tasks, clients, and time.</div>
+            <div title={appBuildTime || undefined} style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 11, fontWeight: 700 }}>
+              v{appVersionLabel()}
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>

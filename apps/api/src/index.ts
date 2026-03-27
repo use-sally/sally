@@ -13,6 +13,7 @@ import { hasExactTodoOrder, normalizeTaskLabels, normalizeTaskTodoTexts } from '
 import { serveProfileImage, saveProfileImage } from './profile-images.js'
 import { cleanupRemovedDescriptionImages, saveTaskImage, serveTaskImage } from './task-description-images.js'
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
+import { appBuildTime, appGitSha, appVersion } from './version.js'
 
 function loadSimpleEnv(filePath: string) {
   if (!fs.existsSync(filePath)) return
@@ -1111,6 +1112,7 @@ const start = async () => {
     })
 
     app.get('/health', async () => ({ ok: true, service: 'api', timestamp: new Date().toISOString() }))
+    app.get('/version', async () => ({ ok: true, name: 'sally', version: appVersion, commit: appGitSha || null, builtAt: appBuildTime || null }))
     app.get('/uploads/task-images/:taskId/:fileName', async (request, reply) => {
       const { taskId, fileName } = request.params as { taskId: string; fileName: string }
       const file = serveTaskImage([taskId, fileName])

@@ -1,6 +1,12 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
+ARG SALLY_VERSION=0.0.0
+ARG SALLY_GIT_SHA=
+ARG SALLY_BUILD_TIME=
+ENV SALLY_VERSION=${SALLY_VERSION}
+ENV SALLY_GIT_SHA=${SALLY_GIT_SHA}
+ENV SALLY_BUILD_TIME=${SALLY_BUILD_TIME}
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
@@ -18,7 +24,13 @@ RUN pnpm --filter @sally/db prisma:generate && pnpm --filter api build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 RUN corepack enable
+ARG SALLY_VERSION=0.0.0
+ARG SALLY_GIT_SHA=
+ARG SALLY_BUILD_TIME=
 ENV NODE_ENV=production
+ENV SALLY_VERSION=${SALLY_VERSION}
+ENV SALLY_GIT_SHA=${SALLY_GIT_SHA}
+ENV SALLY_BUILD_TIME=${SALLY_BUILD_TIME}
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/package.json
