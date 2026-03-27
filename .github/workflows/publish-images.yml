@@ -34,7 +34,7 @@ jobs:
       - name: Compute build metadata
         id: buildmeta
         run: |
-          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -e 'console.log(require("./package.json").version)')" >> "$GITHUB_OUTPUT"
           echo "git_sha_short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
