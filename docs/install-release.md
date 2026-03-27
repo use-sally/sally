@@ -21,6 +21,14 @@ Trigger options:
 - tag starting with `v`
 - manual workflow dispatch
 
+Image builds now stamp version metadata automatically from the repo:
+- version from root `package.json`
+- full git SHA for API/runtime metadata
+- short git SHA for web display metadata
+- UTC build timestamp
+
+That means installed Sally images should already know their version without asking end users to set manual version env vars.
+
 ## Current installer behavior
 
 `create-sally` now supports:

@@ -31,6 +31,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute build metadata
+        id: buildmeta
+        run: |
+          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+          echo "git_sha_short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -60,3 +67,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SALLY_VERSION=${{ steps.buildmeta.outputs.version }}
+            SALLY_GIT_SHA=${{ github.sha }}
+            SALLY_BUILD_TIME=${{ steps.buildmeta.outputs.build_time }}
+            NEXT_PUBLIC_SALLY_VERSION=${{ steps.buildmeta.outputs.version }}
+            NEXT_PUBLIC_SALLY_GIT_SHA=${{ steps.buildmeta.outputs.git_sha_short }}
+            NEXT_PUBLIC_SALLY_BUILD_TIME=${{ steps.buildmeta.outputs.build_time }}

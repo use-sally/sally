@@ -119,6 +119,8 @@ Hosted MCP keys:
 - are the default and recommended MCP path
 - are a better default than telling users to run extra local wrappers
 
+Release images now also stamp Sally version metadata automatically so deployed instances can show their shipped version without manual user configuration.
+
 For details and examples:
 - [`docs/mcp.md`](./docs/mcp.md)
 
