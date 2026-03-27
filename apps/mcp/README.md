@@ -10,7 +10,7 @@ MCP server for **Sally**.
 npm install -g sally-mcp
 ```
 
-Hosted MCP inside Sally is now the primary path at `/api/mcp`. The local `sally-mcp` stdio package remains available for advanced or legacy setups.
+Hosted MCP inside Sally is now the primary path at `/mcp`. The local `sally-mcp` stdio package remains available for advanced or legacy setups.
 
 ## Required environment
 
