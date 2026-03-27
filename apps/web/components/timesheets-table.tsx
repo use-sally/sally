@@ -1,7 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getWorkspaceId, loadSession } from '../lib/auth'
+import { getProjectMembers } from '../lib/api'
+import { canAddTimesheet, canDeleteTimesheet, canEditTimesheet, canValidateTimesheet } from '../lib/timesheet-permissions'
 import { useProjectTasksQuery } from '../lib/query'
 import { sortableHeaderButton } from '../lib/theme'
 import { TimesheetsFiltersBar, TimesheetsSummaryBar } from './timesheets-table-chrome'
@@ -91,6 +93,7 @@ export function TimesheetsTable({
   const compactLockedTaskEntry = !!lockedTaskId
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [projectRoles, setProjectRoles] = useState<Record<string, string | null>>({})
 
   const resolvedTaskOptions = (taskOptions.length ? taskOptions : selectedProjectTasks.map((task) => ({ id: task.id, title: task.title })))
   const showTaskFilter = !!activeProjectId && !lockedTaskId
@@ -100,12 +103,42 @@ export function TimesheetsTable({
     return projects.filter((project) => project.client?.id === clientId)
   }, [projects, clientId])
 
-  const canEditTimesheetUser = useMemo(() => {
-    const session = loadSession()
-    const workspaceId = getWorkspaceId()
-    const membership = session?.memberships?.find((item) => item.workspaceId === workspaceId) ?? session?.memberships?.[0]
-    return session?.account?.platformRole === 'SUPERADMIN' || membership?.role === 'OWNER'
-  }, [])
+  const session = useMemo(() => loadSession(), [])
+  const workspaceId = getWorkspaceId()
+  const workspaceRole = session?.memberships?.find((item) => item.workspaceId === workspaceId)?.role ?? session?.memberships?.[0]?.role ?? null
+
+  useEffect(() => {
+    if (!session?.account?.id) {
+      setProjectRoles({})
+      return
+    }
+    const candidateProjectIds = Array.from(new Set([
+      ...(activeProjectId ? [activeProjectId] : []),
+      ...((report?.entries ?? []).map((entry) => entry.projectId)),
+    ].filter(Boolean)))
+    if (!candidateProjectIds.length) {
+      setProjectRoles({})
+      return
+    }
+    let cancelled = false
+    void Promise.all(candidateProjectIds.map(async (projectId) => {
+      const members = await getProjectMembers(projectId)
+      return [projectId, members.find((member) => member.accountId === session.account?.id)?.role ?? null] as const
+    }))
+      .then((pairs) => {
+        if (!cancelled) setProjectRoles(Object.fromEntries(pairs))
+      })
+      .catch(() => {
+        if (!cancelled) setProjectRoles({})
+      })
+    return () => { cancelled = true }
+  }, [activeProjectId, report?.entries, session?.account?.id])
+
+  const currentTimesheetUserId = users.find((user) => user.name === session?.account?.name || user.name === session?.account?.email)?.id ?? null
+  const activeViewer = { timesheetUserId: currentTimesheetUserId, platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: activeProjectId ? (projectRoles[activeProjectId] ?? null) : null }
+  const addDecision = canAddTimesheet(activeViewer)
+  const validateDecision = canValidateTimesheet(activeViewer)
+  const canEditTimesheetUser = validateDecision.allowed
 
   const sortedEntries = useMemo(() => {
     const entries = [...(report?.entries ?? [])]
@@ -231,6 +264,8 @@ export function TimesheetsTable({
           projectId={projectId}
           projects={filteredProjects.map((project) => ({ id: project.id, name: project.name }))}
           users={users.map((user) => ({ id: user.id, name: user.name }))}
+          canManage={addDecision.allowed}
+          forceUserId={!validateDecision.allowed ? (currentTimesheetUserId ?? '') : undefined}
           showCustomerColumn={effectiveShowCustomerColumn}
           showProjectColumn={effectiveShowProjectColumn}
           showUserColumn={effectiveShowUserColumn}
@@ -278,6 +313,9 @@ export function TimesheetsTable({
               showValidationColumn={effectiveShowValidationColumn}
               users={users.map((user) => ({ id: user.id, name: user.name }))}
               canEditUser={canEditTimesheetUser}
+              canEditEntry={canEditTimesheet({ timesheetUserId: currentTimesheetUserId, platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: projectRoles[entry.projectId] ?? null }, { userId: entry.userId, validated: entry.validated }).allowed}
+              canDeleteEntry={canDeleteTimesheet({ timesheetUserId: currentTimesheetUserId, platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: projectRoles[entry.projectId] ?? null }, { userId: entry.userId, validated: entry.validated }).allowed}
+              canValidateEntry={canValidateTimesheet({ timesheetUserId: currentTimesheetUserId, platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: projectRoles[entry.projectId] ?? null }).allowed}
               activeField={activeField}
               draftValue={draftValue}
               inputRef={inputRef}

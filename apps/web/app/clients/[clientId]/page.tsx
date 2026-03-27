@@ -6,8 +6,10 @@ import { useParams, useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { AppShell, panel, pill } from '../../../components/app-shell'
 import { deleteClient, updateClient } from '../../../lib/api'
+import { getWorkspaceId, loadSession } from '../../../lib/auth'
+import { canManageClients } from '../../../lib/client-permissions'
 import { qk, useClientQuery } from '../../../lib/query'
-import { deleteTextAction } from '../../../lib/theme'
+import { deleteTextAction, labelText, projectInputField } from '../../../lib/theme'
 
 export default function ClientDetailPage() {
   const qc = useQueryClient()
@@ -15,6 +17,9 @@ export default function ClientDetailPage() {
   const params = useParams()
   const clientId = useMemo(() => (params?.clientId ? String(params.clientId) : ''), [params])
   const { data: client, error, isLoading } = useClientQuery(clientId)
+  const session = useMemo(() => loadSession(), [])
+  const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+  const manageClientsDecision = canManageClients({ platformRole: session?.account?.platformRole ?? null, workspaceRole })
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -78,11 +83,11 @@ export default function ClientDetailPage() {
           {error ? <div style={{ color: 'var(--danger-text)' }}>{error instanceof Error ? error.message : 'Failed to load client'}</div> : null}
           {client ? (
             <div style={{ display: 'grid', gap: 12, maxWidth: 540 }}>
-              <label style={field}><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} style={input} /></label>
-              <label style={field}><span>Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...input, minHeight: 120, resize: 'vertical' }} /></label>
+              <label style={field}><span style={labelText}>Name</span><input value={name} onChange={(e) => setName(e.target.value)} style={input} disabled={!manageClientsDecision.allowed} /></label>
+              <label style={field}><span style={labelText}>Notes</span><textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={{ ...input, minHeight: 120, resize: 'vertical' }} disabled={!manageClientsDecision.allowed} /></label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <button onClick={() => void handleSave()} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save changes'}</button>
-                <button onClick={() => void handleDelete()} disabled={saving} style={deleteTextAction}>{saving ? 'Working…' : 'Delete'}</button>
+                {manageClientsDecision.visible ? <button onClick={() => void handleSave()} disabled={!manageClientsDecision.allowed || saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save changes'}</button> : null}
+                {manageClientsDecision.visible ? <button onClick={() => void handleDelete()} disabled={!manageClientsDecision.allowed || saving} style={deleteTextAction}>{saving ? 'Working…' : 'Delete'}</button> : null}
                 {status ? <span style={{ color: status === 'Saved.' ? '#166534' : 'var(--danger-text)', fontWeight: 600 }}>{status}</span> : null}
               </div>
             </div>
@@ -114,7 +119,7 @@ export default function ClientDetailPage() {
   )
 }
 
-const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: 'var(--text-secondary)' }
-const input: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', background: 'var(--form-bg)', color: 'var(--form-text)', fontWeight: 500 }
+const field: React.CSSProperties = { display: 'grid', gap: 6 }
+const input: React.CSSProperties = { ...projectInputField, fontWeight: 500 }
 const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
 const panelHeader: React.CSSProperties = { padding: '16px 18px', fontWeight: 750, fontSize: 14, borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)' }

@@ -41,7 +41,6 @@ const RESET_TTL_HOURS = Number(process.env.RESET_TTL_HOURS || 2)
 const PROJECT_ROLE = {
   OWNER: 'OWNER',
   MEMBER: 'MEMBER',
-  VIEWER: 'VIEWER',
 } as const
 
 type ProjectRole = (typeof PROJECT_ROLE)[keyof typeof PROJECT_ROLE]
@@ -186,8 +185,8 @@ function normalizeWorkspaceRole(input?: string) {
   const value = input.trim().toUpperCase()
   if (value === 'OWNER') return WorkspaceRole.OWNER
   if (value === 'MEMBER') return WorkspaceRole.MEMBER
-  if (value === 'VIEWER') return WorkspaceRole.VIEWER
-  return null
+  if (value === 'VIEWER') return WorkspaceRole.MEMBER
+  return WorkspaceRole.MEMBER
 }
 
 function normalizeProjectRole(input?: string) {
@@ -195,7 +194,7 @@ function normalizeProjectRole(input?: string) {
   const value = input.trim().toUpperCase()
   if (value === 'OWNER') return PROJECT_ROLE.OWNER
   if (value === 'MEMBER') return PROJECT_ROLE.MEMBER
-  if (value === 'VIEWER') return PROJECT_ROLE.VIEWER
+  if (value === 'VIEWER') return PROJECT_ROLE.MEMBER
   return null
 }
 
@@ -213,7 +212,8 @@ async function requireWorkspaceRole(request: any, reply: any, roles: WorkspaceRo
     reply.code(403).send({ ok: false, error: 'Workspace access denied' })
     return false
   }
-  if (!roles.includes(membership.role)) {
+  const effectiveRole = membership.role === WorkspaceRole.VIEWER ? WorkspaceRole.MEMBER : membership.role
+  if (!roles.includes(effectiveRole)) {
     reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
     return false
   }
@@ -231,7 +231,8 @@ async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, work
   }
   ;(request as any).membership = membership
   ;(request as any).workspace = membership.workspace
-  if (!roles.includes(membership.role)) {
+  const effectiveRole = membership.role === WorkspaceRole.VIEWER ? WorkspaceRole.MEMBER : membership.role
+  if (!roles.includes(effectiveRole)) {
     reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
     return false
   }
@@ -249,7 +250,8 @@ async function requireProjectRole(request: any, reply: any, projectId: string, r
     reply.code(403).send({ ok: false, error: 'Project access denied' })
     return false
   }
-  if (!roles.includes(membership.role)) {
+  const effectiveRole = membership.role === 'VIEWER' ? PROJECT_ROLE.MEMBER : membership.role
+  if (!roles.includes(effectiveRole)) {
     reply.code(403).send({ ok: false, error: 'Insufficient project permissions' })
     return false
   }
@@ -281,13 +283,13 @@ function visibleProjectWhere(projectIds: string[] | null) {
 
 function workspaceRoleRank(role: WorkspaceRole) {
   if (role === WorkspaceRole.OWNER) return 3
-  if (role === WorkspaceRole.MEMBER) return 2
+  if (role === WorkspaceRole.MEMBER || role === WorkspaceRole.VIEWER) return 2
   return 1
 }
 
-function projectRoleRank(role: ProjectRole) {
+function projectRoleRank(role: ProjectRole | 'VIEWER') {
   if (role === PROJECT_ROLE.OWNER) return 3
-  if (role === PROJECT_ROLE.MEMBER) return 2
+  if (role === PROJECT_ROLE.MEMBER || role === 'VIEWER') return 2
   return 1
 }
 
@@ -298,7 +300,7 @@ function canManageWorkspaceRole(requesterRole: WorkspaceRole, targetRole: Worksp
   return requester > target && requester > next
 }
 
-function canManageProjectRole(requesterRole: ProjectRole, targetRole: ProjectRole, nextRole?: ProjectRole) {
+function canManageProjectRole(requesterRole: ProjectRole | 'VIEWER', targetRole: ProjectRole | 'VIEWER', nextRole?: ProjectRole | 'VIEWER') {
   const requester = projectRoleRank(requesterRole)
   const target = projectRoleRank(targetRole)
   const next = nextRole ? projectRoleRank(nextRole) : 0
@@ -341,6 +343,31 @@ function actorFromRequest(request: any) {
   const account = (request as any).account as { name?: string | null; email?: string | null } | undefined
   const apiKey = (request as any).apiKey as { label?: string | null } | undefined
   return { actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null }
+}
+
+async function deleteOrphanPlaceholderAccountByEmail(email?: string | null) {
+  const normalized = email?.trim().toLowerCase()
+  if (!normalized) return false
+  const account = await prisma.account.findFirst({ where: { email: normalized } })
+  if (!account) return false
+  const [memberships, pendingInvites, sessions, apiKeys, mcpKeys, emailChanges, passwordResets, authoredComments, sentNotifications, receivedNotifications, commentMentions, projectMemberships] = await Promise.all([
+    prisma.workspaceMembership.count({ where: { accountId: account.id } }),
+    prisma.accountInvite.count({ where: { email: normalized, acceptedAt: null, expiresAt: { gt: new Date() } } }),
+    prisma.accountSession.count({ where: { accountId: account.id } }),
+    prisma.accountApiKey.count({ where: { accountId: account.id } }),
+    prisma.accountMcpKey.count({ where: { accountId: account.id } }),
+    prisma.emailChangeToken.count({ where: { accountId: account.id } }),
+    prisma.passwordReset.count({ where: { accountId: account.id } }),
+    prisma.comment.count({ where: { authorAccountId: account.id } }),
+    prisma.notification.count({ where: { actorAccountId: account.id } }),
+    prisma.notification.count({ where: { recipientAccountId: account.id } }),
+    prisma.commentMention.count({ where: { mentionedAccountId: account.id } }),
+    prisma.projectMembership.count({ where: { accountId: account.id } }),
+  ])
+  const isOrphanPlaceholder = memberships === 0 && pendingInvites === 0 && sessions === 0 && apiKeys === 0 && mcpKeys === 0 && emailChanges === 0 && passwordResets === 0 && authoredComments === 0 && sentNotifications === 0 && receivedNotifications === 0 && commentMentions === 0 && projectMemberships === 0
+  if (!isOrphanPlaceholder) return false
+  await prisma.account.delete({ where: { id: account.id } })
+  return true
 }
 
 function activityValue(value: unknown) {
@@ -470,13 +497,36 @@ async function resolveWorkspaceAccountMembership(workspaceId: string, identity?:
 }
 
 async function ensureProjectMembershipForAssignee(workspaceId: string, projectId: string, assignee?: string | null) {
-  const membership = await resolveWorkspaceAccountMembership(workspaceId, assignee)
-  if (!membership) return null
-  const existing = await prisma.projectMembership.findFirst({ where: { projectId, accountId: membership.accountId } })
-  if (!existing) {
-    await prisma.projectMembership.create({ data: { projectId, accountId: membership.accountId, role: PROJECT_ROLE.MEMBER } })
+  const value = assignee?.trim()
+  if (!value) return null
+
+  const workspaceMembership = await resolveWorkspaceAccountMembership(workspaceId, value)
+  if (workspaceMembership) {
+    const existing = await prisma.projectMembership.findFirst({ where: { projectId, accountId: workspaceMembership.accountId } })
+    if (!existing) {
+      await prisma.projectMembership.create({ data: { projectId, accountId: workspaceMembership.accountId, role: PROJECT_ROLE.MEMBER } })
+    } else if (existing.role === 'VIEWER') {
+      await prisma.projectMembership.update({ where: { id: existing.id }, data: { role: PROJECT_ROLE.MEMBER } })
+    }
+    return workspaceMembership
   }
-  return membership
+
+  const account = await prisma.account.findFirst({
+    where: {
+      OR: [
+        { name: value },
+        { email: value.toLowerCase() },
+      ],
+    },
+  })
+  if (!account) return null
+
+  const existingProjectMembership = await prisma.projectMembership.findFirst({ where: { projectId, accountId: account.id } })
+  if (!existingProjectMembership) return null
+  if (existingProjectMembership.role === 'VIEWER') {
+    await prisma.projectMembership.update({ where: { id: existingProjectMembership.id }, data: { role: PROJECT_ROLE.MEMBER } })
+  }
+  return { accountId: account.id, account }
 }
 
 async function createNotification(input: { workspaceId: string; recipientAccountId: string; actorAccountId?: string | null; projectId?: string | null; taskId?: string | null; type: string; title: string; body: string; data?: any }) {
@@ -1194,7 +1244,7 @@ const start = async () => {
       const search = query.query?.trim() || ''
       const account = (request as any).account as { id: string } | undefined
       if (!projectId) return reply.code(400).send({ ok: false, error: 'projectId is required' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const projectMemberships = await prisma.projectMembership.findMany({ where: { projectId }, select: { accountId: true } })
       const projectMemberIds = new Set(projectMemberships.map((membership) => membership.accountId))
       const memberships = await prisma.workspaceMembership.findMany({
@@ -1424,6 +1474,26 @@ const start = async () => {
       }
     })
 
+    app.get('/auth/invite-info', async (request, reply) => {
+      const query = request.query as { token?: string }
+      const token = query.token?.trim()
+      if (!token) return reply.code(400).send({ ok: false, error: 'token is required' })
+      const invite = await prisma.accountInvite.findFirst({ where: { token, acceptedAt: null, expiresAt: { gt: new Date() } } })
+      if (!invite) return reply.code(400).send({ ok: false, error: 'Invite is invalid or expired' })
+      const account = await prisma.account.findFirst({ where: { email: invite.email } })
+      return {
+        ok: true,
+        invite: {
+          email: invite.email,
+          workspaceId: invite.workspaceId,
+          role: invite.role,
+          expiresAt: invite.expiresAt.toISOString(),
+          accountExists: !!account,
+          accountActivated: !!account?.passwordHash,
+        },
+      }
+    })
+
     app.post('/auth/accept-invite', async (request, reply) => {
       const body = request.body as { token?: string; name?: string; password?: string }
       const token = body.token?.trim()
@@ -1438,8 +1508,12 @@ const start = async () => {
         account = await prisma.account.create({ data: { email: invite.email, name: body.name?.trim() || null, passwordHash: await hashPassword(password), platformRole: await getInitialPlatformRole(invite.email) } })
         await syncConfiguredSuperadmin()
       } else {
-        if (account.passwordHash) return reply.code(400).send({ ok: false, error: 'Account already activated' })
-        account = await prisma.account.update({ where: { id: account.id }, data: { ...(body.name && !account.name ? { name: body.name.trim() } : {}), passwordHash: await hashPassword(password) } })
+        if (account.passwordHash) {
+          const valid = await verifyPassword(password, account.passwordHash)
+          if (!valid) return reply.code(400).send({ ok: false, error: 'Account already activated. Use the existing password for this email or reset it first.' })
+        } else {
+          account = await prisma.account.update({ where: { id: account.id }, data: { ...(body.name && !account.name ? { name: body.name.trim() } : {}), passwordHash: await hashPassword(password) } })
+        }
       }
       const existingMembership = await prisma.workspaceMembership.findFirst({ where: { workspaceId: invite.workspaceId, accountId: account.id } })
       if (!existingMembership) {
@@ -1459,7 +1533,7 @@ const start = async () => {
     })
 
     app.post('/auth/request-password-reset', async (request, reply) => {
-      const body = request.body as { email?: string }
+      const body = request.body as { email?: string; inviteToken?: string }
       const email = body.email?.trim().toLowerCase()
       if (!email) return reply.code(400).send({ ok: false, error: 'email is required' })
       const account = await prisma.account.findFirst({ where: { email } })
@@ -1467,7 +1541,7 @@ const start = async () => {
       if (isConfiguredSuperadminEmail(email) && superadminPasswordResetDisabled()) return { ok: true }
       const resetToken = generateSessionToken()
       const reset = await prisma.passwordReset.create({ data: { accountId: account.id, token: resetToken, expiresAt: getResetExpiry() } })
-      const mailResult = await sendPasswordResetEmail({ email, resetToken: reset.token, expiresAt: reset.expiresAt })
+      const mailResult = await sendPasswordResetEmail({ email, resetToken: reset.token, inviteToken: body.inviteToken?.trim() || undefined, expiresAt: reset.expiresAt })
       if (!mailResult.ok) {
         request.log.warn({ err: mailResult.reason }, 'Failed to send password reset email')
       } else {
@@ -1477,9 +1551,10 @@ const start = async () => {
     })
 
     app.post('/auth/reset-password', async (request, reply) => {
-      const body = request.body as { token?: string; password?: string }
+      const body = request.body as { token?: string; password?: string; inviteToken?: string }
       const token = body.token?.trim()
       const password = body.password?.trim()
+      const inviteToken = body.inviteToken?.trim()
       if (!token) return reply.code(400).send({ ok: false, error: 'token is required' })
       if (!password) return reply.code(400).send({ ok: false, error: 'password is required' })
       if (!validateStrongPassword(password)) return reply.code(400).send({ ok: false, error: STRONG_PASSWORD_HINT })
@@ -1490,6 +1565,16 @@ const start = async () => {
       if (isConfiguredSuperadminEmail(resetAccount.email) && superadminPasswordResetDisabled()) return reply.code(403).send({ ok: false, error: 'Password reset is disabled for the superadmin account' })
       const account = await prisma.account.update({ where: { id: reset.accountId }, data: { passwordHash: await hashPassword(password) } })
       await prisma.passwordReset.update({ where: { id: reset.id }, data: { usedAt: new Date() } })
+      if (inviteToken) {
+        const invite = await prisma.accountInvite.findFirst({ where: { token: inviteToken, acceptedAt: null, expiresAt: { gt: new Date() } } })
+        if (invite && invite.email.toLowerCase() === account.email.toLowerCase()) {
+          const existingMembership = await prisma.workspaceMembership.findFirst({ where: { workspaceId: invite.workspaceId, accountId: account.id } })
+          if (!existingMembership) {
+            await prisma.workspaceMembership.create({ data: { workspaceId: invite.workspaceId, accountId: account.id, role: normalizeWorkspaceRole(invite.role ?? WorkspaceRole.MEMBER) } })
+          }
+          await prisma.accountInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date(), accountId: account.id } })
+        }
+      }
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
@@ -1567,21 +1652,48 @@ const start = async () => {
 
     app.get('/workspaces/:workspaceId/members', async (request, reply) => {
       const { workspaceId } = request.params as { workspaceId: string }
+      if (!(await requireWorkspaceRoleForWorkspaceId(request, reply, workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const workspace = await prisma.workspace.findFirst({ where: { id: workspaceId } })
       if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
-      const memberships = await prisma.workspaceMembership.findMany({
-        where: { workspaceId },
-        orderBy: { createdAt: 'asc' },
-        include: { account: true },
-      })
-      return memberships.map((membership) => ({
-        id: membership.id,
-        accountId: membership.accountId,
-        name: membership.account.name,
-        email: membership.account.email,
-        role: membership.role,
-        createdAt: membership.createdAt.toISOString(),
-      }))
+      const [memberships, invites] = await Promise.all([
+        prisma.workspaceMembership.findMany({
+          where: { workspaceId },
+          orderBy: { createdAt: 'asc' },
+          include: { account: true },
+        }),
+        prisma.accountInvite.findMany({
+          where: { workspaceId, acceptedAt: null, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: 'asc' },
+        }),
+      ])
+      return [
+        ...memberships.map((membership) => ({
+          id: membership.id,
+          accountId: membership.accountId,
+          name: membership.account.name,
+          email: membership.account.email,
+          role: membership.role,
+          createdAt: membership.createdAt.toISOString(),
+          invited: false,
+          inviteId: null,
+          inviteAcceptedAt: null,
+          inviteExpiresAt: null,
+        })),
+        ...invites
+          .filter((invite) => !memberships.some((membership) => membership.account.email.toLowerCase() === invite.email.toLowerCase()))
+          .map((invite) => ({
+            id: `invite:${invite.id}`,
+            accountId: invite.accountId ?? `invite:${invite.email.toLowerCase()}`,
+            name: null,
+            email: invite.email,
+            role: invite.role,
+            createdAt: invite.createdAt.toISOString(),
+            invited: true,
+            inviteId: invite.id,
+            inviteAcceptedAt: null,
+            inviteExpiresAt: invite.expiresAt.toISOString(),
+          })),
+      ]
     })
 
     app.post('/workspaces/:workspaceId/members', async (request, reply) => {
@@ -1610,7 +1722,7 @@ const start = async () => {
       if (!isSuperadmin(request)) {
         if (!requester) return reply.code(403).send({ ok: false, error: 'Workspace access denied' })
         if (accountId === requester.accountId) return reply.code(403).send({ ok: false, error: 'You cannot change your own role' })
-        if (!canManageWorkspaceRole(requester.role, WorkspaceRole.VIEWER, role)) return reply.code(403).send({ ok: false, error: 'Role change not allowed' })
+        if (!canManageWorkspaceRole(requester.role, requester.role === WorkspaceRole.OWNER ? WorkspaceRole.MEMBER : requester.role, role)) return reply.code(403).send({ ok: false, error: 'Role change not allowed' })
       }
       const existing = await prisma.workspaceMembership.findFirst({ where: { workspaceId, accountId } })
       if (existing) return { ok: true, membershipId: existing.id, existing: true }
@@ -1659,12 +1771,57 @@ const start = async () => {
       return { ok: true }
     })
 
+    app.post('/workspaces/:workspaceId/invites/:inviteId/resend', async (request, reply) => {
+      const { workspaceId, inviteId } = request.params as { workspaceId: string; inviteId: string }
+      if (!(await requireWorkspaceRoleForWorkspaceId(request, reply, workspaceId, [WorkspaceRole.OWNER]))) return
+      const workspace = await prisma.workspace.findFirst({ where: { id: workspaceId } })
+      if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      const existing = await prisma.accountInvite.findFirst({ where: { id: inviteId, workspaceId, acceptedAt: null } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Invite not found' })
+
+      let invite = existing
+      if (existing.expiresAt <= new Date()) {
+        invite = await prisma.accountInvite.create({
+          data: {
+            email: existing.email,
+            workspaceId,
+            role: existing.role,
+            token: generateSessionToken(),
+            expiresAt: getInviteExpiry(),
+          },
+        })
+      }
+
+      const mailResult = await sendInviteEmail({
+        email: invite.email,
+        inviteToken: invite.token,
+        expiresAt: invite.expiresAt,
+        workspaceName: workspace.name,
+        role: invite.role,
+      })
+      if (!mailResult.ok) {
+        request.log.warn({ err: mailResult.reason }, 'Failed to resend invite email')
+      }
+      return { ok: true, emailed: mailResult.ok, inviteId: invite.id, expiresAt: invite.expiresAt.toISOString() }
+    })
+
+    app.delete('/workspaces/:workspaceId/invites/:inviteId', async (request, reply) => {
+      const { workspaceId, inviteId } = request.params as { workspaceId: string; inviteId: string }
+      if (!(await requireWorkspaceRoleForWorkspaceId(request, reply, workspaceId, [WorkspaceRole.OWNER]))) return
+      const invite = await prisma.accountInvite.findFirst({ where: { id: inviteId, workspaceId, acceptedAt: null } })
+      if (!invite) return reply.code(404).send({ ok: false, error: 'Invite not found' })
+      const email = invite.email
+      await prisma.accountInvite.delete({ where: { id: inviteId } })
+      const deletedPlaceholderAccount = await deleteOrphanPlaceholderAccountByEmail(email)
+      return { ok: true, deletedPlaceholderAccount }
+    })
+
     app.get('/projects/:projectId/members', async (request, reply) => {
       const workspace = (request as any).workspace
       const { projectId } = request.params as { projectId: string }
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const requesterAccountId = ((request as any).account as { id: string } | undefined)?.id ?? null
       return getEffectiveProjectMembers(workspace.id, projectId, requesterAccountId)
     })
@@ -1697,7 +1854,7 @@ const start = async () => {
       if (!isSuperadmin(request) && workspaceMembership?.role !== WorkspaceRole.OWNER) {
         if (!requesterProjectMembership) return reply.code(403).send({ ok: false, error: 'Project access denied' })
         if (accountId === requesterProjectMembership.accountId) return reply.code(403).send({ ok: false, error: 'You cannot change your own role' })
-        if (!canManageProjectRole(requesterProjectMembership.role, PROJECT_ROLE.VIEWER, role)) return reply.code(403).send({ ok: false, error: 'Role change not allowed' })
+        if (!canManageProjectRole(requesterProjectMembership.role, PROJECT_ROLE.MEMBER, role)) return reply.code(403).send({ ok: false, error: 'Role change not allowed' })
       }
       const existing = await prisma.projectMembership.findFirst({ where: { projectId, accountId } })
       if (existing) return { ok: true, membershipId: existing.id, existing: true }
@@ -1886,7 +2043,7 @@ const start = async () => {
       const archivedFilter = query.archived === 'true'
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, ...(archivedFilter ? { archivedAt: { not: null } } : { archivedAt: null }) }, include: { client: true, tasks: { where: { archivedAt: null }, include: { status: true, labels: { include: { label: true } }, todos: true }, orderBy: [{ createdAt: 'asc' }] }, statuses: { orderBy: [{ position: 'asc' }] }, labels: { orderBy: [{ name: 'asc' }] }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 12 } } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, projectId)
       const visibleTasks = project.tasks.filter((task) => canAccessTaskAssignee(taskScope, task.assignee))
       const assigneeAvatars = await getAssigneeAvatarMap(workspace.id, visibleTasks.map((task) => task.assignee))
@@ -1894,6 +2051,10 @@ const start = async () => {
       const visibleTimesheets = timesheetScope.elevated || !timesheetScope.userId ? project.timesheets : project.timesheets.filter((entry) => entry.userId === timesheetScope.userId)
       const openTasks = visibleTasks.filter((t) => t.status.type !== 'DONE').length
       const reviewTasks = visibleTasks.filter((t) => t.status.type === 'REVIEW').length
+      const statusTaskCounts = new Map<string, number>()
+      visibleTasks.forEach((task) => {
+        statusTaskCounts.set(task.statusId, (statusTaskCounts.get(task.statusId) ?? 0) + 1)
+      })
       return {
         id: project.id,
         name: project.name,
@@ -1902,7 +2063,7 @@ const start = async () => {
         taskCount: visibleTasks.length,
         openTasks,
         reviewTasks,
-        statuses: project.statuses.map((s) => ({ id: s.id, name: s.name, type: s.type, position: s.position, color: s.color })),
+        statuses: project.statuses.map((s) => ({ id: s.id, name: s.name, type: s.type, position: s.position, color: s.color, taskCount: statusTaskCounts.get(s.id) ?? 0 })),
         labels: project.labels.map((l) => ({ id: l.id, name: l.name })),
         timesheetSummary: summarizeTimesheets(visibleTimesheets),
         timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()),
@@ -1918,7 +2079,7 @@ const start = async () => {
       const archivedFilter = query.archived === 'true'
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, ...(archivedFilter ? { archivedAt: { not: null } } : { archivedAt: null }) } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, projectId)
       const tasks = await prisma.task.findMany({
         where: {
@@ -1955,7 +2116,7 @@ const start = async () => {
       const { taskId } = request.params as { taskId: string }
       const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { project: { include: { client: true } }, status: true, comments: { orderBy: { createdAt: 'asc' } }, labels: { include: { label: true } }, todos: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 20 } } })
       if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
-      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, task.projectId)
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       const assigneeAvatars = await getAssigneeAvatarMap(workspace.id, [task.assignee])
@@ -2080,7 +2241,7 @@ const start = async () => {
     app.get('/projects/:projectId/activity', async (request, reply) => {
       const workspace = (request as any).workspace
       const { projectId } = request.params as { projectId: string }
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const events = await prisma.activityLog.findMany({ where: { workspaceId: workspace.id, projectId }, orderBy: { createdAt: 'desc' }, take: 100 })
       return events.map((event) => ({
         id: event.id,
@@ -2105,7 +2266,7 @@ const start = async () => {
       if (!name) return reply.code(400).send({ ok: false, error: 'name is required' })
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
       const maxPos = await prisma.taskStatus.aggregate({ where: { projectId }, _max: { position: true } })
       const status = await prisma.taskStatus.create({ data: { projectId, name, type: 'TODO', position: (maxPos._max.position ?? -1) + 1, color: '#1F2937' } })
       await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.created', summary: `Created status ${name}.`, payload: { statusId: status.id, name } })
@@ -2119,7 +2280,7 @@ const start = async () => {
       const body = request.body as { name?: string; color?: string }
       const status = await prisma.taskStatus.findFirst({ where: { id: statusId, projectId, project: { workspaceId: workspace.id } } })
       if (!status) return reply.code(404).send({ ok: false, error: 'Status not found' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
       const nextName = body.name !== undefined ? body.name.trim() : status.name
       const nextColor = body.color !== undefined ? (body.color.trim() || '#1F2937') : status.color
       const details: string[] = []
@@ -2137,7 +2298,7 @@ const start = async () => {
       const body = request.body as { targetStatusId?: string }
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
       const statuses = await prisma.taskStatus.findMany({ where: { projectId }, orderBy: { position: 'asc' } })
       if (body.targetStatusId && !statuses.some((s) => s.id === body.targetStatusId)) {
         return reply.code(400).send({ ok: false, error: 'Target status must belong to the same project' })
@@ -2282,8 +2443,13 @@ const start = async () => {
       const count = await prisma.task.count({ where: { statusId: targetStatus.id } })
       const labels = normalizeTaskLabels(body.labels)
       const todos = normalizeTaskTodoTexts(body.todos)
+      const defaultAssignee = body.assignee?.trim() || (((request as any).account as { email?: string } | undefined)?.email ?? null)
+      if (defaultAssignee) {
+        const allowedAssignee = await ensureProjectMembershipForAssignee(workspace.id, body.projectId, defaultAssignee)
+        if (!allowedAssignee) return reply.code(400).send({ ok: false, error: 'Assignee must already be a member of this project' })
+      }
       const task = await prisma.$transaction(async (tx) => {
-        const createdTask = await tx.task.create({ data: { projectId: body.projectId, statusId: targetStatus.id, title: body.title.trim(), description: body.description?.trim() || null, assignee: body.assignee?.trim() || null, priority: body.priority ?? 'P2', dueDate: toIsoOrNull(body.dueDate), position: count } })
+        const createdTask = await tx.task.create({ data: { projectId: body.projectId, statusId: targetStatus.id, title: body.title.trim(), description: body.description?.trim() || null, assignee: defaultAssignee, priority: body.priority ?? 'P2', dueDate: toIsoOrNull(body.dueDate), position: count } })
         if (labels.length) {
           const labelIds: string[] = []
           for (const name of labels) {
@@ -2333,9 +2499,13 @@ const start = async () => {
       if (nextPriority !== existing.priority) details.push(activityChange('priority', existing.priority, nextPriority))
       if ((nextDueDate || null)?.toString() !== (existing.dueDate || null)?.toString()) details.push(activityChange('due date', existing.dueDate, nextDueDate))
       if (nextStatusId !== existing.statusId) details.push(activityChange('status', currentStatus?.name || existing.statusId, targetStatusName || nextStatusId))
+      if (nextAssignee) {
+        const allowedAssignee = await ensureProjectMembershipForAssignee(workspace.id, existing.projectId, nextAssignee)
+        if (!allowedAssignee) return reply.code(400).send({ ok: false, error: 'Assignee must already be a member of this project' })
+      }
       await prisma.task.update({ where: { id: params.taskId }, data: { ...(body.title !== undefined ? { title: body.title } : {}), ...(body.description !== undefined ? { description: body.description } : {}), ...(body.assignee !== undefined ? { assignee: body.assignee } : {}), ...(body.priority !== undefined ? { priority: body.priority } : {}), ...(body.dueDate !== undefined ? { dueDate: toIsoOrNull(body.dueDate) } : {}), ...(body.statusId !== undefined ? { statusId: body.statusId } : {}) } })
-      await ensureProjectMembershipForAssignee(workspace.id, existing.projectId, nextAssignee)
       if (nextAssignee !== existing.assignee) {
+        await ensureProjectMembershipForAssignee(workspace.id, existing.projectId, nextAssignee)
         await notifyTaskAssignment({ workspaceId: workspace.id, projectId: existing.projectId, taskId: existing.id, taskTitle: nextTitle, assignee: nextAssignee, actorAccountId: ((request as any).account as { id: string } | undefined)?.id ?? null })
       }
       if (body.description !== undefined) cleanupRemovedDescriptionImages(existing.description, nextDescription)
@@ -2393,7 +2563,7 @@ const start = async () => {
       const query = request.query as { from?: string; to?: string }
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const timesheetScope = await resolveTimesheetScope(request, workspace.id, projectId)
       const where: any = { projectId }
       if (!timesheetScope.elevated && timesheetScope.userId) where.userId = timesheetScope.userId
@@ -2411,7 +2581,7 @@ const start = async () => {
       const { taskId } = request.params as { taskId: string }
       const task = await prisma.task.findFirst({ where: { id: taskId, project: { workspaceId: workspace.id } } })
       if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
-      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, task.projectId)
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       const timesheetScope = await resolveTimesheetScope(request, workspace.id, task.projectId)
@@ -2436,7 +2606,7 @@ const start = async () => {
       }
       const project = await prisma.project.findFirst({ where: { id: query.projectId, workspaceId: workspace.id } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      if (!(await requireProjectRole(request, reply, project.id, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER, PROJECT_ROLE.VIEWER]))) return
+      if (!(await requireProjectRole(request, reply, project.id, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const memberships = await prisma.projectMembership.findMany({
         where: { projectId: query.projectId },
         include: { account: true },

@@ -1,16 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { AssigneeAvatar } from '../../../components/assignee-avatar'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AppShell, panel, pill, priorityStars, tagStyle } from '../../../components/app-shell'
-import { EditProjectModal } from '../../../components/edit-project-modal'
 import { ProjectTabs } from '../../../components/project-tabs'
 import { StatusSettings } from '../../../components/status-settings'
 import { TimesheetsTable } from '../../../components/timesheets-table'
 import { ProjectCurrentTasks } from '../../../components/project-current-tasks'
-import { getProjectActivity, getProjectMembers } from '../../../lib/api'
-import { useProjectQuery } from '../../../lib/query'
+import { addProjectMember, archiveProject, deleteProject, getProjectActivity, getProjectMembers, getWorkspaceMembers, inviteWorkspaceMember, removeProjectMember, updateProject, updateProjectMember } from '../../../lib/api'
+import { getWorkspaceId, loadSession } from '../../../lib/auth'
+import { qk, useClientsQuery, useProjectQuery } from '../../../lib/query'
+import { labelText, projectInputField } from '../../../lib/theme'
+import { projectRoleOptions } from '../../../lib/roles'
+import { canAddProjectMember, canChangeProjectClient, canChangeProjectMemberRole, canEditProject, canInviteProjectMember, canManageProjectWorkflow, canRemoveProjectMember } from '../../../lib/permissions'
 
 function formatActivityActor(event: { actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null }) {
   const actor = event.actorName || event.actorEmail || 'System'
@@ -31,17 +35,76 @@ function projectMemberRoleLabel(member: { role: string; workspaceRole?: string |
         : member.role
 }
 
-function ProjectMemberAvatar({ member }: { member: { accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; workspaceRole?: string | null; platformRole?: string | null } }) {
-  const [hovered, setHovered] = useState(false)
+function projectRoleRank(role?: string | null) {
+  return role === 'OWNER' ? 2 : 1
+}
+
+function ProjectMemberAvatar({ member, canEditRole, canRemove, onChangeRole, onRemove, roleSaving }: { member: { id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; workspaceRole?: string | null; platformRole?: string | null; locked?: boolean }; canEditRole: boolean; canRemove: boolean; onChangeRole: (membershipId: string, role: string) => void; onRemove: (membershipId: string, memberLabel: string) => void; roleSaving: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const label = projectMemberRoleLabel(member)
+
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false)
+        setRoleMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [open])
+
   return (
-    <div style={{ position: 'relative' }} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
-      <AssigneeAvatar name={member.name || member.email} avatarUrl={member.avatarUrl} size={32} />
-      {hovered ? (
-        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 20, minWidth: 220, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', boxShadow: 'var(--panel-shadow)', pointerEvents: 'none' }}>
+    <div ref={rootRef} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen((value) => !value)} style={memberAvatarButton}>
+        <AssigneeAvatar name={member.name || member.email} avatarUrl={member.avatarUrl} size={32} />
+      </button>
+      {open ? (
+        <div style={memberPopover}>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{member.name || '—'}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{member.email}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6 }}>{label}</div>
+          <div style={{ marginTop: 8, position: 'relative' }}>
+            {canEditRole && !member.locked ? (
+              <>
+                <button type="button" onClick={() => setRoleMenuOpen((value) => !value)} style={memberRoleTrigger}>
+                  {label}
+                </button>
+                {roleMenuOpen ? (
+                  <div style={memberRoleMenu}>
+                    {projectRoleOptions.map((role) => (
+                      <button
+                        key={role.value}
+                        type="button"
+                        onClick={() => {
+                          setRoleMenuOpen(false)
+                          onChangeRole(member.id, role.value)
+                        }}
+                        disabled={roleSaving}
+                        style={{ ...memberRoleOption, fontWeight: member.role === role.value ? 700 : 400 }}
+                      >
+                        {role.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div style={memberRoleStatic}>{label}</div>
+            )}
+            {canRemove ? (
+              <button
+                type="button"
+                onClick={() => onRemove(member.id, member.name || member.email)}
+                disabled={roleSaving}
+                style={memberRemoveText}
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
@@ -71,11 +134,27 @@ function ArchivedProjectTimesheets({ entries }: { entries: { id: string; userNam
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const qc = useQueryClient()
   const archivedParam = searchParams.get('archived') === 'true'
   const [projectId, setProjectId] = useState<string>('')
-  const [showEdit, setShowEdit] = useState(false)
   const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; details: string[]; createdAt: string }[]>([])
   const [members, setMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; createdAt: string; locked?: boolean; workspaceRole?: string | null; platformRole?: string | null }[]>([])
+  const [workspaceMembers, setWorkspaceMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; role: string }[]>([])
+  const [selectedWorkspaceMemberId, setSelectedWorkspaceMemberId] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false)
+  const [memberInviteMode, setMemberInviteMode] = useState(false)
+  const [memberActionSaving, setMemberActionSaving] = useState(false)
+  const [memberActionInfo, setMemberActionInfo] = useState<string | null>(null)
+  const [memberActionError, setMemberActionError] = useState<string | null>(null)
+  const [clientSaving, setClientSaving] = useState(false)
+  const [editingProjectName, setEditingProjectName] = useState(false)
+  const [editingProjectDescription, setEditingProjectDescription] = useState(false)
+  const [projectNameDraft, setProjectNameDraft] = useState('')
+  const [projectDescriptionDraft, setProjectDescriptionDraft] = useState('')
+  const [projectHeaderSaving, setProjectHeaderSaving] = useState(false)
+  const [projectDangerSaving, setProjectDangerSaving] = useState<'archive' | 'delete' | null>(null)
 
   useEffect(() => {
     void params.then((p) => setProjectId(p.projectId))
@@ -87,15 +166,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 
     const load = async () => {
       try {
-        const [events, projectMembers] = await Promise.all([getProjectActivity(projectId), getProjectMembers(projectId)])
+        const workspaceId = getWorkspaceId()
+        const requests = [getProjectActivity(projectId), getProjectMembers(projectId)] as const
+        const [events, projectMembers] = await Promise.all(requests)
+        const workspace = workspaceId ? await getWorkspaceMembers(workspaceId).catch(() => []) : []
         if (!cancelled) {
           setActivity(events)
           setMembers(projectMembers)
+          setWorkspaceMembers(workspace)
+          const projectMemberIds = new Set(projectMembers.map((member) => member.accountId))
+          const available = workspace.filter((member) => !projectMemberIds.has(member.accountId))
+          setSelectedWorkspaceMemberId((current) => current || available[0]?.accountId || '')
         }
       } catch {
         if (!cancelled) {
           setActivity([])
           setMembers([])
+          setWorkspaceMembers([])
         }
       }
     }
@@ -110,15 +197,263 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   }, [projectId])
 
   const { data: project, error } = useProjectQuery(projectId, { archived: archivedParam })
+  const { data: clients = [] } = useClientsQuery()
+
+  useEffect(() => {
+    if (!project) return
+    setProjectNameDraft(project.name)
+    setProjectDescriptionDraft(project.description || '')
+  }, [project?.id, project?.name, project?.description])
+  const session = loadSession()
   const recentTasks = project?.recentTasks.slice(0, 5) ?? []
   const taskOptions = project?.recentTasks.map((task) => ({ id: task.id, title: task.title })) ?? []
+  const availableWorkspaceMembers = workspaceMembers.filter((member) => !members.some((projectMember) => projectMember.accountId === member.accountId))
+  const currentAccountId = session?.account?.id ?? null
+  const currentMember = members.find((member) => member.accountId === currentAccountId)
+  const currentWorkspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+  const permissionViewer = {
+    accountId: currentAccountId,
+    platformRole: session?.account?.platformRole ?? null,
+    workspaceRole: currentWorkspaceRole,
+    projectRole: currentMember?.role ?? null,
+  }
+  const permissionContext = {
+    archived: archivedParam,
+    projectOwnerCount: members.filter((member) => member.role === 'OWNER').length,
+  }
+  const projectEditDecision = canEditProject(permissionViewer, permissionContext)
+  const clientChangeDecision = canChangeProjectClient(permissionViewer, permissionContext)
+  const workflowDecision = canManageProjectWorkflow(permissionViewer, permissionContext)
+  const addMemberDecision = canAddProjectMember(permissionViewer, permissionContext)
+  const inviteMemberDecision = canInviteProjectMember(permissionViewer, permissionContext)
+
+  const refreshProjectPage = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: qk.project(projectId, archivedParam) }),
+      qc.invalidateQueries({ queryKey: ['projects'] }),
+      qc.invalidateQueries({ queryKey: qk.projectsSummary }),
+      qc.invalidateQueries({ queryKey: qk.clients }),
+    ])
+  }
+
+  const handleClientChange = async (clientId: string) => {
+    if (!project || clientSaving) return
+    try {
+      setClientSaving(true)
+      await updateProject(projectId, {
+        name: project.name,
+        description: project.description || '',
+        clientId: clientId || null,
+      })
+      await refreshProjectPage()
+    } finally {
+      setClientSaving(false)
+    }
+  }
+
+  const saveProjectHeader = async (patch: { name?: string; description?: string }) => {
+    if (!project || projectHeaderSaving) return
+    try {
+      setProjectHeaderSaving(true)
+      await updateProject(projectId, {
+        name: patch.name ?? project.name,
+        description: patch.description ?? (project.description || ''),
+        clientId: project.client?.id ?? null,
+      })
+      await refreshProjectPage()
+    } finally {
+      setProjectHeaderSaving(false)
+    }
+  }
+
+  const refreshMembers = async () => {
+    const workspaceId = getWorkspaceId()
+    const [projectMembers, workspace] = await Promise.all([
+      getProjectMembers(projectId),
+      workspaceId ? getWorkspaceMembers(workspaceId).catch(() => []) : Promise.resolve([]),
+    ])
+    setMembers(projectMembers)
+    setWorkspaceMembers(workspace)
+    const projectMemberIds = new Set(projectMembers.map((member) => member.accountId))
+    const available = workspace.filter((member) => !projectMemberIds.has(member.accountId))
+    setSelectedWorkspaceMemberId((current) => current && available.some((member) => member.accountId === current) ? current : (available[0]?.accountId || ''))
+  }
+
+  const handleAddExistingMember = async (accountId = selectedWorkspaceMemberId) => {
+    if (!accountId || memberActionSaving) return
+    try {
+      setMemberActionSaving(true)
+      setMemberActionError(null)
+      setMemberActionInfo(null)
+      await addProjectMember(projectId, { accountId, role: 'MEMBER' })
+      await refreshMembers()
+      setMemberPickerOpen(false)
+      setSelectedWorkspaceMemberId('')
+      setMemberActionInfo('Project member added.')
+    } catch (err) {
+      setMemberActionError(err instanceof Error ? err.message : 'Failed to add project member')
+    } finally {
+      setMemberActionSaving(false)
+    }
+  }
+
+  const handleInviteProjectMember = async () => {
+    const email = inviteEmail.trim().toLowerCase()
+    if (!email || memberActionSaving) return
+    try {
+      setMemberActionSaving(true)
+      setMemberActionError(null)
+      setMemberActionInfo(null)
+      await inviteWorkspaceMember({ email, role: 'MEMBER' })
+      await addProjectMember(projectId, { email, role: 'MEMBER' })
+      await refreshMembers()
+      setInviteEmail('')
+      setMemberInviteMode(false)
+      setMemberPickerOpen(false)
+      setMemberActionInfo('Invite sent. User will join the workspace and this project.')
+    } catch (err) {
+      setMemberActionError(err instanceof Error ? err.message : 'Failed to invite project member')
+    } finally {
+      setMemberActionSaving(false)
+    }
+  }
+
+  const handleProjectRoleChange = async (membershipId: string, role: string) => {
+    try {
+      setMemberActionSaving(true)
+      setMemberActionError(null)
+      setMemberActionInfo(null)
+      await updateProjectMember(projectId, membershipId, { role })
+      await refreshMembers()
+      setMemberActionInfo('Project role updated.')
+    } catch (err) {
+      setMemberActionError(err instanceof Error ? err.message : 'Failed to update project role')
+    } finally {
+      setMemberActionSaving(false)
+    }
+  }
+
+  const handleRemoveProjectMember = async (membershipId: string, memberLabel: string) => {
+    if (!window.confirm(`Remove ${memberLabel} from this project?`)) return
+    try {
+      setMemberActionSaving(true)
+      setMemberActionError(null)
+      setMemberActionInfo(null)
+      await removeProjectMember(projectId, membershipId)
+      await refreshMembers()
+      setMemberActionInfo('Project member removed.')
+    } catch (err) {
+      setMemberActionError(err instanceof Error ? err.message : 'Failed to remove project member')
+    } finally {
+      setMemberActionSaving(false)
+    }
+  }
+
+  const handleArchiveProject = async () => {
+    if (!window.confirm('Archive this project?')) return
+    try {
+      setProjectDangerSaving('archive')
+      await archiveProject(projectId, true)
+      router.push('/projects')
+      router.refresh()
+    } finally {
+      setProjectDangerSaving(null)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!window.confirm('Delete this project permanently?')) return
+    try {
+      setProjectDangerSaving('delete')
+      await deleteProject(projectId)
+      router.push('/projects')
+      router.refresh()
+    } finally {
+      setProjectDangerSaving(null)
+    }
+  }
+
+  const projectTitle = projectEditDecision.visible ? '' : (project?.name ?? 'Project')
+  const projectSubtitle = projectEditDecision.visible ? '' : (project?.description || 'Project overview and recent work.')
 
   return (
-    <AppShell title={project?.name ?? 'Project'} subtitle={project?.description || 'Project overview and recent work.'}>
-      {projectId && !archivedParam ? (
+    <AppShell title={projectTitle} subtitle={projectSubtitle}>
+      {project ? (
+        <div style={{ display: 'grid', gap: 12, marginBottom: 18 }}>
+          <div>
+            {projectEditDecision.visible ? (
+              editingProjectName ? (
+                <input
+                  autoFocus
+                  value={projectNameDraft}
+                  onChange={(event) => setProjectNameDraft(event.target.value)}
+                  onBlur={() => {
+                    setEditingProjectName(false)
+                    if (projectNameDraft.trim() && projectNameDraft.trim() !== project.name) void saveProjectHeader({ name: projectNameDraft.trim() })
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      event.currentTarget.blur()
+                    }
+                    if (event.key === 'Escape') {
+                      setProjectNameDraft(project.name)
+                      setEditingProjectName(false)
+                    }
+                  }}
+                  disabled={projectHeaderSaving}
+                  style={projectHeaderNameInput}
+                />
+              ) : (
+                <button type="button" onClick={() => setEditingProjectName(true)} style={projectHeaderNameButton}>{project.name}</button>
+              )
+            ) : (
+              <div style={projectHeaderNameText}>{project.name}</div>
+            )}
+
+            {projectEditDecision.visible ? (
+              editingProjectDescription ? (
+                <textarea
+                  autoFocus
+                  value={projectDescriptionDraft}
+                  onChange={(event) => setProjectDescriptionDraft(event.target.value)}
+                  onBlur={() => {
+                    setEditingProjectDescription(false)
+                    if (projectDescriptionDraft !== (project.description || '')) void saveProjectHeader({ description: projectDescriptionDraft })
+                  }}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                      event.preventDefault()
+                      event.currentTarget.blur()
+                    }
+                    if (event.key === 'Escape') {
+                      setProjectDescriptionDraft(project.description || '')
+                      setEditingProjectDescription(false)
+                    }
+                  }}
+                  disabled={projectHeaderSaving}
+                  style={projectHeaderDescriptionInput}
+                />
+              ) : (
+                <button type="button" onClick={() => setEditingProjectDescription(true)} style={projectHeaderDescriptionButton}>{project.description || 'Project overview and recent work.'}</button>
+              )
+            ) : (
+              <div style={projectHeaderDescriptionText}>{project.description || 'Project overview and recent work.'}</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <ProjectTabs projectId={projectId} current="overview" />
+            {projectEditDecision.visible ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <button onClick={() => void handleArchiveProject()} disabled={projectDangerSaving !== null} style={archiveHeaderButton}>{projectDangerSaving === 'archive' ? 'Archiving…' : 'Archive'}</button>
+                <button onClick={() => void handleDeleteProject()} disabled={projectDangerSaving !== null} style={deleteHeaderButton}>{projectDangerSaving === 'delete' ? 'Deleting…' : 'Delete'}</button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : projectId ? (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }}>
           <ProjectTabs projectId={projectId} current="overview" />
-          <button onClick={() => setShowEdit(true)} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700, flex: '0 0 auto' }}>Edit project</button>
         </div>
       ) : null}
       {error ? <div style={{ color: 'var(--danger-text)', marginBottom: 16 }}>{error instanceof Error ? error.message : 'Failed to load project'}</div> : null}
@@ -126,36 +461,120 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 
       {project ? (
         <>
-          <div style={{ ...panel, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Client</div>
-              <div style={{ marginTop: 6, fontSize: 20, fontWeight: 750 }}>{project.client ? project.client.name : 'Not linked'}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1.4fr) minmax(180px, 0.7fr) minmax(240px, 1fr)', gap: 16, marginBottom: 20, alignItems: 'stretch' }}>
+            <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 10 }}>
+              <div style={labelText}>Client</div>
+              {!clientChangeDecision.visible ? (
+                <div style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
+              ) : archivedParam ? (
+                <div style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
+              ) : (
+                <select
+                  value={project.client?.id || ''}
+                  onChange={(event) => void handleClientChange(event.target.value)}
+                  disabled={clientSaving || !clientChangeDecision.allowed}
+                  style={projectInputField}
+                >
+                  <option value="">No client / internal</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
+                  ))}
+                </select>
+              )}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={project.client ? linkedText : unlinkedText}>{project.client ? 'Linked' : 'Unlinked'}</span>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={pill(project.client ? '#ecfeff' : 'var(--form-bg)', project.client ? '#155e75' : 'var(--text-secondary)')}>{project.client ? 'Linked' : 'Not linked'}</span>
-              {!archivedParam ? <button onClick={() => setShowEdit(true)} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 14px', fontWeight: 700 }}>{project.client ? 'Change client' : 'Assign client'}</button> : null}
+
+            <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 8 }}>
+              <div style={labelText}>Total tasks</div>
+              <div style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>{project.taskCount} {project.taskCount === 1 ? 'task' : 'tasks'}</div>
+            </div>
+
+            <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 10 }}>
+              <div style={labelText}>Project members</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {members.length ? members.map((member) => {
+                  const roleDecision = canChangeProjectMemberRole(permissionViewer, member, permissionContext)
+                  const removeDecision = canRemoveProjectMember(permissionViewer, member, permissionContext)
+                  return (
+                    <ProjectMemberAvatar
+                      key={member.accountId}
+                      member={member}
+                      canEditRole={roleDecision.visible}
+                      canRemove={removeDecision.visible}
+                      onChangeRole={handleProjectRoleChange}
+                      onRemove={handleRemoveProjectMember}
+                      roleSaving={memberActionSaving}
+                    />
+                  )
+                }) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                {addMemberDecision.visible || inviteMemberDecision.visible ? (
+                  <div style={{ position: 'relative' }}>
+                    {memberInviteMode && inviteMemberDecision.visible ? (
+                      <input
+                        autoFocus
+                        value={inviteEmail}
+                        onChange={(event) => setInviteEmail(event.target.value)}
+                        onBlur={() => { if (!memberActionSaving && !inviteEmail.trim()) setMemberInviteMode(false) }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            void handleInviteProjectMember()
+                          }
+                          if (event.key === 'Escape') {
+                            setInviteEmail('')
+                            setMemberInviteMode(false)
+                            setMemberPickerOpen(false)
+                          }
+                        }}
+                        placeholder="Invite by email"
+                        style={memberAddInput}
+                      />
+                    ) : (
+                      <button type="button" onClick={() => setMemberPickerOpen((value) => !value)} style={memberAddButton}>Add member</button>
+                    )}
+                    {memberPickerOpen && !memberInviteMode && (addMemberDecision.visible || inviteMemberDecision.visible) ? (
+                      <div style={memberAddMenu}>
+                        {addMemberDecision.visible ? availableWorkspaceMembers.map((member) => (
+                          <button
+                            key={member.accountId}
+                            type="button"
+                            onClick={() => {
+                              setSelectedWorkspaceMemberId(member.accountId)
+                              void handleAddExistingMember(member.accountId)
+                            }}
+                            disabled={memberActionSaving}
+                            style={memberAddOption}
+                          >
+                            {member.name || member.email}
+                          </button>
+                        )) : null}
+                        {inviteMemberDecision.visible ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMemberInviteMode(true)
+                              setMemberPickerOpen(false)
+                            }}
+                            style={memberAddOption}
+                          >
+                            Invite by email
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              {memberActionInfo ? <div style={{ color: '#34d399', fontSize: 12 }}>{memberActionInfo}</div> : null}
+              {memberActionError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{memberActionError}</div> : null}
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
-            <div style={panel}><div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Total tasks</div><div style={{ marginTop: 10, fontSize: 28, fontWeight: 750 }}>{project.taskCount}</div></div>
-            <div style={panel}><div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Open tasks</div><div style={{ marginTop: 10, fontSize: 28, fontWeight: 750 }}>{project.openTasks}</div></div>
-            <div style={panel}><div style={{ color: 'var(--text-muted)', fontSize: 14 }}>In review</div><div style={{ marginTop: 10, fontSize: 28, fontWeight: 750 }}>{project.reviewTasks}</div></div>
-            <div style={panel}>
-              <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Project members</div>
-              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {members.length ? members.map((member) => <ProjectMemberAvatar key={member.accountId} member={member} />) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-              </div>
-            </div>
-          </div>
+          {workflowDecision.visible ? <div style={{ marginBottom: 24 }}><StatusSettings projectId={projectId} statuses={project.statuses} canManage={workflowDecision.allowed} /></div> : null}
 
           <div style={{ display: 'grid', gap: 20 }}>
-            {!archivedParam ? (
-              <div style={panel}>
-                <div style={{ fontWeight: 750, marginBottom: 14 }}>Workflow</div>
-                <StatusSettings projectId={projectId} statuses={project.statuses} />
-              </div>
-            ) : null}
 
             <div style={panel}>
               <div style={{ fontWeight: 750, marginBottom: 14 }}>Recent tasks</div>
@@ -189,15 +608,30 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
         </>
       ) : <div style={{ color: 'var(--text-muted)' }}>Loading project…</div>}
 
-      {showEdit && project ? (
-        <EditProjectModal
-          projectId={projectId}
-          initialName={project.name}
-          initialDescription={project.description}
-          initialClientId={project.client?.id || null}
-          onClose={() => setShowEdit(false)}
-        />
-      ) : null}
     </AppShell>
   )
 }
+
+const summaryCardPanel: React.CSSProperties = { minHeight: 120, height: '100%' }
+const linkedText: React.CSSProperties = { color: '#34d399', fontSize: 14, fontWeight: 400 }
+const unlinkedText: React.CSSProperties = { color: 'var(--danger-text)', fontSize: 14, fontWeight: 400 }
+const smallActionBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 12px', fontWeight: 700, whiteSpace: 'nowrap' }
+const memberAvatarButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 999 }
+const memberPopover: React.CSSProperties = { position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 20, minWidth: 220, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', boxShadow: 'var(--panel-shadow)' }
+const memberRoleTrigger: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', lineHeight: 1.2 }
+const memberRoleStatic: React.CSSProperties = { marginTop: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2 }
+const memberRoleMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 140, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
+const memberRoleOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12 }
+const memberAddButton: React.CSSProperties = { ...projectInputField, width: 'auto', padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`, background: 'var(--form-bg)', cursor: 'pointer' }
+const memberAddInput: React.CSSProperties = { ...projectInputField, width: 180, padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberAddMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 200, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
+const memberAddOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '7px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberRemoveText: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 12, cursor: 'pointer', textAlign: 'left', lineHeight: 1.2 }
+const projectHeaderNameText: React.CSSProperties = { fontSize: 30, fontWeight: 750, color: 'var(--text-primary)', lineHeight: 1.1 }
+const projectHeaderNameButton: React.CSSProperties = { ...projectHeaderNameText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
+const projectHeaderNameInput: React.CSSProperties = { ...projectInputField, fontSize: 30, fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
+const projectHeaderDescriptionText: React.CSSProperties = { marginTop: 8, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.45 }
+const projectHeaderDescriptionButton: React.CSSProperties = { ...projectHeaderDescriptionText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
+const projectHeaderDescriptionInput: React.CSSProperties = { ...projectInputField, marginTop: 8, minHeight: 96, resize: 'vertical', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.45 }
+const archiveHeaderButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }
+const deleteHeaderButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 13, cursor: 'pointer' }

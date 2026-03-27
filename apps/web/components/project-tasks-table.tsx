@@ -5,15 +5,16 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ProjectMember, ProjectTaskListItem } from '@sally/types/src'
 import { archiveTask, createTask, getProjectMembers } from '../lib/api'
+import { getWorkspaceId, loadSession } from '../lib/auth'
 import { qk, useProjectQuery, useProjectTasksQuery } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
 import { AssigneeAvatar } from './assignee-avatar'
 import { statusChipStyle } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
 import { InlineTaskPanel } from './inline-task-panel'
-import { sortableHeaderButton } from '../lib/theme'
+import { labelText, projectInputField, sortableHeaderButton } from '../lib/theme'
 
-const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 10px', background: 'var(--form-bg)', fontSize: 14 }
+const inputStyle: React.CSSProperties = { ...projectInputField }
 
 type SortKey = 'title' | 'assignee' | 'priority' | 'dueDate' | 'status'
 type SortDir = 'asc' | 'desc'
@@ -37,6 +38,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [showArchived, setShowArchived] = useState(archived)
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const session = loadSession()
 
   const filters = useMemo(() => ({ status: status.startsWith('!') ? '' : status, assignee, search, label, archived: showArchived }), [status, assignee, search, label, showArchived])
 
@@ -85,8 +87,6 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
   }, [expandedTaskId])
 
   useEffect(() => {
-    if (!showFilters) return
-
     function closeWhenSafe() {
       if (!tableRef.current) return
       const saving = tableRef.current.querySelector('[data-description-saving="true"]')
@@ -108,6 +108,10 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
     document.addEventListener('mousedown', handleOutsideClick)
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [showFilters, pathname, searchParams])
+
+  const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+  const currentProjectRole = projectMembers.find((member) => member.accountId === session?.account?.id)?.role ?? null
+  const taskPermissionViewer = { platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: currentProjectRole }
 
   const assigneeOptions = useMemo(() => {
     const map = new Map<string, string>()
@@ -221,7 +225,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
 
       <div ref={tableRef} style={{ display: 'grid', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Tasks{showArchived ? ' · Archived' : ''}</div>
+          <div style={{ ...labelText, fontSize: 13 }}>Tasks{showArchived ? ' · Archived' : ''}</div>
           {!archived ? (
             <button onClick={() => { setShowArchived((prev) => !prev); setExpandedTaskParam(null) }} style={{ background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 12 }}>
               {showArchived ? 'Hide archived' : 'Show archived'}
@@ -262,7 +266,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
                 boxShadow: expanded ? '0 10px 24px rgba(16, 185, 129, 0.07)' : 'none',
               }}
             >
-              <EditableTaskRow task={task} projectId={projectId} statuses={project?.statuses || []} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} />
+              <EditableTaskRow task={task} projectId={projectId} statuses={project?.statuses || []} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} taskPermissionViewer={taskPermissionViewer} />
               {expanded ? <InlineTaskPanel taskId={task.id} projectId={projectId} /> : null}
             </div>
           )

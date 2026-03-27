@@ -58,6 +58,7 @@ export type StatusOption = {
   type: string
   position: number
   color?: string | null
+  taskCount?: number
 }
 
 export type TodoItem = {
@@ -243,6 +244,10 @@ export type WorkspaceMember = {
   email: string
   role: string
   createdAt: string
+  invited?: boolean
+  inviteId?: string | null
+  inviteAcceptedAt?: string | null
+  inviteExpiresAt?: string | null
 }
 
 export type ProjectMember = {

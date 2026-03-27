@@ -148,16 +148,20 @@ export function login(payload: { email: string; password: string }): Promise<{ o
   return getJson('/auth/login', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-export function requestPasswordReset(payload: { email: string }): Promise<{ ok: boolean; expiresAt?: string }> {
+export function requestPasswordReset(payload: { email: string; inviteToken?: string }): Promise<{ ok: boolean; expiresAt?: string }> {
   return getJson('/auth/request-password-reset', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-export function resetPassword(payload: { token: string; password: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[] }> {
+export function resetPassword(payload: { token: string; password: string; inviteToken?: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[] }> {
   return getJson('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) })
 }
 
 export function inviteWorkspaceMember(payload: { email: string; role?: string }): Promise<{ ok: boolean; existing?: boolean; emailed?: boolean; expiresAt?: string }> {
   return getJson('/auth/invite', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function getInviteInfo(token: string): Promise<{ ok: boolean; invite: { email: string; workspaceId: string; role: string; expiresAt: string; accountExists: boolean; accountActivated: boolean } }> {
+  return getJson(`/auth/invite-info?token=${encodeURIComponent(token)}`)
 }
 
 export function acceptInvite(payload: { token: string; name?: string; password: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[] }> {
@@ -188,6 +192,12 @@ export function updateWorkspaceMember(workspaceId: string, membershipId: string,
 }
 export function removeWorkspaceMember(workspaceId: string, membershipId: string): Promise<{ ok: boolean }> {
   return getJson(`/workspaces/${workspaceId}/members/${membershipId}`, { method: 'DELETE' })
+}
+export function resendWorkspaceInvite(workspaceId: string, inviteId: string): Promise<{ ok: boolean; emailed?: boolean; inviteId?: string; expiresAt?: string }> {
+  return getJson(`/workspaces/${workspaceId}/invites/${inviteId}/resend`, { method: 'POST', body: JSON.stringify({}) })
+}
+export function cancelWorkspaceInvite(workspaceId: string, inviteId: string): Promise<{ ok: boolean; deletedPlaceholderAccount?: boolean }> {
+  return getJson(`/workspaces/${workspaceId}/invites/${inviteId}`, { method: 'DELETE' })
 }
 
 export function apiUrl(path: string): string { return `${API_BASE_URL}${path}` }

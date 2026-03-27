@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { MentionableUser } from '@sally/types/src'
-import { archiveTask, createComment, createProjectLabel, createTaskTodo, deleteTask, deleteTaskTodo, getMentionableUsers, updateTask, updateTaskLabels, updateTaskTodo, uploadTaskDescriptionImage } from '../lib/api'
-import { loadSession } from '../lib/auth'
+import { archiveTask, createComment, createProjectLabel, createTaskTodo, deleteTask, deleteTaskTodo, getMentionableUsers, getProjectMembers, updateTask, updateTaskLabels, updateTaskTodo, uploadTaskDescriptionImage } from '../lib/api'
+import { getWorkspaceId, loadSession } from '../lib/auth'
+import { canEditTask } from '../lib/task-permissions'
 import { qk, useProjectQuery, useTaskQuery } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
 import { MarkdownDescriptionEditor } from './markdown-description-editor'
 import { TimesheetsTable } from './timesheets-table'
-import { archiveTextAction, deleteTextAction } from '../lib/theme'
+import { archiveTextAction, deleteTextAction, projectInputField } from '../lib/theme'
 async function compressImageForTask(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
   const imageUrl = URL.createObjectURL(file)
   try {
@@ -100,6 +101,7 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
   const [mentionMenuPos, setMentionMenuPos] = useState<{ top: number; left: number } | null>(null)
   const [mentionMap, setMentionMap] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const [projectRole, setProjectRole] = useState<string | null>(null)
   const [timesheetsOpen, setTimesheetsOpen] = useState(false)
   const lastCommittedDescriptionRef = useRef('')
   const commentInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -116,6 +118,22 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
     setDescription(nextDescription)
     lastCommittedDescriptionRef.current = nextDescription
   }, [task])
+
+  useEffect(() => {
+    if (!task?.project.id || !session?.account?.id) {
+      setProjectRole(null)
+      return
+    }
+    let cancelled = false
+    void getProjectMembers(task.project.id)
+      .then((members) => {
+        if (!cancelled) setProjectRole(members.find((member) => member.accountId === session.account?.id)?.role ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setProjectRole(null)
+      })
+    return () => { cancelled = true }
+  }, [task?.project.id, session?.account?.id])
 
   useEffect(() => {
     if (!task?.project.id || !mentionQuery) {
@@ -334,6 +352,9 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
     }
   }
 
+  const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+  const taskEditDecision = canEditTask({ platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole }, false)
+
   if (error) return <div style={{ color: '#991b1b' }}>{error instanceof Error ? error.message : 'Failed to load task'}</div>
   if (!task) return <div style={{ color: 'var(--text-muted)' }}>Loading task…</div>
 
@@ -345,21 +366,22 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
           <MarkdownDescriptionEditor
             value={description}
             onCommit={(nextValue) => {
+              if (!taskEditDecision.allowed) return
               if (nextValue === lastCommittedDescriptionRef.current) return
               lastCommittedDescriptionRef.current = nextValue
               setDescription(nextValue)
               void saveDescription(nextValue)
             }}
-            onImageUpload={(file) => handleDescriptionImageUpload(file)}
+            onImageUpload={(file) => taskEditDecision.allowed ? handleDescriptionImageUpload(file) : Promise.resolve(null)}
             busy={busy}
           />
           {busy ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>Saving…</div> : null}
         </div>
         <div style={{ display: 'grid', gap: 10 }}>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Checklist</div>
-          <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addTodo() } }} style={inputStyle} placeholder="Add checklist item and press Enter" />
+          {taskEditDecision.visible ? <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && taskEditDecision.allowed) { e.preventDefault(); void addTodo() } }} style={inputStyle} placeholder="Add checklist item and press Enter" disabled={!taskEditDecision.allowed} /> : null}
           <div style={{ display: 'grid', gap: 8 }}>
-            {task.todos.map((todo) => <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" checked={todo.done} onChange={() => void toggleTodo(todo.id, todo.done)} /> <span style={{ textDecoration: todo.done ? 'line-through' : 'none', opacity: todo.done ? 0.55 : 1 }}>{todo.text}</span></label><button onClick={() => void removeTodo(todo.id)} style={deleteTextAction}>Delete</button></div>)}
+            {task.todos.map((todo) => <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" checked={todo.done} onChange={() => taskEditDecision.allowed ? void toggleTodo(todo.id, todo.done) : undefined} disabled={!taskEditDecision.allowed} /> <span style={{ textDecoration: todo.done ? 'line-through' : 'none', opacity: todo.done ? 0.55 : 1 }}>{todo.text}</span></label>{taskEditDecision.visible ? <button onClick={() => void removeTodo(todo.id)} style={deleteTextAction}>Delete</button> : null}</div>)}
           </div>
         </div>
       </div>
@@ -370,7 +392,7 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
         <div style={{ display: 'grid', gap: 8, maxHeight: 220, overflow: 'auto' }}>
           {task.comments.map((comment) => <div key={comment.id} style={{ background: 'var(--form-bg)', border: '1px solid var(--panel-border)', borderRadius: 12, padding: 10 }}><div style={{ fontWeight: 700, fontSize: 13 }}>{comment.author}</div><div style={{ marginTop: 6, color: 'rgba(209, 250, 229, 0.62)', fontSize: 14 }}>{comment.body}</div></div>)}
         </div>
-        <div style={{ position: 'relative', display: 'grid', gap: 8 }}>
+        {taskEditDecision.visible ? <div style={{ position: 'relative', display: 'grid', gap: 8 }}>
           <div style={{ display: 'grid', gap: 8 }}>
             <textarea
               ref={commentInputRef}
@@ -417,7 +439,7 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Type <strong>@</strong> to mention a teammate. Press <strong>⌘/Ctrl+Enter</strong> to submit.</div>
-              <button onClick={() => void addComment()} style={btnStyle}>Comment</button>
+              <button onClick={() => void addComment()} style={btnStyle} disabled={!taskEditDecision.allowed}>Comment</button>
             </div>
           </div>
           {mentionOptions.length && mentionMenuPos ? (
@@ -436,7 +458,7 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
               ))}
             </div>
           ) : null}
-        </div>
+        </div> : null}
       </div>
 
       <div style={{ display: 'grid', gap: 8 }}>
@@ -451,13 +473,13 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
         {timesheetsOpen ? <TimesheetsTable lockedProjectId={projectId} lockedTaskId={taskId} lockedProjectName={project?.name} showProjectColumn={false} showCustomerColumn={false} showTaskColumn={false} showValidationColumn={false} /> : null}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8, borderTop: '1px solid var(--panel-border)' }}>
-        <button onClick={() => void handleArchiveTask()} disabled={busy} aria-label="Archive task" title="Archive task" style={archiveTextAction}>Archive</button>
-        <button onClick={() => void handleDeleteTask()} disabled={busy} aria-label="Delete task" title="Delete task" style={deleteTextAction}>Delete</button>
-      </div>
+      {taskEditDecision.visible ? <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8, borderTop: '1px solid var(--panel-border)' }}>
+        <button onClick={() => void handleArchiveTask()} disabled={busy || !taskEditDecision.allowed} aria-label="Archive task" title="Archive task" style={archiveTextAction}>Archive</button>
+        <button onClick={() => void handleDeleteTask()} disabled={busy || !taskEditDecision.allowed} aria-label="Delete task" title="Delete task" style={deleteTextAction}>Delete</button>
+      </div> : null}
     </div>
   )
 }
 
-const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', background: 'var(--form-bg)', color: 'var(--form-text)' }
+const inputStyle: React.CSSProperties = { ...projectInputField }
 const btnStyle: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }

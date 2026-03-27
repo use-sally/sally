@@ -30,7 +30,7 @@ Think of Sally as five connected layers:
 5. **machine interfaces**
    - HTTP API
    - hosted MCP at `/mcp`
-   - local stdio MCP via `sally-mcp`
+   - local stdio MCP via `sally-mcp` only as a parked advanced/legacy path
 
 ## Who Sally is for
 
@@ -58,28 +58,32 @@ Sally is especially suited to teams that:
 - create workspaces (superadmin)
 - manage workspace memberships
 - invite members by email
+- resend or cancel pending invites
 - workspace-scoped access control
 
 ### Projects
 - create and update projects
 - archive and delete projects
+- inline project name/description editing in the web app
 - default project statuses: Backlog, In Progress, Review, Done
-- custom project statuses
+- custom project statuses with color and task counts
 - project activity log
 - project members with roles
+- add existing workspace members to projects or invite by email from the project surface
 - client linking
 
 ### Tasks
 - create, update, archive, delete
 - move between statuses
 - reorder within columns
-- descriptions
+- inline title and description editing in the web app
 - priorities
 - due dates
 - labels
 - todos/checklists
 - comments and mentions
 - inline image upload for task descriptions
+- permission-aware assignee, comment, and edit controls
 
 ### Clients
 - create, view, update, delete
@@ -96,11 +100,12 @@ Sally is especially suited to teams that:
 - workspace-wide reporting
 - billable and validated flags
 - project/user/client filters
+- permission-aware entry editing, deletion, validation, and self-entry flows
 
 ### MCP
 - hosted MCP endpoint at `/mcp`
 - hosted MCP keys tied to real Sally accounts
-- local stdio MCP package for advanced setups
+- local stdio MCP package kept parked for advanced/legacy setups
 
 ## How Sally usually gets used
 
@@ -134,17 +139,17 @@ There are two main permission layers:
 ### Workspace roles
 - `OWNER`
 - `MEMBER`
-- `VIEWER`
+- `VIEWER` may still exist in older data or API-level handling, but normal current UI flows focus on `OWNER` and `MEMBER`
 
 ### Project roles
 - `OWNER`
 - `MEMBER`
-- `VIEWER`
+- `VIEWER` may still exist in older data or API-level handling, but normal current UI flows focus on `OWNER` and `MEMBER`
 
 General rule of thumb:
 - owners manage structure and membership
 - members do normal project work
-- viewers read but do not actively change project state
+- the web app now hides or disables actions based on the effective permission decision instead of exposing a broad editable surface to everyone
 
 For exact behavior and edge cases, use:
 - [`docs/api.md`](./api.md)

@@ -86,20 +86,11 @@ const spacing = {
 } as const
 
 const fontSize = {
+  xs: 12,
   sm: 14,
 } as const
 
-export const formControlMd: CSSProperties = {
-  width: '100%',
-  border: '1px solid var(--form-border)',
-  borderRadius: radius.lg,
-  padding: `${spacing.mdY} ${spacing.mdX}`,
-  background: 'var(--form-bg)',
-  color: 'var(--form-text)',
-  fontSize: fontSize.sm,
-}
-
-export const formControlSm: CSSProperties = {
+export const projectInputField: CSSProperties = {
   width: '100%',
   border: '1px solid var(--form-border)',
   borderRadius: radius.md,
@@ -109,14 +100,20 @@ export const formControlSm: CSSProperties = {
   fontSize: fontSize.sm,
 }
 
+export const formControlMd: CSSProperties = {
+  ...projectInputField,
+  borderRadius: radius.lg,
+  padding: `${spacing.mdY} ${spacing.mdX}`,
+}
+
+export const formControlSm: CSSProperties = {
+  ...projectInputField,
+}
+
 export const formControlCell: CSSProperties = {
-  width: '100%',
-  border: '1px solid var(--form-border)',
+  ...projectInputField,
   borderRadius: radius.sm,
   padding: '6px 8px',
-  background: 'var(--form-bg)',
-  color: 'var(--form-text)',
-  fontSize: fontSize.sm,
 }
 
 export const deleteTextAction: CSSProperties = {
@@ -154,6 +151,24 @@ export function sortableHeaderButton(active: boolean): CSSProperties {
 
 export const taskTitleText: CSSProperties = {
   color: 'var(--task-title)',
+}
+
+export const labelText: CSSProperties = {
+  color: 'var(--text-muted)',
+  fontSize: fontSize.xs,
+  fontWeight: 700,
+}
+
+export const metaLabelText: CSSProperties = {
+  ...labelText,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+}
+
+export const sectionLabelText: CSSProperties = {
+  ...labelText,
+  fontSize: 14,
+  fontWeight: 750,
 }
 
 function varsFor(mode: ThemeMode) {

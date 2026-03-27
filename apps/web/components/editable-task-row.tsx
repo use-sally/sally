@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ProjectTaskListItem, StatusOption } from '@sally/types/src'
 import { createProjectLabel, updateTask, updateTaskLabels } from '../lib/api'
-import { qk, useTimesheetUsersQuery } from '../lib/query'
+import { qk } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
 import { AssigneeAvatar } from './assignee-avatar'
+import { AssigneePicker } from './assignee-picker'
 import { statusChipStyle } from '../lib/status-colors'
-import { taskTitleText } from '../lib/theme'
+import { getWorkspaceId, loadSession } from '../lib/auth'
+import { canAssignTask } from '../lib/task-permissions'
+import { projectInputField, taskTitleText } from '../lib/theme'
 
 type ActiveField = 'title' | 'assignee' | 'dueDate' | 'status' | 'labels' | null
 
@@ -31,12 +34,14 @@ export function EditableTaskRow({
   statuses,
   expanded,
   onActivate,
+  taskPermissionViewer,
 }: {
   task: ProjectTaskListItem
   projectId: string
   statuses: StatusOption[]
   expanded: boolean
   onActivate: () => void
+  taskPermissionViewer?: { platformRole?: string | null; workspaceRole?: string | null; projectRole?: string | null }
 }) {
   const qc = useQueryClient()
   const [activeField, setActiveField] = useState<ActiveField>(null)
@@ -46,7 +51,6 @@ export function EditableTaskRow({
   const [dueDate, setDueDate] = useState(task.dueDate ? String(task.dueDate).slice(0, 10) : '')
   const [statusId, setStatusId] = useState(task.statusId)
   const [labelsInput, setLabelsInput] = useState((task.labels || []).join(', '))
-  const { data: users = [] } = useTimesheetUsersQuery(projectId)
 
   useEffect(() => {
     setActiveField(null)
@@ -61,6 +65,10 @@ export function EditableTaskRow({
   const parsedLabels = useMemo(() => Array.from(new Set(labelsInput.split(',').map((label) => label.trim()).filter(Boolean))), [labelsInput])
   const activeStatus = statuses.find((status) => status.id === task.statusId)
   const due = dueBadge(task.dueDate)
+  const session = loadSession()
+  const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+  const effectiveViewer = taskPermissionViewer ?? { platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: 'MEMBER' }
+  const assignDecision = canAssignTask(effectiveViewer, false)
 
   async function invalidateAll() {
     await Promise.all([
@@ -132,17 +140,15 @@ export function EditableTaskRow({
 
         <div onClick={handleFieldClick('assignee')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
           {activeField === 'assignee' ? (
-            <select
+            <AssigneePicker
+              projectId={projectId}
+              taskId={task.id}
               value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              onBlur={() => { if (assignee !== (task.assignee === 'Unassigned' ? '' : task.assignee)) void saveTask({ assignee: assignee || 'Unassigned' }); setActiveField(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (assignee !== (task.assignee === 'Unassigned' ? '' : task.assignee)) void saveTask({ assignee: assignee || 'Unassigned' }); setActiveField(null) } }}
-              autoFocus
-              style={inputStyle}
-            >
-              <option value="">Unassigned</option>
-              {users.map((user) => <option key={user.id} value={user.name}>{user.name}</option>)}
-            </select>
+              placeholder="Unassigned"
+              onChange={setAssignee}
+              onSaved={() => setActiveField(null)}
+              canManage={assignDecision.allowed}
+            />
           ) : (
             <AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} />
           )}
@@ -222,5 +228,5 @@ export function EditableTaskRow({
   )
 }
 
-const inputStyle: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontSize: 14 }
+const inputStyle: React.CSSProperties = { ...projectInputField }
 const starBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 22, cursor: 'pointer', lineHeight: 1 }

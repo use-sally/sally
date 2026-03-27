@@ -129,10 +129,8 @@ It writes instance files such as:
 - `.env`
 - `docker-compose.yml`
 - `Caddyfile` for `managed-simple`
-- `mcp/.env.example`
-- `mcp/run-mcp.sh`
-- `mcp/openclaw.example.json`
-- `mcp/MCP_SETUP.txt`
+
+For MCP, the primary path is now the hosted MCP endpoint inside Sally itself.
 
 ---
 
@@ -143,7 +141,9 @@ It writes instance files such as:
 - The installer asks for `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `MAIL_FROM`.
 - Sally's API mailer now supports those SMTP fields directly.
 - You can defer email setup, but Sally will not be able to send invites, password resets, or notifications until SMTP is configured.
-- Hosted MCP is now the primary path. The installer no longer auto-installs local `sally-mcp` scaffolding.
+- Hosted MCP is now the primary path.
+- After install, users create hosted MCP keys inside Sally itself and connect to the hosted `/mcp` endpoint.
+- The old local `sally-mcp` path is now advanced/legacy, not the primary onboarding path.
 
 ---
 

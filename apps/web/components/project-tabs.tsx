@@ -21,7 +21,7 @@ export function ProjectTabs({ projectId, current }: { projectId: string; current
               textDecoration: 'none',
               padding: '10px 14px',
               borderRadius: 12,
-              fontWeight: 700,
+              fontWeight: 400,
               background: active ? 'rgba(16, 185, 129, 0.10)' : 'var(--form-bg)',
               color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
               border: active ? '1px solid var(--form-border-focus)' : '1px solid var(--form-border)',

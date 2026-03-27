@@ -11,7 +11,7 @@ import { createTask, reorderTask } from '../lib/api'
 import { qk } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
 import { AssigneeAvatar } from './assignee-avatar'
-import { taskTitleText } from '../lib/theme'
+import { projectInputField, taskTitleText } from '../lib/theme'
 
 function dueBadge(dueDate: string | null) {
   if (!dueDate) return null
@@ -156,7 +156,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
           onChange={(e) => setDrafts((d: any) => ({ ...d, [column.id]: e.target.value }))}
           onKeyDown={(e) => { if (e.key === 'Enter') void addInlineTask(column.id) }}
           placeholder={`Add to ${column.title}`}
-          style={{ width: '100%', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', background: 'var(--form-bg)', color: 'var(--form-text)' }}
+          style={boardInput}
         />
         <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{savingFor === column.id ? 'Adding…' : 'Press Enter to create'}</div>
       </div>
@@ -183,3 +183,5 @@ function SortableTaskCard({ card, taskBaseHref }: { card: BoardCard; taskBaseHre
     </div>
   )
 }
+
+const boardInput: React.CSSProperties = { ...projectInputField, padding: '10px 12px' }

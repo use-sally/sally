@@ -1,9 +1,12 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { formControlMd } from '../lib/theme'
-import { createTask } from '../lib/api'
+import { useEffect, useMemo, useState } from 'react'
+import { formControlMd, labelText } from '../lib/theme'
+import { createTask, getProjectMembers } from '../lib/api'
+import { getWorkspaceId, loadSession } from '../lib/auth'
+import { canAssignTask, canCreateTask } from '../lib/task-permissions'
 import { tagStyle } from './app-shell'
+import { AssigneePicker } from './assignee-picker'
 
 type TaskModalProjectOption = { id: string; name: string }
 
@@ -18,9 +21,30 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
   const [todosInput, setTodosInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [projectRole, setProjectRole] = useState<string | null>(null)
 
   const parsedLabels = useMemo(() => Array.from(new Set(labelsInput.split(',').map((label) => label.trim()).filter(Boolean))), [labelsInput])
   const parsedTodos = useMemo(() => todosInput.split(/\r?\n/).map((line) => line.trim()).filter(Boolean), [todosInput])
+  const session = loadSession()
+  const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+  const createDecision = canCreateTask({ platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole }, false)
+  const assignDecision = canAssignTask({ platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole }, false)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!projectId || !session?.account?.id) {
+      setProjectRole(null)
+      return
+    }
+    void getProjectMembers(projectId)
+      .then((members) => {
+        if (!cancelled) setProjectRole(members.find((member) => member.accountId === session.account?.id)?.role ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setProjectRole(null)
+      })
+    return () => { cancelled = true }
+  }, [projectId, session?.account?.id])
 
   async function submit() {
     try {
@@ -55,7 +79,7 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
         <div style={{ display: 'grid', gap: 12 }}>
           <label style={field}><span>Project</span><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={input}>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
           <label style={field}><span>Title</span><input value={title} onChange={(e) => setTitle(e.target.value)} style={input} placeholder="Add task title" /></label>
-          <label style={field}><span>Assignee</span><input value={assignee} onChange={(e) => setAssignee(e.target.value)} style={input} placeholder="Alex" /></label>
+          <label style={field}><span style={labelText}>Assignee</span><AssigneePicker projectId={projectId} value={assignee} onChange={setAssignee} onSaved={setAssignee} placeholder="Unassigned" canManage={assignDecision.allowed} /></label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={field}>
               <span>Priority</span>
@@ -95,7 +119,7 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
         {error ? <div style={{ color: 'var(--danger-text)', marginTop: 12 }}>{error}</div> : null}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
           <button onClick={onClose} style={ghostBtn}>Cancel</button>
-          <button onClick={submit} style={primaryBtn} disabled={saving || !title.trim() || !projectId}>{saving ? 'Creating…' : 'Create task'}</button>
+          <button onClick={submit} style={primaryBtn} disabled={!createDecision.allowed || saving || !title.trim() || !projectId}>{saving ? 'Creating…' : 'Create task'}</button>
         </div>
       </div>
     </div>

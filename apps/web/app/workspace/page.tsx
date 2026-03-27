@@ -2,17 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AppShell, panel, pill } from '../../components/app-shell'
-import { createWorkspace, getMe, getWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, updateWorkspaceMember } from '../../lib/api'
+import { cancelWorkspaceInvite, createWorkspace, getMe, getWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, resendWorkspaceInvite, updateWorkspaceMember } from '../../lib/api'
 import { getWorkspaceId, loadSession, saveSession, setWorkspaceId as persistWorkspaceId } from '../../lib/auth'
 import { platformRoleLabel, workspaceRoleHelp, workspaceRoleLabel, workspaceRoleOptions } from '../../lib/roles'
 import type { WorkspaceMember } from '@sally/types/src'
-
-function workspaceRoleRank(role?: string | null) {
-  if (role === 'OWNER') return 3
-  if (role === 'MEMBER') return 2
-  if (role === 'VIEWER') return 1
-  return 0
-}
+import { projectInputField } from '../../lib/theme'
+import { canChangeWorkspaceMemberRole, canInviteWorkspaceMembers, canManageWorkspaceInvite, canRemoveWorkspaceMember } from '../../lib/workspace-permissions'
 
 export default function WorkspacePage() {
   const [workspaceId, setWorkspaceId] = useState<string>('')
@@ -28,6 +23,7 @@ export default function WorkspacePage() {
   const [inviteRole, setInviteRole] = useState('MEMBER')
   const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [inviteActionId, setInviteActionId] = useState<string | null>(null)
 
   const session = useMemo(() => loadSession(), [])
   const activeWorkspace = useMemo(() => {
@@ -37,8 +33,14 @@ export default function WorkspacePage() {
   }, [session])
 
   const isSuperadmin = session?.account?.platformRole === 'SUPERADMIN'
-  const canManageMembers = activeWorkspace?.role === 'OWNER' || isSuperadmin
-  const showActions = canManageMembers
+  const workspaceViewer = {
+    accountId: session?.account?.id ?? null,
+    platformRole: session?.account?.platformRole ?? null,
+    workspaceRole: activeWorkspace?.role ?? null,
+  }
+  const inviteDecision = canInviteWorkspaceMembers(workspaceViewer)
+  const inviteManageDecision = canManageWorkspaceInvite(workspaceViewer)
+  const showActions = inviteDecision.visible || inviteManageDecision.visible
   const memberGrid = showActions
     ? 'minmax(180px, 1.2fr) minmax(220px, 1.5fr) minmax(260px, 1.3fr) minmax(120px, 140px) 120px'
     : 'minmax(180px, 1.2fr) minmax(220px, 1.5fr) minmax(260px, 1.3fr) minmax(120px, 140px)'
@@ -145,17 +147,6 @@ export default function WorkspacePage() {
     }
   }
 
-  const canManageWorkspaceMember = (member: WorkspaceMember, nextRole?: string) => {
-    if (!canManageMembers) return false
-    const isSelf = session?.account?.id && member.accountId === session.account.id
-    if (isSelf) return false
-    if (isSuperadmin) return true
-    const requesterRank = workspaceRoleRank(activeWorkspace?.role)
-    const targetRank = workspaceRoleRank(member.role)
-    const nextRank = nextRole ? workspaceRoleRank(nextRole) : 0
-    return requesterRank > targetRank && requesterRank > nextRank
-  }
-
   const handleRemove = async (memberId: string, memberName?: string | null) => {
     if (!workspaceId) return
     if (!window.confirm(`Remove ${memberName || 'this member'} from the workspace?`)) return
@@ -171,6 +162,38 @@ export default function WorkspacePage() {
     }
   }
 
+  const handleResendInvite = async (inviteId: string) => {
+    if (!workspaceId) return
+    setInviteActionId(inviteId)
+    setError(null)
+    setInfo(null)
+    try {
+      const result = await resendWorkspaceInvite(workspaceId, inviteId)
+      setInfo(result.emailed ? 'Invite resent.' : 'Invite refreshed, but the email could not be sent.')
+      await loadMembers(workspaceId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resend invite')
+    } finally {
+      setInviteActionId(null)
+    }
+  }
+
+  const handleCancelInvite = async (inviteId: string, email: string) => {
+    if (!workspaceId) return
+    if (!window.confirm(`Cancel the pending invite for ${email}?`)) return
+    setInviteActionId(inviteId)
+    setError(null)
+    setInfo(null)
+    try {
+      const result = await cancelWorkspaceInvite(workspaceId, inviteId)
+      setInfo(result.deletedPlaceholderAccount ? 'Invite cancelled. Orphan placeholder account was also removed.' : 'Invite cancelled.')
+      await loadMembers(workspaceId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel invite')
+    } finally {
+      setInviteActionId(null)
+    }
+  }
 
   return (
     <AppShell title="Workspace" subtitle="Team access, roles, and workspace health.">
@@ -218,20 +241,26 @@ export default function WorkspacePage() {
               <div>Name</div><div>Email</div><div>Role</div><div>Joined</div>{showActions ? <div>Actions</div> : null}
             </div>
             {members.map((member) => {
-              const isSelf = session?.account?.id && member.accountId === session.account.id
+              const isSelf = !member.invited && session?.account?.id && member.accountId === session.account.id
+              const roleDecision = canChangeWorkspaceMemberRole(workspaceViewer, member)
+              const removeDecision = canRemoveWorkspaceMember(workspaceViewer, member)
+              const inviteManageTargetDecision = canManageWorkspaceInvite(workspaceViewer)
               const editableRoleOptions = isSuperadmin
                 ? workspaceRoleOptions
-                : workspaceRoleOptions.filter((role) => canManageWorkspaceMember(member, role.value))
+                : workspaceRoleOptions.filter((role) => canChangeWorkspaceMemberRole(workspaceViewer, member, role.value).allowed)
               return (
                 <div key={member.id} style={{ display: 'grid', gridTemplateColumns: memberGrid, columnGap: 16, padding: '12px', borderBottom: '1px solid var(--panel-border)', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 600 }}>{member.name ?? '—'}</div>
-                  <div style={{ color: 'var(--text-secondary)' }}>{member.email}</div>
+                  <div style={{ fontWeight: 600 }}>{member.name ?? (member.invited ? 'Invited' : '—')}</div>
+                  <div style={{ color: 'var(--text-secondary)', display: 'grid', gap: 4 }}>
+                    <span>{member.email}</span>
+                    {member.invited ? <span style={{ color: '#34d399', fontSize: 12 }}>Pending invite</span> : null}
+                  </div>
                   <div style={{ display: 'grid', gap: 4 }}>
-                    {canManageMembers ? (
+                    {roleDecision.visible ? (
                       <select
                         value={member.role}
                         onChange={(event) => void handleRoleChange(member.id, event.target.value)}
-                        disabled={roleUpdatingId === member.id || !canManageWorkspaceMember(member, member.role)}
+                        disabled={!!member.invited || roleUpdatingId === member.id || !roleDecision.allowed}
                         style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '6px 8px', fontWeight: 600, background: 'var(--form-bg)', color: 'var(--form-text)' }}
                       >
                         {(editableRoleOptions.length ? editableRoleOptions : workspaceRoleOptions.filter((role) => role.value === member.role)).map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
@@ -241,20 +270,40 @@ export default function WorkspacePage() {
                     )}
                     <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{workspaceRoleHelp(member.role)}</div>
                   </div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{new Date(member.createdAt).toLocaleDateString()}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13, display: 'grid', gap: 4 }}>
+                    <span>{member.invited ? `Invited ${new Date(member.createdAt).toLocaleDateString()}` : new Date(member.createdAt).toLocaleDateString()}</span>
+                    {member.invited && member.inviteExpiresAt ? <span>Expires {new Date(member.inviteExpiresAt).toLocaleDateString()}</span> : null}
+                  </div>
                   {showActions ? (
                     <div>
                       {isSelf ? (
                         <span style={pill('#f8fafc', '#475569')}>You</span>
-                      ) : (
+                      ) : member.invited && member.inviteId && inviteManageTargetDecision.visible ? (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => void handleResendInvite(member.inviteId!)}
+                            disabled={inviteActionId === member.inviteId}
+                            style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '6px 10px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--form-text)' }}
+                          >
+                            {inviteActionId === member.inviteId ? 'Working…' : 'Resend'}
+                          </button>
+                          <button
+                            onClick={() => void handleCancelInvite(member.inviteId!, member.email)}
+                            disabled={inviteActionId === member.inviteId}
+                            style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '6px 10px', fontWeight: 700, background: 'rgba(3, 7, 18, 0.96)', color: 'var(--text-primary)' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : removeDecision.visible ? (
                         <button
                           onClick={() => void handleRemove(member.id, member.name)}
-                          disabled={removingId === member.id || !canManageWorkspaceMember(member)}
+                          disabled={removingId === member.id || !removeDecision.allowed}
                           style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '6px 10px', fontWeight: 700, background: 'rgba(3, 7, 18, 0.96)', color: 'var(--text-primary)' }}
                         >
                           {removingId === member.id ? 'Removing…' : 'Remove'}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -264,42 +313,38 @@ export default function WorkspacePage() {
           </div>
         </div>
 
-        <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={{ fontWeight: 750 }}>Invite member</div>
-          {!canManageMembers ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>Only workspace owners or superadmins can invite members.</div> : null}
-          {info ? <div style={{ color: 'var(--text-primary)', fontSize: 13 }}>{info}</div> : null}
-          <form onSubmit={handleInvite} style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Email</span>
-              <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} disabled={!canManageMembers} placeholder="teammate@company.com" style={inputStyle} />
-            </label>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Name</span>
-              <input value={inviteName} onChange={(event) => setInviteName(event.target.value)} disabled={!canManageMembers} placeholder="Optional" style={inputStyle} />
-            </label>
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Role</span>
-              <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)} disabled={!canManageMembers} style={inputStyle}>
-                {inviteRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-              </select>
-            </label>
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Workspace owners see every project in this workspace. Superadmins see every workspace. Other workspace roles only see projects they are added to.</div>
-            <div>
-              <button type="submit" disabled={!canManageMembers || inviting} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }}>
-                {inviting ? 'Inviting…' : 'Send invite'}
-              </button>
-            </div>
-          </form>
-        </div>
+        {inviteDecision.visible ? (
+          <div style={{ ...panel, display: 'grid', gap: 12 }}>
+            <div style={{ fontWeight: 750 }}>Invite member</div>
+            {info ? <div style={{ color: 'var(--text-primary)', fontSize: 13 }}>{info}</div> : null}
+            <form onSubmit={handleInvite} style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Email</span>
+                <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} disabled={!inviteDecision.allowed} placeholder="teammate@company.com" style={inputStyle} />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Name</span>
+                <input value={inviteName} onChange={(event) => setInviteName(event.target.value)} disabled={!inviteDecision.allowed} placeholder="Optional" style={inputStyle} />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Role</span>
+                <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)} disabled={!inviteDecision.allowed} style={inputStyle}>
+                  {inviteRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                </select>
+              </label>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Workspace owners see every project in this workspace. Superadmins see every workspace. Other workspace roles only see projects they are added to.</div>
+              <div>
+                <button type="submit" disabled={!inviteDecision.allowed || inviting} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }}>
+                  {inviting ? 'Inviting…' : 'Send invite'}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
 
       </div>
     </AppShell>
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 12,
-  border: '1px solid var(--form-border)',
-  fontSize: 14,
-}
+const inputStyle: React.CSSProperties = { ...projectInputField }

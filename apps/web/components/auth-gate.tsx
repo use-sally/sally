@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { getMe, login, requestPasswordReset } from '../lib/api'
 import { clearSession, getWorkspaceId, loadSession, saveSession, setWorkspaceId, type Membership } from '../lib/auth'
+import { projectInputField } from '../lib/theme'
 
 type AuthMode = 'login' | 'forgot'
 
@@ -36,16 +37,7 @@ const authCard: CSSProperties = {
   boxShadow: '0 0 0 1px rgba(16,185,129,0.04), 0 20px 60px rgba(0,0,0,0.35)',
 }
 
-const inputStyle: CSSProperties = {
-  padding: '11px 12px',
-  borderRadius: 12,
-  border: '1px solid var(--form-border)',
-  fontSize: 14,
-  background: 'var(--form-bg)',
-  color: 'var(--text-primary)',
-  fontFamily: monoFont,
-  outline: 'none',
-}
+const inputStyle: CSSProperties = { ...projectInputField, padding: '11px 12px', color: 'var(--text-primary)', fontFamily: monoFont, outline: 'none' }
 
 const primaryButton: CSSProperties = {
   marginTop: 18,

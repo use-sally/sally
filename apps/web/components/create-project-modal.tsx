@@ -8,6 +8,7 @@ import { qk } from '../lib/query'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { ClientPicker } from './client-picker'
 import type { WorkspaceMember } from '@sally/types/src'
+import { labelText, projectInputField } from '../lib/theme'
 
 export function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
@@ -93,8 +94,8 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} style={ghostBtn}>Close</button>
         </div>
         <div style={{ display: 'grid', gap: 12 }}>
-          <label style={field}><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} style={input} placeholder="Project name" /></label>
-          <label style={field}><span>Description</span><textarea value={description} onChange={(e) => setDescription(e.target.value)} style={{ ...input, minHeight: 100, resize: 'vertical' }} /></label>
+          <label style={field}><span style={labelText}>Name</span><input value={name} onChange={(e) => setName(e.target.value)} style={input} placeholder="Project name" /></label>
+          <label style={field}><span style={labelText}>Description</span><textarea value={description} onChange={(e) => setDescription(e.target.value)} style={{ ...input, minHeight: 100, resize: 'vertical' }} /></label>
           <ClientPicker value={clientId} onChange={setClientId} />
           <div style={{ display: 'grid', gap: 8 }}>
             <div style={{ fontWeight: 700, color: 'rgba(209, 250, 229, 0.72)' }}>Always included</div>
@@ -142,7 +143,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
 
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.35)', display: 'grid', placeItems: 'center', padding: 24 }
 const modal: React.CSSProperties = { width: '100%', maxWidth: 560, background: 'var(--form-bg)', borderRadius: 20, padding: 22, boxShadow: '0 20px 50px rgba(15,23,42,0.18)' }
-const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: 'rgba(209, 250, 229, 0.72)' }
-const input: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', background: 'var(--form-bg)', fontWeight: 500 }
+const field: React.CSSProperties = { display: 'grid', gap: 6 }
+const input: React.CSSProperties = { ...projectInputField, fontWeight: 500 }
 const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
 const ghostBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }

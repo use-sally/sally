@@ -45,7 +45,7 @@ Current product surface:
 - notifications and notification preferences
 - personal API keys and hosted MCP keys
 - hosted MCP endpoint (`/mcp`)
-- local stdio MCP package (`sally-mcp`)
+- local stdio MCP package (`sally-mcp`) kept as a parked advanced/legacy path
 - web app + API in one TypeScript-first system
 
 ---
@@ -74,7 +74,7 @@ Detailed guides:
 
 ### Use MCP
 - [`docs/mcp.md`](./docs/mcp.md)
-- [`apps/mcp/README.md`](./apps/mcp/README.md)
+- [`apps/mcp/README.md`](./apps/mcp/README.md) — only if you explicitly want the parked local stdio path
 
 ---
 
@@ -116,6 +116,7 @@ Typical flow:
 Hosted MCP keys:
 - inherit real Sally permissions
 - can optionally be restricted to a workspace
+- are the default and recommended MCP path
 - are a better default than telling users to run extra local wrappers
 
 For details and examples:
@@ -140,7 +141,7 @@ Sally works well for:
 - `apps/web` — human-facing Next.js app
 - `apps/api` — Fastify API + hosted MCP endpoint
 - `apps/create-sally` — installer/bootstrap package
-- `apps/mcp` — local stdio MCP package
+- `apps/mcp` — parked local stdio MCP package for advanced/legacy setups
 - `packages/db` — Prisma schema + DB client
 - `packages/ui` — shared UI
 - `packages/types` — shared types
@@ -212,7 +213,7 @@ Sally currently ships as:
 - a web image
 - an API image
 - an installer package
-- a local MCP package
+- an optional parked local MCP package
 
 Published images:
 - `ghcr.io/use-sally/sally-web`

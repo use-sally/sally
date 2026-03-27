@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '../lib/api'
 import { qk, useClientsQuery } from '../lib/query'
+import { labelText, projectInputField } from '../lib/theme'
 
 type ClientPickerProps = {
   value: string
@@ -42,7 +43,15 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       <label style={field}>
-        <span>Client</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={labelText}>Client</span>
+          <details style={{ position: 'relative' }}>
+            <summary style={{ listStyle: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>ⓘ</summary>
+            <div style={{ position: 'absolute', right: 0, top: 20, zIndex: 2, width: 280, padding: 10, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: '0 12px 28px rgba(15,23,42,0.18)', ...helperPopoverText }}>
+              Attach work to a customer to make reporting and handoffs easier.
+            </div>
+          </details>
+        </div>
         <select value={showInlineCreate ? ADD_NEW_CLIENT_VALUE : value} onChange={(e) => {
           setError(null)
           if (e.target.value === ADD_NEW_CLIENT_VALUE) {
@@ -58,7 +67,6 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
           ))}
           <option value={ADD_NEW_CLIENT_VALUE}>Add new client</option>
         </select>
-        <span style={helperText}>Attach work to a customer to make reporting and handoffs easier.</span>
       </label>
       {showInlineCreate ? (
         <input
@@ -75,6 +83,6 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
   )
 }
 
-const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: 'rgba(209, 250, 229, 0.72)' }
-const input: React.CSSProperties = { width: '100%', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', background: 'var(--form-bg)', fontWeight: 500 }
-const helperText: React.CSSProperties = { fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }
+const field: React.CSSProperties = { display: 'grid', gap: 6 }
+const input: React.CSSProperties = { ...projectInputField, fontWeight: 500 }
+const helperPopoverText: React.CSSProperties = { fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', lineHeight: 1.45 }

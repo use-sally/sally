@@ -5,7 +5,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import type { Membership } from '../lib/auth'
 import { loadSession } from '../lib/auth'
 import { apiUrl, createApiKey, createMcpKey, getApiKeys, getMcpKeys, revokeApiKey, revokeMcpKey } from '../lib/api'
-import { deleteTextAction } from '../lib/theme'
+import { deleteTextAction, labelText, metaLabelText, projectInputField, sectionLabelText } from '../lib/theme'
 import { panel } from './app-shell'
 
 type KeyItem = {
@@ -74,8 +74,8 @@ export function PersonalApiKeysPanel() {
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ ...panel, display: 'grid', gap: 14 }}>
         <div style={{ display: 'grid', gap: 4 }}>
-          <div style={{ fontWeight: 750 }}>Hosted MCP</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+          <div style={sectionLabelText}>Hosted MCP</div>
+          <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>
             This is the primary path. Create a hosted MCP key here, copy the endpoint/config below, and point your agent or MCP client at Sally directly. The older local `sally-mcp` stdio route is still possible for advanced setups, but it is intentionally de-emphasized.
           </div>
         </div>
@@ -86,7 +86,7 @@ export function PersonalApiKeysPanel() {
         </div>
 
         <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 14, background: 'var(--form-bg)', border: '1px solid var(--panel-border)' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' }}>Recommended flow</div>
+          <div style={metaLabelText}>Recommended flow</div>
           <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
             <li>Create a hosted MCP key.</li>
             <li>Copy the endpoint or config snippet.</li>
@@ -114,7 +114,7 @@ export function PersonalApiKeysPanel() {
                 <option key={membership.workspaceId} value={membership.workspaceId}>{membership.workspaceName}</option>
               ))}
             </select>
-            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+            <span style={{ ...labelText, fontWeight: 500 }}>
               {restrictedWorkspace
                 ? `This key will only work inside ${restrictedWorkspace.workspaceName}.`
                 : 'Leave this open if the client needs access to every workspace your Sally user can reach.'}
@@ -128,7 +128,6 @@ export function PersonalApiKeysPanel() {
           await loadKeys()
         }}
         onCopy={() => mcpKeySecret ? void copyValue(mcpKeySecret, 'mcp') : undefined}
-        createButton="Create hosted MCP key"
         emptyText="No hosted MCP keys yet."
         secretTitle="New hosted MCP key"
         placeholder="e.g. Claude hosted MCP, OpenClaw"
@@ -153,7 +152,6 @@ export function PersonalApiKeysPanel() {
           await loadKeys()
         }}
         onCopy={() => apiKeySecret ? void copyValue(apiKeySecret, 'api') : undefined}
-        createButton="Create API key"
         emptyText="No API keys yet."
         secretTitle="New API key"
         placeholder="e.g. Zapier, n8n"
@@ -176,7 +174,6 @@ function KeySection({
   error,
   onCreate,
   onCopy,
-  createButton,
   emptyText,
   secretTitle,
   placeholder,
@@ -195,7 +192,6 @@ function KeySection({
   error: string | null
   onCreate: () => Promise<void>
   onCopy: () => void
-  createButton: string
   emptyText: string
   secretTitle: string
   placeholder: string
@@ -212,17 +208,17 @@ function KeySection({
   return (
     <div style={{ ...panel, display: 'grid', gap: 12 }}>
       <div style={{ display: 'grid', gap: 4 }}>
-        <div style={{ fontWeight: 750 }}>{title}</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{description}</div>
+        <div style={sectionLabelText}>{title}</div>
+        <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{description}</div>
       </div>
       {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
       {secret ? (
         <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 14, background: 'var(--panel-bg)', border: '1px solid var(--panel-border)' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{secretTitle}</div>
+          <div style={metaLabelText}>{secretTitle}</div>
           <button type="button" onClick={onCopy} style={{ ...copySurface, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }} title="Click to copy">
             <code style={{ wordBreak: 'break-all', fontSize: 13 }}>{secret}</code>
           </button>
-          <div style={{ color: copied ? 'var(--success-text)' : 'var(--text-muted)', fontSize: 12 }}>
+          <div style={{ ...labelText, color: copied ? 'var(--success-text)' : 'var(--text-muted)' }}>
             {copied ? 'Copied' : 'Click the key to copy it'}
           </div>
         </div>
@@ -245,7 +241,7 @@ function KeySection({
           />
         </label>
       </form>
-      <div style={{ color: loading ? 'var(--text-muted)' : 'var(--text-secondary)', fontSize: 12 }}>
+      <div style={{ ...labelText, color: loading ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
         {loading ? 'Creating…' : 'Press Enter in the label field to create the key'}
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
@@ -253,7 +249,7 @@ function KeySection({
           <div key={key.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '12px', borderBottom: '1px solid var(--panel-border)' }}>
             <div style={{ display: 'grid', gap: 4 }}>
               <div style={{ fontWeight: 600, color: 'var(--task-title)' }}>{key.label}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{renderMeta(key)}</div>
+              <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{renderMeta(key)}</div>
             </div>
             <button
               onClick={() => void (async () => {
@@ -275,7 +271,7 @@ function KeySection({
             </button>
           </div>
         ))}
-        {!items.length && !loading ? <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>{emptyText}</div> : null}
+        {!items.length && !loading ? <div style={{ ...labelText, fontSize: 14, fontWeight: 500 }}>{emptyText}</div> : null}
       </div>
     </div>
   )
@@ -288,7 +284,7 @@ function CopyRow({ label, value, copied, onCopy }: { label: string; value: strin
       <button type="button" onClick={onCopy} style={{ ...copySurface, width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }} title="Click to copy">
         <code>{value}</code>
       </button>
-      <div style={{ color: copied ? 'var(--success-text)' : 'var(--text-muted)', fontSize: 12 }}>
+      <div style={{ ...labelText, color: copied ? 'var(--success-text)' : 'var(--text-muted)' }}>
         {copied ? 'Copied' : 'Click the field to copy'}
       </div>
     </div>
@@ -302,49 +298,16 @@ function CopyBlock({ label, value, copied, onCopy }: { label: string; value: str
       <button type="button" onClick={onCopy} style={{ ...copySurface, width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }} title="Click to copy">
         <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{value}</pre>
       </button>
-      <div style={{ color: copied ? 'var(--success-text)' : 'var(--text-muted)', fontSize: 12 }}>
+      <div style={{ ...labelText, color: copied ? 'var(--success-text)' : 'var(--text-muted)' }}>
         {copied ? 'Copied' : 'Click the field to copy'}
       </div>
     </div>
   )
 }
 
-const fieldLabel: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 700,
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase',
-}
+const fieldLabel: CSSProperties = metaLabelText
 
-const inputStyle: CSSProperties = {
-  height: 42,
-  boxSizing: 'border-box',
-  padding: '10px 12px',
-  borderRadius: 12,
-  border: '1px solid var(--form-border)',
-  fontSize: 14,
-  lineHeight: '20px',
-  background: 'var(--form-bg)',
-  color: 'var(--form-text)',
-}
-
-const primaryButton: CSSProperties = {
-  background: 'var(--form-bg)',
-  color: 'var(--form-text)',
-  border: 'none',
-  borderRadius: 12,
-  padding: '11px 14px',
-  fontWeight: 700,
-}
-
-const smallButton: CSSProperties = {
-  borderRadius: 10,
-  border: '1px solid var(--form-border)',
-  padding: '6px 10px',
-  fontWeight: 700,
-  background: 'var(--form-bg)',
-  color: 'var(--text-primary)',
-}
+const inputStyle: CSSProperties = { ...projectInputField, height: 42, boxSizing: 'border-box', lineHeight: '20px' }
 
 const copySurface: CSSProperties = {
   padding: '10px 12px',

@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { resetPassword } from '../../lib/api'
 import { saveSession, setWorkspaceId } from '../../lib/auth'
+import { projectInputField } from '../../lib/theme'
 
 type Status = 'idle' | 'saving' | 'done'
 
@@ -26,15 +27,7 @@ const cardStyle: React.CSSProperties = {
   padding: 24,
   boxShadow: '0 0 0 1px rgba(16,185,129,0.04), 0 20px 60px rgba(0,0,0,0.35)',
 }
-const inputStyle: React.CSSProperties = {
-  padding: '11px 12px',
-  borderRadius: 12,
-  border: '1px solid var(--form-border)',
-  fontSize: 14,
-  background: 'var(--form-bg)',
-  color: 'var(--text-primary)',
-  fontFamily: monoFont,
-}
+const inputStyle: React.CSSProperties = { ...projectInputField, padding: '11px 12px', color: 'var(--text-primary)', fontFamily: monoFont }
 const primaryButton: React.CSSProperties = {
   marginTop: 18,
   width: '100%',
@@ -64,6 +57,7 @@ function ResetPasswordForm() {
   const params = useSearchParams()
   const router = useRouter()
   const token = useMemo(() => params.get('token') ?? '', [params])
+  const inviteToken = useMemo(() => params.get('inviteToken') ?? '', [params])
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -88,7 +82,7 @@ function ResetPasswordForm() {
     setError(null)
     setInfo(null)
     try {
-      const response = await resetPassword({ token: token.trim(), password: password.trim() })
+      const response = await resetPassword({ token: token.trim(), password: password.trim(), inviteToken: inviteToken.trim() || undefined })
       saveSession({ token: response.sessionToken, expiresAt: response.expiresAt, account: response.account, memberships: response.memberships })
       if (response.memberships[0]?.workspaceId) setWorkspaceId(response.memberships[0].workspaceId)
       setStatus('done')

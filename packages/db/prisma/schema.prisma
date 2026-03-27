@@ -28,7 +28,6 @@ enum PlatformRole {
 
 enum WorkspaceRole {
   OWNER
-  ADMIN
   MEMBER
   VIEWER
 }

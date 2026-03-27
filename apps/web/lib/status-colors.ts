@@ -38,7 +38,7 @@ export function resolveStatusThemeColors(color?: string | null) {
   const pair = resolveStatusPair(color)
   if (pair) {
     return {
-      dark: { background: pair.darkBg, color: pair.darkText, border: pair.darkBg },
+      dark: { background: pair.darkText, color: pair.darkBg, border: pair.darkText },
       light: { background: pair.lightBg, color: pair.lightText, border: pair.lightBg },
     }
   }

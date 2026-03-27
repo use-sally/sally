@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { AppShell, panel } from '../../components/app-shell'
+import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
 import { apiUrl, getNotificationPreferences, getProfile, logout, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
 import { platformRoleLabel } from '../../lib/roles'
-import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
+import { labelText, projectInputField, sectionLabelText } from '../../lib/theme'
 
 async function compressProfileImage(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
   const imageUrl = URL.createObjectURL(file)
@@ -140,7 +141,7 @@ export default function ProfilePage() {
     <AppShell title="Profile" subtitle="Your account, personal API keys, and access context.">
       <div style={{ display: 'grid', gap: 18 }}>
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={{ fontWeight: 750 }}>Profile</div>
+          <div style={sectionLabelText}>Profile</div>
           {loading ? <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div> : null}
           {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
           {info ? <div style={{ color: 'var(--text-primary)', fontSize: 13 }}>{info}</div> : null}
@@ -155,20 +156,20 @@ export default function ProfilePage() {
               >
                 {avatarSrc ? <img src={avatarSrc} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (name?.trim()?.[0] || email?.trim()?.[0] || '?').toUpperCase()}
               </button>
-              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{uploadingImage ? 'Uploading image…' : 'Click the profile image to upload or replace it. Compression matches task description images.'}</div>
+              <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{uploadingImage ? 'Uploading image…' : 'Click the profile image to upload or replace it. Compression matches task description images.'}</div>
               <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleImageUpload(event)} style={{ display: 'none' }} />
             </div>
             <label style={field}><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} style={inputStyle} /></label>
             <label style={field}><span>Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" style={inputStyle} disabled={lockedSuperadminEmail} /></label>
-            {profile?.pendingEmail ? <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Pending email change: {profile.pendingEmail}</div> : null}
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>PNG/JPG/WebP supported.</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{lockedSuperadminEmail ? 'The configured superadmin email is locked. Change it via .env and redeploy only.' : 'If you change your email, we will send a confirmation link to the new address before applying it.'}</div>
+            {profile?.pendingEmail ? <div style={{ ...labelText, fontSize: 13 }}>Pending email change: {profile.pendingEmail}</div> : null}
+            <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>PNG/JPG/WebP supported.</div>
+            <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{lockedSuperadminEmail ? 'The configured superadmin email is locked. Change it via .env and redeploy only.' : 'If you change your email, we will send a confirmation link to the new address before applying it.'}</div>
             <div><button type="submit" disabled={saving || loading} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }}>{saving ? 'Saving…' : 'Save profile'}</button></div>
           </form>
         </div>
 
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={{ fontWeight: 750 }}>Account context</div>
+          <div style={sectionLabelText}>Account context</div>
           <div><strong>Platform role:</strong> {platformRoleLabel(profile?.platformRole || 'NONE')}</div>
           <div><strong>Current email:</strong> {profile?.email || '—'}</div>
           <div>
@@ -177,14 +178,14 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={{ fontWeight: 750 }}>Notifications</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Control how Sally notifies you in-app and by email.</div>
+          <div style={sectionLabelText}>Notifications</div>
+          <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>Control how Sally notifies you in-app and by email.</div>
           <div style={{ display: 'grid', gap: 10 }}>
             {notificationPreferences.map((preference) => (
               <div key={preference.eventType} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 12, alignItems: 'center', padding: '12px 14px', border: '1px solid var(--panel-border)', borderRadius: 14, background: 'var(--form-bg)' }}>
                 <div>
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{preference.eventType === 'comment.mentioned' ? 'Comment mentions' : 'Task assignments'}</div>
-                  <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 12 }}>{preference.eventType === 'comment.mentioned' ? 'Notify me when someone mentions me in a task comment.' : 'Notify me when I am assigned to a task.'}</div>
+                  <div style={{ ...labelText, marginTop: 4 }}>{preference.eventType === 'comment.mentioned' ? 'Notify me when someone mentions me in a task comment.' : 'Notify me when I am assigned to a task.'}</div>
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={preference.inAppEnabled} onChange={(event) => void handlePreferenceToggle(preference.eventType, 'inAppEnabled', event.target.checked)} /> In-app</label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={preference.emailEnabled} onChange={(event) => void handlePreferenceToggle(preference.eventType, 'emailEnabled', event.target.checked)} /> Email</label>
@@ -200,4 +201,4 @@ export default function ProfilePage() {
 }
 
 const field: React.CSSProperties = { display: 'grid', gap: 6 }
-const inputStyle: React.CSSProperties = { padding: '10px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--form-text)', fontSize: 14 }
+const inputStyle: React.CSSProperties = { ...projectInputField }

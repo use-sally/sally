@@ -7,6 +7,8 @@ Sally supports two MCP patterns:
 
 For most users, the recommended default is **hosted MCP**.
 
+The local stdio package is currently best thought of as a parked advanced/legacy path, not an equal product surface.
+
 ---
 
 ## Quick decision guide
@@ -17,10 +19,10 @@ Choose **hosted MCP** if you want:
 - remote clients connecting directly to Sally
 - key management inside the Sally product
 
-Choose **stdio `sally-mcp`** if you want:
+Choose **stdio `sally-mcp`** only if you explicitly want:
 - a local CLI process
 - older or stricter MCP clients that expect stdio
-- extra tool families exposed by the local MCP wrapper
+- a compatibility bridge for advanced or legacy setups
 
 ---
 
@@ -196,7 +198,9 @@ sally-mcp
 It is useful when:
 - your MCP client prefers local processes
 - you want a stable CLI-based setup
-- you want the additional tool families documented in `apps/mcp/README.md`
+- you specifically need the parked compatibility wrapper in `apps/mcp`
+
+If you are choosing fresh, prefer hosted MCP instead.
 
 ---
 

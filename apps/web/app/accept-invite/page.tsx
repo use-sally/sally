@@ -1,8 +1,9 @@
 'use client'
 
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { acceptInvite } from '../../lib/api'
+import { acceptInvite, getInviteInfo, requestPasswordReset } from '../../lib/api'
+import { projectInputField } from '../../lib/theme'
 import { saveSession, setWorkspaceId } from '../../lib/auth'
 
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
@@ -24,15 +25,7 @@ const cardStyle: React.CSSProperties = {
   padding: 24,
   boxShadow: '0 0 0 1px rgba(16,185,129,0.04), 0 20px 60px rgba(0,0,0,0.35)',
 }
-const inputStyle: React.CSSProperties = {
-  padding: '11px 12px',
-  borderRadius: 12,
-  border: '1px solid var(--form-border)',
-  fontSize: 14,
-  background: 'var(--form-bg)',
-  color: 'var(--text-primary)',
-  fontFamily: monoFont,
-}
+const inputStyle: React.CSSProperties = { ...projectInputField, padding: '11px 12px', color: 'var(--text-primary)', fontFamily: monoFont }
 const primaryButton: React.CSSProperties = {
   marginTop: 18,
   width: '100%',
@@ -45,21 +38,76 @@ const primaryButton: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: monoFont,
 }
+const inlineLinkButton: React.CSSProperties = {
+  marginTop: 8,
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  color: '#fde68a',
+  textDecoration: 'underline',
+  cursor: 'pointer',
+  fontSize: 13,
+  fontFamily: monoFont,
+}
+
+function readInviteTokenFromLocation() {
+  if (typeof window === 'undefined') return ''
+  const url = new URL(window.location.href)
+  return url.searchParams.get('token')?.trim() ?? ''
+}
 
 function AcceptInviteForm() {
   const params = useSearchParams()
   const router = useRouter()
-  const token = useMemo(() => params.get('token') ?? '', [params])
+  const tokenFromParams = useMemo(() => params.get('token')?.trim() ?? '', [params])
+  const [token, setToken] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [inviteInfo, setInviteInfo] = useState<null | { email: string; workspaceId: string; role: string; expiresAt: string; accountExists: boolean; accountActivated: boolean }>(null)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [resetting, setResetting] = useState(false)
+
+  useEffect(() => {
+    const nextToken = tokenFromParams || readInviteTokenFromLocation()
+    if (nextToken) setToken(nextToken)
+  }, [tokenFromParams])
+
+  useEffect(() => {
+    const activeToken = token || tokenFromParams || readInviteTokenFromLocation()
+    if (!activeToken) return
+    let cancelled = false
+    void getInviteInfo(activeToken)
+      .then((response) => {
+        if (!cancelled) setInviteInfo(response.invite)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load invite')
+      })
+    return () => { cancelled = true }
+  }, [token, tokenFromParams])
+
+  const handlePasswordReset = async () => {
+    if (!inviteInfo?.email || resetting) return
+    setResetting(true)
+    setError(null)
+    setInfo(null)
+    try {
+      await requestPasswordReset({ email: inviteInfo.email, inviteToken: token || tokenFromParams || readInviteTokenFromLocation() })
+      setInfo(`Password reset sent to ${inviteInfo.email}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send password reset')
+    } finally {
+      setResetting(false)
+    }
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!token.trim()) {
+    const activeToken = token || tokenFromParams || readInviteTokenFromLocation()
+    if (!activeToken.trim()) {
       setError('Invite token is required.')
       return
     }
@@ -67,7 +115,7 @@ function AcceptInviteForm() {
       setError('Password is required.')
       return
     }
-    if (password.trim() !== confirm.trim()) {
+    if (!inviteInfo?.accountActivated && password.trim() !== confirm.trim()) {
       setError('Passwords do not match.')
       return
     }
@@ -75,7 +123,7 @@ function AcceptInviteForm() {
     setError(null)
     setInfo(null)
     try {
-      const response = await acceptInvite({ token: token.trim(), name: name.trim() || undefined, password: password.trim() })
+      const response = await acceptInvite({ token: activeToken.trim(), name: name.trim() || undefined, password: password.trim() })
       saveSession({ token: response.sessionToken, expiresAt: response.expiresAt, account: response.account, memberships: response.memberships })
       if (response.memberships.length) setWorkspaceId(response.memberships[0].workspaceId)
       setInfo('Invite accepted. Redirecting to workspace...')
@@ -94,25 +142,42 @@ function AcceptInviteForm() {
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / invite</div>
       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>Accept your invite</div>
-      <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Set your name and password to join the workspace.</div>
-      {!token ? <div style={{ marginTop: 18, color: 'var(--danger-text)', fontSize: 13 }}>Invite token is missing from this link.</div> : null}
-      <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Name</span>
-        <input value={name} onChange={(event) => setName(event.target.value)} type="text" placeholder="Optional" style={inputStyle} />
-      </label>
+      <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
+        {inviteInfo?.accountActivated
+          ? 'This email already has an account. Enter your existing password to join this workspace.'
+          : 'Set your name and password to join the workspace.'}
+      </div>
+      {!(token || tokenFromParams) ? <div style={{ marginTop: 18, color: 'var(--danger-text)', fontSize: 13 }}>Invite token is missing from this link.</div> : null}
+      {!inviteInfo?.accountActivated ? (
+        <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Name</span>
+          <input value={name} onChange={(event) => setName(event.target.value)} type="text" placeholder="Optional" style={inputStyle} />
+        </label>
+      ) : null}
       <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Password</span>
         <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
       </label>
-      <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 10 }}>Use at least 12 characters with uppercase, lowercase, number, and symbol.</div>
-      <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Confirm password</span>
-        <input value={confirm} onChange={(event) => setConfirm(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
-      </label>
-      {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
+      {!inviteInfo?.accountActivated ? <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 10 }}>Use at least 12 characters with uppercase, lowercase, number, and symbol.</div> : null}
+      {!inviteInfo?.accountActivated ? (
+        <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Confirm password</span>
+          <input value={confirm} onChange={(event) => setConfirm(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
+        </label>
+      ) : null}
+      {error ? (
+        <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>
+          <div>{error}</div>
+          {inviteInfo?.accountActivated && error.includes('reset it first') ? (
+            <button type="button" onClick={() => void handlePasswordReset()} disabled={resetting} style={inlineLinkButton}>
+              {resetting ? 'Sending reset…' : `Send password reset to ${inviteInfo.email}`}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
       <button type="submit" disabled={loading} style={primaryButton}>
-        {loading ? 'Accepting…' : 'Accept invite'}
+        {loading ? 'Accepting…' : inviteInfo?.accountActivated ? 'Join workspace' : 'Accept invite'}
       </button>
     </form>
   )

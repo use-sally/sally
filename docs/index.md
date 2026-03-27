@@ -8,7 +8,7 @@ This documentation set is intended to be useful in two ways:
 
 If a page here disagrees with the actual implementation, trust the code in:
 - `apps/api/src/index.ts`
-- `apps/mcp/src/index.ts`
+- `apps/mcp/src/index.ts` for the parked stdio wrapper only
 - `packages/db/prisma/schema.prisma`
 
 ## Start here
@@ -41,7 +41,7 @@ If a page here disagrees with the actual implementation, trust the code in:
 Sally currently covers:
 - account login and session auth
 - workspaces and memberships
-- invites and password reset flows
+- invites, invite management, and password reset flows
 - projects with default or custom statuses
 - project memberships
 - tasks with priorities, descriptions, due dates, labels, todos, comments, and inline images
@@ -49,7 +49,7 @@ Sally currently covers:
 - notifications for assignment and mentions
 - timesheets and reporting
 - hosted MCP via `/mcp`
-- local stdio MCP via `sally-mcp`
+- local stdio MCP via `sally-mcp` as a parked advanced/legacy path
 
 ## Documentation style notes
 

@@ -12,6 +12,9 @@ import { DndContext, PointerSensor, type DragEndEvent, useSensor, useSensors } f
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { MarkdownDescriptionEditor } from './markdown-description-editor'
+import { AssigneePicker } from './assignee-picker'
+import { getWorkspaceId, loadSession } from '../lib/auth'
+import { canAssignTask } from '../lib/task-permissions'
 import { deleteTextAction, formControlMd, theme } from '../lib/theme'
 
 async function compressImageForTask(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
@@ -56,6 +59,9 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
   const qc = useQueryClient()
   const { data: task, isLoading, error } = useTaskQuery(taskId)
   const { data: project } = useProjectQuery(projectId)
+  const session = loadSession()
+  const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+  const assignDecision = canAssignTask({ platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: 'MEMBER' }, false)
   const { data: timesheetUsers = [] } = useTimesheetUsersQuery(projectId)
   const [commentBody, setCommentBody] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
@@ -374,7 +380,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
             </div>
 
             <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
-              <Row label="Assignee"><input defaultValue={task.assignee} onBlur={(e) => void save({ assignee: e.target.value })} style={inputStyle} /></Row>
+              <Row label="Assignee"><AssigneePicker projectId={task.project.id} taskId={task.id} value={task.assignee === 'Unassigned' ? '' : task.assignee} placeholder="Unassigned" canManage={assignDecision.allowed} /></Row>
               <Row label="Priority">
                 <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                   {[1, 2, 3].map((rating) => {

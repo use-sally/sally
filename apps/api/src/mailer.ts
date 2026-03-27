@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer'
 export type PasswordResetPayload = {
   email: string
   resetToken: string
+  inviteToken?: string
   resetUrl?: string
   expiresAt?: Date
 }
@@ -161,7 +162,7 @@ export async function sendPasswordResetEmail(payload: PasswordResetPayload): Pro
   }
 
   const baseUrl = process.env.APP_BASE_URL!.replace(/\/+$/, '')
-  const resetUrl = payload.resetUrl ?? `${baseUrl}/reset-password?token=${encodeURIComponent(payload.resetToken)}`
+  const resetUrl = payload.resetUrl ?? `${baseUrl}/reset-password?token=${encodeURIComponent(payload.resetToken)}${payload.inviteToken ? `&inviteToken=${encodeURIComponent(payload.inviteToken)}` : ''}`
   const expiresAtText = formatExpiry(payload.expiresAt)
   const rendered = renderEmailTemplate({
     preheader: 'Reset your sally_ password',
