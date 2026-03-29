@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import type { Notification } from '@sally/types/src'
-import { getWorkspaceId, loadSession, setWorkspaceId } from '../lib/auth'
-import { apiUrl, getNotifications, readAllNotifications, readNotification } from '../lib/api'
+import { getWorkspaceId, loadSession, saveSession, setWorkspaceId } from '../lib/auth'
+import { apiUrl, createWorkspace, getMe, getNotifications, readAllNotifications, readNotification } from '../lib/api'
 import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
 import type { ThemeMode } from '../lib/theme'
@@ -16,7 +16,6 @@ const navItems = [
   { href: '/projects', label: 'Projects' },
   { href: '/clients', label: 'Clients' },
   { href: '/timesheets', label: 'Timesheets' },
-  { href: '/workspace', label: 'Workspace' },
 ]
 
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
@@ -36,11 +35,16 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const [accountAvatarUrl, setAccountAvatarUrl] = useState<string>('')
   const [workspaceOptions, setWorkspaceOptions] = useState<{ id: string; name: string; role: string }[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>('')
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false)
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  const [newWorkspaceName, setNewWorkspaceName] = useState('')
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const [themeMode, setThemeMode] = useState<ThemeMode>('dark')
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
+  const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const storedTheme = (typeof window !== 'undefined' ? window.localStorage.getItem('theme-mode') : null) as ThemeMode | null
@@ -77,6 +81,35 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     window.location.reload()
   }
 
+  const handleCreateWorkspace = async () => {
+    if (creatingWorkspace) return
+    const session = loadSession()
+    if (session?.account?.platformRole !== 'SUPERADMIN') return
+    const name = newWorkspaceName.trim()
+    if (!name) {
+      setWorkspaceError('Workspace name is required.')
+      return
+    }
+
+    try {
+      setCreatingWorkspace(true)
+      setWorkspaceError(null)
+      const created = await createWorkspace({ name })
+      const current = loadSession()
+      const me = await getMe()
+      if (current?.token) saveSession({ token: current.token, expiresAt: current.expiresAt, account: me.account, memberships: me.memberships })
+      setWorkspaceId(created.workspaceId)
+      setActiveWorkspaceId(created.workspaceId)
+      setWorkspaceMenuOpen(false)
+      setNewWorkspaceName('')
+      window.location.reload()
+    } catch (err) {
+      setWorkspaceError(err instanceof Error ? err.message : 'Failed to create workspace')
+    } finally {
+      setCreatingWorkspace(false)
+    }
+  }
+
   const handleThemeChange = (nextTheme: ThemeMode) => {
     setThemeMode(nextTheme)
     document.documentElement.setAttribute('data-theme', nextTheme)
@@ -107,6 +140,15 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     document.addEventListener('mousedown', handlePointerDown)
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [notificationsOpen])
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!workspaceMenuRef.current?.contains(event.target as Node)) setWorkspaceMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [workspaceMenuOpen])
 
   const unreadCount = notifications.filter((notification) => !notification.readAt).length
 
@@ -170,11 +212,11 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
             {workspaceOptions.length ? (
-              <div style={{ display: 'grid', gap: 6 }}>
+              <div ref={workspaceMenuRef} style={{ display: 'grid', gap: 6, position: 'relative' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Workspace</div>
-                <select
-                  value={activeWorkspaceId}
-                  onChange={(event) => handleWorkspaceChange(event.target.value)}
+                <button
+                  type="button"
+                  onClick={() => setWorkspaceMenuOpen((value) => !value)}
                   style={{
                     borderRadius: 12,
                     border: '1px solid var(--form-border)',
@@ -185,12 +227,78 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                     width: '100%',
                     fontFamily: monoFont,
                     outline: 'none',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
                   }}
                 >
-                  {workspaceOptions.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
-                  ))}
-                </select>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeWorkspace?.name || 'Select workspace'}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{workspaceMenuOpen ? '−' : '+'}</span>
+                </button>
+                {workspaceMenuOpen ? (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 30, border: '1px solid var(--panel-border)', borderRadius: 14, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', padding: 10, display: 'grid', gap: 8 }}>
+                    <div style={{ display: 'grid', gap: 4 }}>
+                      {workspaceOptions.map((workspace) => {
+                        const selected = workspace.id === activeWorkspaceId
+                        return (
+                          <button
+                            key={workspace.id}
+                            type="button"
+                            onClick={() => handleWorkspaceChange(workspace.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              width: '100%',
+                              padding: '9px 10px',
+                              borderRadius: 10,
+                              border: selected ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                              background: selected ? '#fcd34d' : 'transparent',
+                              color: selected ? '#052e16' : 'var(--text-primary)',
+                              cursor: selected ? 'default' : 'pointer',
+                              textAlign: 'left',
+                              fontFamily: monoFont,
+                              fontSize: 12,
+                              fontWeight: 700,
+                            }}
+                          >
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workspace.name}</span>
+                            <span style={{ color: selected ? '#052e16' : 'var(--text-muted)', fontSize: 11 }}>{workspaceRoleLabel(workspace.role)}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {loadSession()?.account?.platformRole === 'SUPERADMIN' ? (
+                      <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--panel-border)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Create workspace</div>
+                        <input
+                          value={newWorkspaceName}
+                          onChange={(event) => setNewWorkspaceName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              void handleCreateWorkspace()
+                            }
+                          }}
+                          placeholder="New workspace"
+                          style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontFamily: monoFont, fontSize: 12 }}
+                        />
+                        {workspaceError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{workspaceError}</div> : null}
+                        <button
+                          type="button"
+                          onClick={() => void handleCreateWorkspace()}
+                          disabled={creatingWorkspace}
+                          style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer', fontFamily: monoFont, fontSize: 12 }}
+                        >
+                          {creatingWorkspace ? 'Creating…' : 'Create workspace'}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {activeWorkspace ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{workspaceRoleLabel(activeWorkspace.role)}</span> : null}
               </div>
             ) : null}
@@ -366,7 +474,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#fcd34d', marginBottom: 8 }}>runtime / workspace</div>
               <div style={{ fontSize: 30, fontWeight: 750, letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>{title}</div>
-              <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 14 }}>{subtitle}</div>
+              <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12, fontFamily: monoFont, letterSpacing: '0.04em' }}>{subtitle}</div>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button

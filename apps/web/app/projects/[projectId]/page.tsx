@@ -9,6 +9,7 @@ import { ProjectTabs } from '../../../components/project-tabs'
 import { StatusSettings } from '../../../components/status-settings'
 import { TimesheetsTable } from '../../../components/timesheets-table'
 import { ProjectCurrentTasks } from '../../../components/project-current-tasks'
+import { SectionHeaderWithInfo } from '../../../components/info-flag'
 import { addProjectMember, archiveProject, deleteProject, getProjectActivity, getProjectMembers, getWorkspaceMembers, inviteWorkspaceMember, removeProjectMember, updateProject, updateProjectMember } from '../../../lib/api'
 import { getWorkspaceId, loadSession } from '../../../lib/auth'
 import { qk, useClientsQuery, useProjectQuery } from '../../../lib/query'
@@ -582,8 +583,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
             </div>
 
             <div style={panel}>
-              <div style={{ fontWeight: 750, marginBottom: 8 }}>Recent activity</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 14 }}>Live project log. Shows the latest 100 events with actor, API key usage, and timestamp.</div>
+              <SectionHeaderWithInfo
+                title="Recent activity"
+                info="Live project log. Shows the latest 100 events with actor, API key usage, and timestamp."
+                marginBottom={14}
+              />
               {activity.length ? (
                 <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }}>
                   {[...activity].reverse().map((event, index, items) => (
@@ -601,7 +605,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
             </div>
 
             <div style={panel}>
-              <div style={{ fontWeight: 750, marginBottom: 14 }}>Timesheets</div>
+              <SectionHeaderWithInfo
+                title="Timesheets"
+                info="Validated entries are hidden by default. Turn this on to review them and uncheck validation to restore them."
+                marginBottom={14}
+              />
               {archivedParam ? <ArchivedProjectTimesheets entries={project.recentTimesheets} /> : <TimesheetsTable lockedProjectId={projectId} lockedProjectName={project.name} taskOptions={taskOptions} showProjectColumn={false} showCustomerColumn={false} />}
             </div>
           </div>

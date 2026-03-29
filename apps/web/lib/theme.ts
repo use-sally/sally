@@ -171,6 +171,43 @@ export const sectionLabelText: CSSProperties = {
   fontWeight: 750,
 }
 
+export const sectionHeaderRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+}
+
+export const infoFlagIconButton: CSSProperties = {
+  listStyle: 'none',
+  cursor: 'pointer',
+  color: 'var(--text-muted)',
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1,
+  userSelect: 'none',
+}
+
+export const infoFlagPopover: CSSProperties = {
+  position: 'absolute',
+  top: 20,
+  zIndex: 20,
+  width: 280,
+  padding: 10,
+  borderRadius: 12,
+  border: '1px solid var(--panel-border)',
+  background: 'var(--panel-bg)',
+  boxShadow: 'var(--panel-shadow)',
+}
+
+export const infoFlagText: CSSProperties = {
+  color: 'var(--text-muted)',
+  fontSize: 12,
+  fontWeight: 500,
+  textTransform: 'none',
+  letterSpacing: 'normal',
+  lineHeight: 1.45,
+}
+
 function varsFor(mode: ThemeMode) {
   const palette = mode === 'light' ? lightTheme.color : darkTheme.color
   return `

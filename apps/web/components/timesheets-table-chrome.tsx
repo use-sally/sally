@@ -81,7 +81,6 @@ export function TimesheetsFiltersBar({
         <select value={userId} onChange={(e) => onUserChange(e.target.value)} style={formControlSm}><option value="">All users</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 14, whiteSpace: 'nowrap', fontWeight: 600 }}><input type="checkbox" checked={showValidated} onChange={(e) => onShowValidatedChange(e.target.checked)} /> Show validated / restore</label>
       </div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Validated entries are hidden by default. Turn this on to review them and uncheck validation to restore them.</div>
     </div>
   )
 }

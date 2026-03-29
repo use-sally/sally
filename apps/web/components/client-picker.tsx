@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '../lib/api'
 import { qk, useClientsQuery } from '../lib/query'
 import { labelText, projectInputField } from '../lib/theme'
+import { InfoFlag } from './info-flag'
 
 type ClientPickerProps = {
   value: string
@@ -45,12 +46,7 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
       <label style={field}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={labelText}>Client</span>
-          <details style={{ position: 'relative' }}>
-            <summary style={{ listStyle: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>ⓘ</summary>
-            <div style={{ position: 'absolute', right: 0, top: 20, zIndex: 2, width: 280, padding: 10, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: '0 12px 28px rgba(15,23,42,0.18)', ...helperPopoverText }}>
-              Attach work to a customer to make reporting and handoffs easier.
-            </div>
-          </details>
+          <InfoFlag text="Attach work to a customer to make reporting and handoffs easier." />
         </div>
         <select value={showInlineCreate ? ADD_NEW_CLIENT_VALUE : value} onChange={(e) => {
           setError(null)
@@ -85,4 +81,3 @@ export function ClientPicker({ value, onChange }: ClientPickerProps) {
 
 const field: React.CSSProperties = { display: 'grid', gap: 6 }
 const input: React.CSSProperties = { ...projectInputField, fontWeight: 500 }
-const helperPopoverText: React.CSSProperties = { fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', lineHeight: 1.45 }
