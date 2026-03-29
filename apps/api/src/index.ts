@@ -1674,6 +1674,7 @@ const start = async () => {
           accountId: membership.accountId,
           name: membership.account.name,
           email: membership.account.email,
+          avatarUrl: membership.account.avatarUrl ?? null,
           role: membership.role,
           createdAt: membership.createdAt.toISOString(),
           invited: false,

@@ -242,6 +242,7 @@ export type WorkspaceMember = {
   accountId: string
   name: string | null
   email: string
+  avatarUrl?: string | null
   role: string
   createdAt: string
   invited?: boolean

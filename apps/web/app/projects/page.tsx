@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AppShell, panel, pill } from '../../components/app-shell'
@@ -11,6 +12,7 @@ import { labelText, taskTitleText } from '../../lib/theme'
 import { qk, useClientsQuery, useProjectsQuery } from '../../lib/query'
 
 export default function ProjectsPage() {
+  const router = useRouter()
   const qc = useQueryClient()
   const [showArchived, setShowArchived] = useState(false)
   const [clientFilter, setClientFilter] = useState('')
@@ -42,10 +44,11 @@ export default function ProjectsPage() {
     if (!name || creatingProject) return
     setCreatingProject(true)
     try {
-      await createProject({ name })
+      const created = await createProject({ name })
       setNewProjectName('')
       await qc.invalidateQueries({ queryKey: ['projects'] })
       await qc.invalidateQueries({ queryKey: qk.projectsSummary })
+      router.push(`/projects/${created.projectId}`)
     } finally {
       setCreatingProject(false)
     }
