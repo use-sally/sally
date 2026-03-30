@@ -1,0 +1,10 @@
+# create-sally changelog
+
+## 0.1.5
+
+- add first-class `update` command for installer-managed Sally deployments
+- add `doctor` command for quick deployment/tooling/health checks
+- add automation-friendly CLI flags: `--dir`, `--version`, `--yes`
+- add non-interactive install flags: `--mode`, `--domain`, `--workspace`, `--superadmin-email`, `--superadmin-name`, `--acme-email`, `--email-setup`, `--smtp-host`, `--smtp-port`, `--smtp-user`, `--smtp-password`, `--mail-from`
+- fix generated Docker Compose files so they no longer hard-code `container_name`, allowing multiple Sally installs to coexist on the same host
+- validate install/update/doctor flows on a real remote server and tighten docs around `create-sally` as the official install/update entrypoint

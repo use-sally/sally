@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { confirm, input, password, select } from '@inquirer/prompts'
+import { confirm, input, select } from '@inquirer/prompts'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -7,6 +7,35 @@ import path from 'node:path'
 import { spawn } from 'node:child_process'
 
 type InstallMode = 'managed-simple' | 'existing-infra'
+type CommandMode = 'install' | 'update' | 'doctor'
+
+type ParsedEnv = {
+  mode: InstallMode
+  appUrl: string
+  apiImage: string
+  webImage: string
+  imageTag: string
+  superadminEmail: string
+}
+
+type CliOptions = {
+  command: CommandMode
+  dir?: string
+  version?: string
+  yes: boolean
+  mode?: InstallMode
+  domain?: string
+  workspace?: string
+  superadminEmail?: string
+  superadminName?: string
+  acmeEmail?: string
+  emailSetup?: 'now' | 'later'
+  smtpHost?: string
+  smtpPort?: string
+  smtpUser?: string
+  smtpPassword?: string
+  mailFrom?: string
+}
 
 const color = {
   reset: '\x1b[0m',
@@ -16,7 +45,6 @@ const color = {
   brightYellow: '\x1b[93m',
   brightGreen: '\x1b[92m',
   red: '\x1b[31m',
-  cyan: '\x1b[36m',
 }
 
 function paint(text: string, tone: string) {
@@ -27,9 +55,10 @@ function section(title: string) {
   console.log(`\n${paint(title, color.brightYellow)}`)
 }
 
-function banner() {
-  console.log(paint('S A L L Y  :::::::  I N S T A L L E R', color.brightGreen))
-  console.log(paint('clean deploy flow for sally_', color.dim))
+function banner(mode: CommandMode) {
+  const label = mode === 'install' ? 'I N S T A L L E R' : mode === 'update' ? 'U P D A T E R' : 'D O C T O R'
+  console.log(paint(`S A L L Y  :::::::  ${label}`, color.brightGreen))
+  console.log(paint(`clean ${mode} flow for sally_`, color.dim))
 }
 
 function randomSecret(bytes = 24) {
@@ -63,7 +92,6 @@ function composeForManagedSimple() {
   return `services:
   postgres:
     image: postgres:16-alpine
-    container_name: sally-postgres
     restart: unless-stopped
     env_file: .env
     environment:
@@ -80,7 +108,6 @@ function composeForManagedSimple() {
 
   api:
     image: ${'${SALLY_API_IMAGE}'}
-    container_name: sally-api
     restart: unless-stopped
     env_file: .env
     depends_on:
@@ -89,7 +116,6 @@ function composeForManagedSimple() {
 
   web:
     image: ${'${SALLY_WEB_IMAGE}'}
-    container_name: sally-web
     restart: unless-stopped
     env_file: .env
     depends_on:
@@ -97,7 +123,6 @@ function composeForManagedSimple() {
 
   caddy:
     image: caddy:2-alpine
-    container_name: sally-caddy
     restart: unless-stopped
     env_file: .env
     ports:
@@ -122,7 +147,6 @@ function composeForExistingInfra() {
   return `services:
   postgres:
     image: postgres:16-alpine
-    container_name: sally-postgres
     restart: unless-stopped
     env_file: .env
     environment:
@@ -139,7 +163,6 @@ function composeForExistingInfra() {
 
   api:
     image: ${'${SALLY_API_IMAGE}'}
-    container_name: sally-api
     restart: unless-stopped
     env_file: .env
     ports:
@@ -150,7 +173,6 @@ function composeForExistingInfra() {
 
   web:
     image: ${'${SALLY_WEB_IMAGE}'}
-    container_name: sally-web
     restart: unless-stopped
     env_file: .env
     ports:
@@ -356,6 +378,19 @@ function printWelcome(mode: InstallMode, appUrl: string, superadminEmail: string
   console.log(`${paint('PASSWORD', color.brightYellow)}: ${bootstrapPassword}`)
 }
 
+function printUpdateSuccess(mode: InstallMode, appUrl: string, imageTag: string) {
+  console.log('')
+  console.log(paint('S A L L Y  :::::::  U P D A T E D', color.brightGreen))
+  console.log(`${paint('VERSION', color.brightYellow)}: ${imageTag}`)
+  if (mode === 'managed-simple') {
+    console.log(`${paint('URL', color.brightYellow)}: ${appUrl}`)
+  } else {
+    console.log(`${paint('URL', color.brightYellow)}: ${appUrl} ${paint('(external URL depends on your reverse proxy / TLS)', color.dim)}`)
+    console.log(`${paint('LOCAL', color.brightYellow)}: http://127.0.0.1:3000`)
+    console.log(`${paint('API', color.brightYellow)}: http://127.0.0.1:4000`)
+  }
+}
+
 async function hasCommand(command: string) {
   try {
     await runCommandCapture('sh', ['-lc', `command -v ${command}`])
@@ -365,15 +400,17 @@ async function hasCommand(command: string) {
   }
 }
 
+async function dockerComposeAvailable() {
+  return await new Promise<boolean>((resolve) => {
+    const child = spawn('docker', ['compose', 'version'], { stdio: 'ignore', shell: false })
+    child.on('exit', (code) => resolve(code === 0))
+    child.on('error', () => resolve(false))
+  })
+}
+
 async function ensureDockerInstalled() {
   const hasDocker = await hasCommand('docker')
-  const hasCompose = hasDocker
-    ? await new Promise<boolean>((resolve) => {
-      const child = spawn('docker', ['compose', 'version'], { stdio: 'ignore', shell: false })
-      child.on('exit', (code) => resolve(code === 0))
-      child.on('error', () => resolve(false))
-    })
-    : false
+  const hasCompose = hasDocker ? await dockerComposeAvailable() : false
 
   if (hasDocker && hasCompose) {
     console.log(paint('Docker OK', color.green))
@@ -390,13 +427,7 @@ async function ensureDockerInstalled() {
   await runCommand('sh', ['-lc', 'systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true'], process.cwd())
 
   const dockerInstalled = await hasCommand('docker')
-  const composeInstalled = dockerInstalled
-    ? await new Promise<boolean>((resolve) => {
-      const child = spawn('docker', ['compose', 'version'], { stdio: 'ignore', shell: false })
-      child.on('exit', (code) => resolve(code === 0))
-      child.on('error', () => resolve(false))
-    })
-    : false
+  const composeInstalled = dockerInstalled ? await dockerComposeAvailable() : false
 
   if (!dockerInstalled || !composeInstalled) {
     throw new Error('Docker installation did not complete successfully. Install Docker + Docker Compose manually, then rerun create-sally.')
@@ -480,21 +511,170 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
   }
 }
 
-async function main() {
-  banner()
-  await ensureDockerInstalled()
+async function parseEnvFile(targetDir: string): Promise<ParsedEnv> {
+  const envPath = path.join(targetDir, '.env')
+  const composePath = path.join(targetDir, 'docker-compose.yml')
 
-  const mode = await select<InstallMode>({
+  const [envText, composeText] = await Promise.all([
+    fs.readFile(envPath, 'utf8').catch(() => {
+      throw new Error(`Missing ${envPath}. create-sally update only supports installs created by create-sally.`)
+    }),
+    fs.readFile(composePath, 'utf8').catch(() => {
+      throw new Error(`Missing ${composePath}. create-sally update only supports installs created by create-sally.`)
+    }),
+  ])
+
+  const values = new Map<string, string>()
+  for (const rawLine of envText.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    const eqIndex = line.indexOf('=')
+    if (eqIndex === -1) continue
+    values.set(line.slice(0, eqIndex), line.slice(eqIndex + 1))
+  }
+
+  const mode = values.get('SALLY_INSTALL_MODE')
+  const appUrl = values.get('SALLY_URL') || values.get('APP_BASE_URL')
+  const apiImage = values.get('SALLY_API_IMAGE')
+  const webImage = values.get('SALLY_WEB_IMAGE')
+  const imageTag = values.get('SALLY_IMAGE_TAG') || 'latest'
+  const superadminEmail = values.get('SUPERADMIN_EMAIL') || 'unknown'
+
+  if (mode !== 'managed-simple' && mode !== 'existing-infra') {
+    throw new Error('Could not determine SALLY_INSTALL_MODE from .env. Refusing update.')
+  }
+
+  if (!appUrl || !apiImage || !webImage) {
+    throw new Error('Missing one or more required Sally image/url values in .env. Refusing update.')
+  }
+
+  if (!composeText.includes('SALLY_API_IMAGE') || !composeText.includes('SALLY_WEB_IMAGE')) {
+    throw new Error('docker-compose.yml does not look like a create-sally managed deployment. Refusing update.')
+  }
+
+  return { mode, appUrl, apiImage, webImage, imageTag, superadminEmail }
+}
+
+async function updateEnvImageTag(targetDir: string, imageTag: string) {
+  const envPath = path.join(targetDir, '.env')
+  let envText = await fs.readFile(envPath, 'utf8')
+
+  const replacements: Array<[RegExp, string]> = [
+    [/^SALLY_IMAGE_TAG=.*$/m, `SALLY_IMAGE_TAG=${imageTag}`],
+    [/^SALLY_API_IMAGE=.*$/m, `SALLY_API_IMAGE=ghcr.io/use-sally/sally-api:${imageTag}`],
+    [/^SALLY_WEB_IMAGE=.*$/m, `SALLY_WEB_IMAGE=ghcr.io/use-sally/sally-web:${imageTag}`],
+  ]
+
+  for (const [pattern, replacement] of replacements) {
+    if (!pattern.test(envText)) {
+      throw new Error(`Could not update ${envPath}: expected ${pattern.toString()} to exist.`)
+    }
+    envText = envText.replace(pattern, replacement)
+  }
+
+  await fs.writeFile(envPath, envText)
+}
+
+async function promptText(message: string, defaultValue?: string) {
+  return await input({ message, default: defaultValue })
+}
+
+async function resolveTextOption(value: string | undefined, message: string, defaultValue?: string) {
+  if (value !== undefined) return value
+  return await promptText(message, defaultValue)
+}
+
+async function resolveRequiredTextOption(value: string | undefined, message: string, flagName: string, options: CliOptions, defaultValue?: string) {
+  if (value !== undefined) return value
+  if (options.yes) {
+    if (defaultValue !== undefined) return defaultValue
+    throw new Error(`Missing required option --${flagName} for non-interactive install.`)
+  }
+  return await promptText(message, defaultValue)
+}
+
+async function resolveConfirm(value: boolean, message: string, defaultValue = false) {
+  if (value) return true
+  return await confirm({ message, default: defaultValue })
+}
+
+async function resolveInstallMode(options: CliOptions) {
+  if (options.mode) return options.mode
+  if (options.yes) throw new Error('Missing required option --mode for non-interactive install.')
+  return await select<InstallMode>({
     message: 'How do you want to install sally_?',
     choices: [
       { name: 'managed-simple — sally_ sets up Docker + Postgres + HTTPS', value: 'managed-simple' },
       { name: 'existing-infra — I already have infrastructure and want sally_ to fit into it', value: 'existing-infra' },
     ],
   })
+}
 
-  const defaultDir = '/opt/sally-instance'
-  const targetDir = path.resolve(await input({ message: 'Where should the installer write the instance files?', default: defaultDir }))
-  const domain = normalizeDomain(await input({ message: 'Domain for this sally_ instance (example: sally.example.com)' }))
+function hasCompleteSmtpOptions(options: CliOptions) {
+  return Boolean(options.smtpHost && options.smtpPort && options.smtpUser && options.smtpPassword && options.mailFrom)
+}
+
+async function resolveEmailSetupMode(options: CliOptions) {
+  if (options.emailSetup === 'now' || options.emailSetup === 'later') return options.emailSetup
+  if (hasCompleteSmtpOptions(options)) return 'now'
+  if (options.yes) return 'later'
+  return await select<'now' | 'later'>({
+    message: 'Email setup is strongly recommended. Without it, sally_ cannot send invites, password resets, or notification emails. How do you want to continue?',
+    choices: [
+      { name: 'Configure email now (recommended)', value: 'now' },
+      { name: 'I will configure email later in .env and restart the stack', value: 'later' },
+    ],
+  })
+}
+
+async function doctorFlow(options: CliOptions) {
+  banner('doctor')
+
+  section('Local tooling')
+  const dockerInstalled = await hasCommand('docker')
+  console.log(`${paint('docker', color.brightYellow)}: ${dockerInstalled ? paint('present', color.green) : paint('missing', color.red)}`)
+
+  const composeInstalled = dockerInstalled ? await dockerComposeAvailable() : false
+  console.log(`${paint('docker compose', color.brightYellow)}: ${composeInstalled ? paint('present', color.green) : paint('missing', color.red)}`)
+
+  const targetDir = path.resolve(options.dir ?? '/opt/sally-instance')
+
+  section('Install directory')
+  console.log(`${paint('dir', color.brightYellow)}: ${targetDir}`)
+
+  try {
+    const current = await parseEnvFile(targetDir)
+    console.log(`${paint('status', color.brightYellow)}: ${paint('installer-managed Sally deployment detected', color.green)}`)
+    console.log(`${paint('mode', color.brightYellow)}: ${current.mode}`)
+    console.log(`${paint('url', color.brightYellow)}: ${current.appUrl}`)
+    console.log(`${paint('version', color.brightYellow)}: ${current.imageTag}`)
+    console.log(`${paint('superadmin', color.brightYellow)}: ${current.superadminEmail}`)
+
+    section('Health checks')
+    try {
+      if (current.mode === 'managed-simple') {
+        await waitForHealth(`${current.appUrl}/api/health`, 'API', 2, 500)
+        await waitForHealth(current.appUrl, 'Web app', 2, 500)
+      } else {
+        await waitForHealth('http://127.0.0.1:4000/health', 'API', 2, 500)
+        await waitForHealth('http://127.0.0.1:3000', 'Web app', 2, 500)
+      }
+      console.log(`${paint('health', color.brightYellow)}: ${paint('ok', color.green)}`)
+    } catch (error) {
+      console.log(`${paint('health', color.brightYellow)}: ${paint(`failed (${error instanceof Error ? error.message : String(error)})`, color.red)}`)
+    }
+  } catch (error) {
+    console.log(`${paint('status', color.brightYellow)}: ${paint(error instanceof Error ? error.message : String(error), color.red)}`)
+  }
+}
+
+async function installFlow(options: CliOptions) {
+  banner('install')
+  await ensureDockerInstalled()
+
+  const mode = await resolveInstallMode(options)
+  const targetDir = path.resolve(options.dir ?? (options.yes ? '/opt/sally-instance' : await promptText('Where should the installer write the instance files?', '/opt/sally-instance')))
+  const domain = normalizeDomain(await resolveRequiredTextOption(options.domain, 'Domain for this sally_ instance (example: sally.example.com)', 'domain', options))
   const appUrl = baseUrlFromDomain(domain)
 
   if (mode === 'managed-simple') {
@@ -502,24 +682,18 @@ async function main() {
     await verifyManagedDomainPointsHere(domain)
   }
 
-  const imageTag = await input({ message: 'Sally version', default: 'latest' })
-  const workspaceName = await input({ message: 'First workspace name', default: 'Operations' })
+  const imageTag = await resolveTextOption(options.version, 'Sally version', 'latest')
+  const workspaceName = await resolveRequiredTextOption(options.workspace, 'First workspace name', 'workspace', options, options.yes ? undefined : 'Operations')
   const workspaceSlug = slugifyWorkspaceName(workspaceName)
-  const superadminEmail = await input({ message: 'Superadmin email' })
-  const superadminName = await input({ message: 'Superadmin name', default: 'Admin' })
+  const superadminEmail = await resolveRequiredTextOption(options.superadminEmail, 'Superadmin email', 'superadmin-email', options)
+  const superadminName = await resolveRequiredTextOption(options.superadminName, 'Superadmin name', 'superadmin-name', options, options.yes ? 'Admin' : 'Admin')
   const caddyAcmeEmail = mode === 'managed-simple'
-    ? await input({ message: 'ACME / TLS contact email', default: superadminEmail })
+    ? await resolveRequiredTextOption(options.acmeEmail, 'ACME / TLS contact email', 'acme-email', options, superadminEmail)
     : ''
 
-  const emailSetupMode = await select<'configure-now' | 'configure-later'>({
-    message: 'Email setup is strongly recommended. Without it, sally_ cannot send invites, password resets, or notification emails. How do you want to continue?',
-    choices: [
-      { name: 'Configure email now (recommended)', value: 'configure-now' },
-      { name: 'I will configure email later in .env and restart the stack', value: 'configure-later' },
-    ],
-  })
+  const emailSetupMode = await resolveEmailSetupMode(options)
 
-  let smtpConfigured = emailSetupMode === 'configure-now'
+  let smtpConfigured = emailSetupMode === 'now'
   let smtpHost = 'smtp.disabled.invalid'
   let smtpPort = '587'
   let smtpUser = 'disabled'
@@ -527,16 +701,18 @@ async function main() {
   let mailFrom = `no-reply@${domain}`
 
   if (smtpConfigured) {
-    smtpHost = await input({ message: 'SMTP host' })
-    smtpPort = await input({ message: 'SMTP port', default: '587' })
-    smtpUser = await input({ message: 'SMTP username' })
-    smtpPassword = await password({ message: 'SMTP password' })
-    mailFrom = await input({ message: 'MAIL_FROM address', default: `no-reply@${domain}` })
+    smtpHost = await resolveRequiredTextOption(options.smtpHost, 'SMTP host', 'smtp-host', options)
+    smtpPort = await resolveRequiredTextOption(options.smtpPort, 'SMTP port', 'smtp-port', options, '587')
+    smtpUser = await resolveRequiredTextOption(options.smtpUser, 'SMTP username', 'smtp-user', options)
+    smtpPassword = await resolveRequiredTextOption(options.smtpPassword, 'SMTP password', 'smtp-password', options)
+    mailFrom = await resolveRequiredTextOption(options.mailFrom, 'MAIL_FROM address', 'mail-from', options, `no-reply@${domain}`)
   } else {
-    const confirmLater = await confirm({
-      message: 'I understand that invites, password resets, and notification emails will not work until I update SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and MAIL_FROM in .env and restart the stack.',
-      default: false,
-    })
+    const confirmLater = options.yes
+      ? true
+      : await confirm({
+        message: 'I understand that invites, password resets, and notification emails will not work until I update SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and MAIL_FROM in .env and restart the stack.',
+        default: false,
+      })
 
     if (!confirmLater) {
       throw new Error('Email setup was skipped without confirmation. Restart the installer and configure email now, or confirm the manual-later path.')
@@ -559,6 +735,253 @@ async function main() {
   await runInstallerCommands(mode, targetDir, appUrl)
   await writeHostedMcpNotes(targetDir, appUrl)
   printWelcome(mode, appUrl, superadminEmail, bootstrapPassword)
+}
+
+async function updateFlow(options: CliOptions) {
+  banner('update')
+  await ensureDockerInstalled()
+
+  const targetDir = path.resolve(options.dir ?? await promptText('Where is the existing sally_ install?', '/opt/sally-instance'))
+  const current = await parseEnvFile(targetDir)
+
+  section('Detected Sally install')
+  console.log(`${paint('MODE', color.brightYellow)}: ${current.mode}`)
+  console.log(`${paint('URL', color.brightYellow)}: ${current.appUrl}`)
+  console.log(`${paint('CURRENT VERSION', color.brightYellow)}: ${current.imageTag}`)
+  console.log(`${paint('SUPERADMIN', color.brightYellow)}: ${current.superadminEmail}`)
+
+  const imageTag = await resolveTextOption(options.version, 'Target Sally version', 'latest')
+
+  const proceed = await resolveConfirm(
+    options.yes,
+    `Proceed with Sally update in ${targetDir}? This updates the deployed images, applies schema changes, and restarts services. Back up Postgres first if this matters.`,
+    false,
+  )
+
+  if (!proceed) {
+    throw new Error('Update cancelled.')
+  }
+
+  await updateEnvImageTag(targetDir, imageTag)
+  await runInstallerCommands(current.mode, targetDir, current.appUrl)
+  printUpdateSuccess(current.mode, current.appUrl, imageTag)
+}
+
+function parseArgs(argv: string[]): CliOptions {
+  let command: CommandMode = 'install'
+  let dir: string | undefined
+  let version: string | undefined
+  let yes = false
+  let mode: InstallMode | undefined
+  let domain: string | undefined
+  let workspace: string | undefined
+  let superadminEmail: string | undefined
+  let superadminName: string | undefined
+  let acmeEmail: string | undefined
+  let emailSetup: 'now' | 'later' | undefined
+  let smtpHost: string | undefined
+  let smtpPort: string | undefined
+  let smtpUser: string | undefined
+  let smtpPassword: string | undefined
+  let mailFrom: string | undefined
+
+  const positional: string[] = []
+  const requireValue = (flag: string, value: string | undefined) => {
+    if (!value) throw new Error(`Missing value for ${flag}`)
+    return value
+  }
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+
+    if (arg === '--yes') {
+      yes = true
+      continue
+    }
+
+    if (arg === '--dir') {
+      dir = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--dir=')) {
+      dir = requireValue('--dir', arg.slice('--dir='.length))
+      continue
+    }
+
+    if (arg === '--version') {
+      version = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--version=')) {
+      version = requireValue('--version', arg.slice('--version='.length))
+      continue
+    }
+
+    if (arg === '--mode') {
+      const value = requireValue(arg, argv[index + 1])
+      if (value !== 'managed-simple' && value !== 'existing-infra') throw new Error(`Invalid --mode: ${value}`)
+      mode = value
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--mode=')) {
+      const value = requireValue('--mode', arg.slice('--mode='.length))
+      if (value !== 'managed-simple' && value !== 'existing-infra') throw new Error(`Invalid --mode: ${value}`)
+      mode = value
+      continue
+    }
+
+    if (arg === '--domain') {
+      domain = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--domain=')) {
+      domain = requireValue('--domain', arg.slice('--domain='.length))
+      continue
+    }
+
+    if (arg === '--workspace') {
+      workspace = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--workspace=')) {
+      workspace = requireValue('--workspace', arg.slice('--workspace='.length))
+      continue
+    }
+
+    if (arg === '--superadmin-email') {
+      superadminEmail = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--superadmin-email=')) {
+      superadminEmail = requireValue('--superadmin-email', arg.slice('--superadmin-email='.length))
+      continue
+    }
+
+    if (arg === '--superadmin-name') {
+      superadminName = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--superadmin-name=')) {
+      superadminName = requireValue('--superadmin-name', arg.slice('--superadmin-name='.length))
+      continue
+    }
+
+    if (arg === '--acme-email') {
+      acmeEmail = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--acme-email=')) {
+      acmeEmail = requireValue('--acme-email', arg.slice('--acme-email='.length))
+      continue
+    }
+
+    if (arg === '--email-setup') {
+      const value = requireValue(arg, argv[index + 1])
+      if (value !== 'now' && value !== 'later') throw new Error(`Invalid --email-setup: ${value}`)
+      emailSetup = value
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--email-setup=')) {
+      const value = requireValue('--email-setup', arg.slice('--email-setup='.length))
+      if (value !== 'now' && value !== 'later') throw new Error(`Invalid --email-setup: ${value}`)
+      emailSetup = value
+      continue
+    }
+
+    if (arg === '--smtp-host') {
+      smtpHost = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--smtp-host=')) {
+      smtpHost = requireValue('--smtp-host', arg.slice('--smtp-host='.length))
+      continue
+    }
+
+    if (arg === '--smtp-port') {
+      smtpPort = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--smtp-port=')) {
+      smtpPort = requireValue('--smtp-port', arg.slice('--smtp-port='.length))
+      continue
+    }
+
+    if (arg === '--smtp-user') {
+      smtpUser = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--smtp-user=')) {
+      smtpUser = requireValue('--smtp-user', arg.slice('--smtp-user='.length))
+      continue
+    }
+
+    if (arg === '--smtp-password') {
+      smtpPassword = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--smtp-password=')) {
+      smtpPassword = requireValue('--smtp-password', arg.slice('--smtp-password='.length))
+      continue
+    }
+
+    if (arg === '--mail-from') {
+      mailFrom = requireValue(arg, argv[index + 1])
+      index += 1
+      continue
+    }
+    if (arg.startsWith('--mail-from=')) {
+      mailFrom = requireValue('--mail-from', arg.slice('--mail-from='.length))
+      continue
+    }
+
+    if (arg.startsWith('-')) throw new Error(`Unknown option: ${arg}`)
+    positional.push(arg)
+  }
+
+  if (positional[0]) {
+    const raw = positional[0].trim().toLowerCase()
+    if (raw === 'install' || raw === 'update' || raw === 'doctor') command = raw
+    else throw new Error(`Unknown command: ${raw}. Supported commands: install, update, doctor`)
+  }
+
+  return {
+    command,
+    dir,
+    version,
+    yes,
+    mode,
+    domain,
+    workspace,
+    superadminEmail,
+    superadminName,
+    acmeEmail,
+    emailSetup,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPassword,
+    mailFrom,
+  }
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2))
+  if (options.command === 'doctor') await doctorFlow(options)
+  else if (options.command === 'update') await updateFlow(options)
+  else await installFlow(options)
 }
 
 main().catch((error) => {

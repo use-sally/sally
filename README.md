@@ -53,16 +53,24 @@ Current product surface:
 ## Start here
 
 ### Install Sally
-The easiest path is the installer:
+The easiest path is the official installer:
 
 ```bash
 npx --yes create-sally@latest
+```
+
+### Update Sally
+Running Sally instances are updated through the same tool:
+
+```bash
+npx --yes create-sally@latest update
 ```
 
 Detailed guides:
 - [`docs/index.md`](./docs/index.md)
 - [`docs/ubuntu-debian-install.md`](./docs/ubuntu-debian-install.md)
 - [`docs/install-release.md`](./docs/install-release.md)
+- [`docs/update-sally.md`](./docs/update-sally.md)
 
 ### Understand the product
 - [`docs/product-guide.md`](./docs/product-guide.md)
