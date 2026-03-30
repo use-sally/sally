@@ -66,6 +66,12 @@ Running Sally instances are updated through the same tool:
 npx --yes create-sally@latest update
 ```
 
+### Version model
+- `create-sally` has its own npm package version and release cycle.
+- The Sally application itself has a separate version and release lifecycle.
+- Updating `create-sally` updates the installer tool.
+- Updating a running Sally instance updates the deployed Sally images.
+
 Detailed guides:
 - [`docs/index.md`](./docs/index.md)
 - [`docs/ubuntu-debian-install.md`](./docs/ubuntu-debian-install.md)

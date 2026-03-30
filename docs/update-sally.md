@@ -89,6 +89,8 @@ That limitation is intentional.
 
 - Sally is deployed from official published container images.
 - `create-sally` is the install and update operator tool around those images.
+- Updating `create-sally` updates the installer tool, not the running Sally application by itself.
+- Updating a running Sally instance updates the deployed Sally images.
 - Hosted MCP remains the default MCP path after upgrade.
 - Existing SMTP and instance settings remain in `.env`; only the managed Sally image references are updated during the normal update flow.
 

@@ -39,6 +39,19 @@ npm packages:
 
 ---
 
+## Version model
+
+Sally has separate version tracks for different artifacts.
+
+- `create-sally` has its own npm package version and release cycle.
+- The Sally application itself has its own release/version lifecycle.
+- Updating `create-sally` updates the installer/operator tool.
+- Updating a running Sally instance updates the deployed Sally images.
+
+This distinction is intentional and should stay explicit in docs, release notes, and support responses.
+
+---
+
 ## GitHub publish flow
 
 The repo includes:
