@@ -87,7 +87,9 @@ export default function ProfilePage() {
       const compressed = await compressProfileImage(file)
       const uploaded = await uploadProfileImage(compressed)
       setAvatarUrl(uploaded.url)
-      setInfo('Profile image uploaded.')
+      const response = await updateProfile({ avatarUrl: uploaded.url })
+      setProfile({ ...response.profile, pendingEmail: response.emailChange?.pendingEmail ?? profile?.pendingEmail ?? null })
+      setInfo('Profile image uploaded and saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload profile image')
     } finally {
