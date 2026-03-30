@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { AppShell, panel } from '../../components/app-shell'
+import { InfoFlag, SectionHeaderWithInfo } from '../../components/info-flag'
 import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
 import { apiUrl, getNotificationPreferences, getProfile, logout, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
 import { platformRoleLabel } from '../../lib/roles'
@@ -50,7 +51,8 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [savingName, setSavingName] = useState(false)
+  const [sendingEmailApproval, setSendingEmailApproval] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -108,20 +110,48 @@ export default function ProfilePage() {
     }
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    setSaving(true)
+  const handleNameBlur = async () => {
+    if (!profile) return
+    const trimmedName = name.trim()
+    const currentName = profile.name?.trim() || ''
+    if (trimmedName === currentName) return
+    setSavingName(true)
     setError(null)
     setInfo(null)
     try {
-      const response = await updateProfile({ name, email, avatarUrl: avatarUrl || null })
-      setProfile({ ...response.profile, pendingEmail: response.emailChange?.pendingEmail ?? profile?.pendingEmail ?? null })
-      setInfo(response.emailChange ? (response.emailChange.emailed ? `Profile updated. Confirm the email change via the link sent to ${response.emailChange.pendingEmail}.` : `Profile updated, but the email confirmation mail could not be sent: ${response.emailChange.reason || 'unknown error'}`) : 'Profile updated.')
+      const response = await updateProfile({ name: trimmedName || undefined })
+      setProfile({ ...response.profile, pendingEmail: response.emailChange?.pendingEmail ?? profile.pendingEmail ?? null })
+      setName(response.profile.name || '')
+      setInfo('Name saved.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update profile name')
+      setName(profile.name || '')
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  const handleSendEmailApproval = async () => {
+    if (!profile) return
+    const trimmedEmail = email.trim().toLowerCase()
+    const currentEmail = profile.email.trim().toLowerCase()
+    if (!trimmedEmail || trimmedEmail === currentEmail) return
+    setSendingEmailApproval(true)
+    setError(null)
+    setInfo(null)
+    try {
+      const response = await updateProfile({ email: trimmedEmail })
+      setProfile({ ...response.profile, pendingEmail: response.emailChange?.pendingEmail ?? profile.pendingEmail ?? null })
+      setInfo(response.emailChange
+        ? (response.emailChange.emailed
+          ? `Confirmation sent to ${response.emailChange.pendingEmail}.`
+          : `Could not send confirmation email: ${response.emailChange.reason || 'unknown error'}`)
+        : 'Email approval requested.')
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update profile')
+      setError(err instanceof Error ? err.message : 'Failed to request email change approval')
     } finally {
-      setSaving(false)
+      setSendingEmailApproval(false)
     }
   }
 
@@ -138,16 +168,22 @@ export default function ProfilePage() {
 
   const avatarSrc = avatarUrl ? (avatarUrl.startsWith('/') ? apiUrl(avatarUrl) : avatarUrl) : ''
   const lockedSuperadminEmail = Boolean(profile?.emailLocked)
+  const emailChanged = email.trim().toLowerCase() !== (profile?.email.trim().toLowerCase() || '')
+  const profileInfoText = lockedSuperadminEmail
+    ? 'Profile changes save on blur. Profile image uploads save immediately. The configured superadmin email is locked and can only be changed via .env and redeploy.'
+    : 'Profile changes save on blur. Profile image uploads save immediately. Email changes require explicit approval sending and are only applied after confirmation.'
 
   return (
     <AppShell title="Profile" subtitle="Your account, personal API keys, and access context.">
       <div style={{ display: 'grid', gap: 18 }}>
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={sectionLabelText}>Profile</div>
-          {loading ? <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div> : null}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <SectionHeaderWithInfo title="Profile" info={profileInfoText} />
+            {loading ? <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div> : null}
+          </div>
           {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
           {info ? <div style={{ color: 'var(--text-primary)', fontSize: 13 }}>{info}</div> : null}
-          <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12, maxWidth: 560 }}>
+          <div style={{ display: 'grid', gap: 12, maxWidth: 560 }}>
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 type="button"
@@ -158,16 +194,39 @@ export default function ProfilePage() {
               >
                 {avatarSrc ? <img src={avatarSrc} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (name?.trim()?.[0] || email?.trim()?.[0] || '?').toUpperCase()}
               </button>
-              <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{uploadingImage ? 'Uploading image…' : 'Click the profile image to upload or replace it. Compression matches task description images.'}</div>
               <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleImageUpload(event)} style={{ display: 'none' }} />
             </div>
-            <label style={field}><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} style={inputStyle} /></label>
-            <label style={field}><span>Email</span><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" style={inputStyle} disabled={lockedSuperadminEmail} /></label>
+            <label style={field}>
+              <span>Name</span>
+              <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void handleNameBlur()} style={inputStyle} />
+              <div style={{ ...labelText, fontSize: 12 }}>{savingName ? 'Saving name…' : 'Saves on blur.'}</div>
+            </label>
+            <label style={field}>
+              <span>Email</span>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" style={{ ...inputStyle, flex: '1 1 260px' }} disabled={lockedSuperadminEmail} />
+                {!lockedSuperadminEmail && emailChanged ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleSendEmailApproval()}
+                    disabled={sendingEmailApproval || loading}
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--form-border)',
+                      borderRadius: 10,
+                      padding: '10px 12px',
+                      fontWeight: 700,
+                      cursor: sendingEmailApproval ? 'progress' : 'pointer',
+                    }}
+                  >
+                    {sendingEmailApproval ? 'Sending…' : 'Send email approval'}
+                  </button>
+                ) : null}
+              </div>
+            </label>
             {profile?.pendingEmail ? <div style={{ ...labelText, fontSize: 13 }}>Pending email change: {profile.pendingEmail}</div> : null}
-            <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>PNG/JPG/WebP supported.</div>
-            <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{lockedSuperadminEmail ? 'The configured superadmin email is locked. Change it via .env and redeploy only.' : 'If you change your email, we will send a confirmation link to the new address before applying it.'}</div>
-            <div><button type="submit" disabled={saving || loading} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }}>{saving ? 'Saving…' : 'Save profile'}</button></div>
-          </form>
+          </div>
         </div>
 
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
@@ -180,8 +239,10 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={sectionLabelText}>Notifications</div>
-          <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>Control how Sally notifies you in-app and by email.</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={sectionLabelText}>Notifications</div>
+            <InfoFlag text="Notification preference changes are applied immediately when you toggle them." />
+          </div>
           <div style={{ display: 'grid', gap: 10 }}>
             {notificationPreferences.map((preference) => (
               <div key={preference.eventType} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 12, alignItems: 'center', padding: '12px 14px', border: '1px solid var(--panel-border)', borderRadius: 14, background: 'var(--form-bg)' }}>
