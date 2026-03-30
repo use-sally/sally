@@ -1112,6 +1112,11 @@ const start = async () => {
     })
 
     app.get('/health', async () => ({ ok: true, service: 'api', timestamp: new Date().toISOString() }))
+
+    app.get('/runtime-config', async () => ({
+      ok: true,
+      appBaseUrl: process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || null,
+    }))
     app.get('/version', async () => ({ ok: true, name: 'sally', version: appVersion, commit: appGitSha || null, builtAt: appBuildTime || null }))
     app.get('/uploads/task-images/:taskId/:fileName', async (request, reply) => {
       const { taskId, fileName } = request.params as { taskId: string; fileName: string }

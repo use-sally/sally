@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import type { Membership } from '../lib/auth'
 import { loadSession } from '../lib/auth'
-import { apiUrl, createApiKey, createMcpKey, getApiKeys, getMcpKeys, revokeApiKey, revokeMcpKey } from '../lib/api'
+import { apiUrl, createApiKey, createMcpKey, getApiKeys, getMcpKeys, getRuntimeConfig, revokeApiKey, revokeMcpKey } from '../lib/api'
 import { deleteTextAction, labelText, metaLabelText, projectInputField, sectionLabelText } from '../lib/theme'
 import { panel } from './app-shell'
 import { InfoFlag } from './info-flag'
@@ -36,15 +36,15 @@ export function PersonalApiKeysPanel() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [appBaseUrl, setAppBaseUrl] = useState<string | null>(null)
 
   const endpoint = apiUrl('/mcp')
-  const explicitAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
   const displayEndpoint = useMemo(() => {
     if (/^https?:\/\//i.test(endpoint)) return endpoint
-    if (explicitAppUrl) return new URL('/api/mcp', explicitAppUrl).toString()
+    if (appBaseUrl) return new URL('/api/mcp', appBaseUrl).toString()
     if (typeof window === 'undefined') return endpoint
     return new URL(endpoint, window.location.origin).toString()
-  }, [endpoint, explicitAppUrl])
+  }, [endpoint, appBaseUrl])
   const hostedConfig = useMemo(() => JSON.stringify({ sally: { type: 'http', url: displayEndpoint, headers: { Authorization: 'Bearer YOUR_HOSTED_MCP_KEY' } } }, null, 2), [displayEndpoint])
   const restrictedWorkspace = memberships.find((membership) => membership.workspaceId === mcpWorkspaceId)
 
@@ -52,9 +52,10 @@ export function PersonalApiKeysPanel() {
     setLoading(true)
     setError(null)
     try {
-      const [api, mcp] = await Promise.all([getApiKeys(), getMcpKeys()])
+      const [api, mcp, runtimeConfig] = await Promise.all([getApiKeys(), getMcpKeys(), getRuntimeConfig()])
       setApiKeys(api)
       setMcpKeys(mcp)
+      setAppBaseUrl(runtimeConfig.appBaseUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load keys')
     } finally {

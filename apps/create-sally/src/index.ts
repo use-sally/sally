@@ -231,7 +231,6 @@ function envFile(args: {
 SALLY_INSTALL_MODE=${args.mode}
 SALLY_URL=${args.appUrl}
 APP_BASE_URL=${args.appUrl}
-NEXT_PUBLIC_APP_URL=${args.appUrl}
 NEXT_PUBLIC_API_BASE_URL=/api
 NEXT_PUBLIC_WORKSPACE_SLUG=${args.workspaceSlug}
 SALLY_WORKSPACE_NAME=${args.workspaceName}

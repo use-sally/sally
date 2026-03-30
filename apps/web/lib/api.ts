@@ -38,6 +38,7 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function getHealth(): Promise<Health> { return getJson('/health') }
+export function getRuntimeConfig(): Promise<{ ok: boolean; appBaseUrl: string | null }> { return getJson('/runtime-config') }
 export function getNotifications(params?: { unreadOnly?: boolean; limit?: number }): Promise<Notification[]> {
   const search = new URLSearchParams()
   if (params?.unreadOnly) search.set('unreadOnly', 'true')
