@@ -52,6 +52,7 @@ export default function ProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [savingName, setSavingName] = useState(false)
+  const [nameSavedAt, setNameSavedAt] = useState<number | null>(null)
   const [sendingEmailApproval, setSendingEmailApproval] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -122,6 +123,7 @@ export default function ProfilePage() {
       const response = await updateProfile({ name: trimmedName || undefined })
       setProfile({ ...response.profile, pendingEmail: response.emailChange?.pendingEmail ?? profile.pendingEmail ?? null })
       setName(response.profile.name || '')
+      setNameSavedAt(Date.now())
       setInfo('Name saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update profile name')
@@ -169,6 +171,7 @@ export default function ProfilePage() {
   const avatarSrc = avatarUrl ? (avatarUrl.startsWith('/') ? apiUrl(avatarUrl) : avatarUrl) : ''
   const lockedSuperadminEmail = Boolean(profile?.emailLocked)
   const emailChanged = email.trim().toLowerCase() !== (profile?.email.trim().toLowerCase() || '')
+  const showNameSaved = Boolean(nameSavedAt && Date.now() - nameSavedAt < 2500)
   const profileInfoText = lockedSuperadminEmail
     ? 'Profile changes save on blur. Profile image uploads save immediately. The configured superadmin email is locked and can only be changed via .env and redeploy.'
     : 'Profile changes save on blur. Profile image uploads save immediately. Email changes require explicit approval sending and are only applied after confirmation.'
@@ -199,12 +202,25 @@ export default function ProfilePage() {
             <label style={field}>
               <span>Name</span>
               <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void handleNameBlur()} style={inputStyle} />
-              <div style={{ ...labelText, fontSize: 12 }}>{savingName ? 'Saving name…' : 'Saves on blur.'}</div>
+              <div style={{ ...labelText, fontSize: 12 }}>{savingName ? 'Saving name…' : showNameSaved ? 'Saved.' : 'Saves on blur.'}</div>
             </label>
             <label style={field}>
               <span>Email</span>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" style={{ ...inputStyle, flex: '1 1 260px' }} disabled={lockedSuperadminEmail} />
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      setEmail(profile?.email || '')
+                      setError(null)
+                      setInfo('Email reset to saved value.')
+                    }
+                  }}
+                  type="email"
+                  style={{ ...inputStyle, flex: '1 1 260px' }}
+                  disabled={lockedSuperadminEmail}
+                />
                 {!lockedSuperadminEmail && emailChanged ? (
                   <button
                     type="button"
