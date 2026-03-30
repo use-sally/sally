@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import type { Notification } from '@sally/types/src'
 import { getWorkspaceId, loadSession, saveSession, setWorkspaceId } from '../lib/auth'
-import { apiUrl, createWorkspace, getMe, getNotifications, readAllNotifications, readNotification } from '../lib/api'
+import { apiUrl, createWorkspace, getMe, getNotifications, logout, readAllNotifications, readNotification } from '../lib/api'
 import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
 import type { ThemeMode } from '../lib/theme'
@@ -79,6 +79,16 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     setWorkspaceId(nextWorkspaceId)
     setActiveWorkspaceId(nextWorkspaceId)
     window.location.reload()
+  }
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } finally {
+      localStorage.removeItem('atpm_session')
+      localStorage.removeItem('atpm_workspace_id')
+      window.location.href = '/'
+    }
   }
 
   const handleCreateWorkspace = async () => {
@@ -424,22 +434,41 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                 <span>sally</span>
               </a>
 
-              <a
-                href="https://usesally.com/docs"
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  color: '#6ee7b7',
-                  fontWeight: 400,
-                  fontSize: 13,
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                Docs
-              </a>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+                <a
+                  href="https://usesally.com/docs"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    color: '#6ee7b7',
+                    fontWeight: 400,
+                    fontSize: 13,
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Docs
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    color: '#fca5a5',
+                    fontWeight: 400,
+                    fontSize: 13,
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Log out
+                </button>
+              </div>
             </div>
 
             <Link

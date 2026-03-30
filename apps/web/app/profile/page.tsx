@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { AppShell, panel } from '../../components/app-shell'
-import { InfoFlag, SectionHeaderWithInfo } from '../../components/info-flag'
+import { InfoFlag } from '../../components/info-flag'
 import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
 import { apiUrl, getNotificationPreferences, getProfile, logout, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
-import { platformRoleLabel } from '../../lib/roles'
 import { labelText, projectInputField, sectionLabelText } from '../../lib/theme'
 
 async function compressProfileImage(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
@@ -101,16 +101,6 @@ export default function ProfilePage() {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      await logout()
-    } finally {
-      localStorage.removeItem('atpm_session')
-      localStorage.removeItem('atpm_workspace_id')
-      window.location.href = '/'
-    }
-  }
-
   const handleNameBlur = async () => {
     if (!profile) return
     const trimmedName = name.trim()
@@ -180,8 +170,11 @@ export default function ProfilePage() {
     <AppShell title="Profile" subtitle="Your account, personal API keys, and access context.">
       <div style={{ display: 'grid', gap: 18 }}>
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <SectionHeaderWithInfo title="Profile" info={profileInfoText} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={sectionLabelText}>Profile</div>
+              <InfoFlag text={profileInfoText} />
+            </div>
             {loading ? <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div> : null}
           </div>
           {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
@@ -200,12 +193,10 @@ export default function ProfilePage() {
               <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleImageUpload(event)} style={{ display: 'none' }} />
             </div>
             <label style={field}>
-              <span>Name</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void handleNameBlur()} style={inputStyle} />
-              <div style={{ ...labelText, fontSize: 12 }}>{savingName ? 'Saving name…' : showNameSaved ? 'Saved.' : 'Saves on blur.'}</div>
+              <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void handleNameBlur()} placeholder="Name" aria-label="Name" style={inputStyle} />
+              <div style={{ ...labelText, fontSize: 12 }}>{savingName ? 'Saving name…' : showNameSaved ? 'Saved.' : ''}</div>
             </label>
             <label style={field}>
-              <span>Email</span>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
                   value={email}
@@ -218,6 +209,8 @@ export default function ProfilePage() {
                     }
                   }}
                   type="email"
+                  placeholder="Email"
+                  aria-label="Email"
                   style={{ ...inputStyle, flex: '1 1 260px' }}
                   disabled={lockedSuperadminEmail}
                 />
@@ -246,15 +239,6 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
-          <div style={sectionLabelText}>Account context</div>
-          <div><strong>Platform role:</strong> {platformRoleLabel(profile?.platformRole || 'NONE')}</div>
-          <div><strong>Current email:</strong> {profile?.email || '—'}</div>
-          <div>
-            <button type="button" onClick={() => void handleLogout()} style={{ borderRadius: 12, border: '1px solid var(--form-border)', padding: '10px 12px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--text-primary)' }}>Log out</button>
-          </div>
-        </div>
-
-        <div style={{ ...panel, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={sectionLabelText}>Notifications</div>
             <InfoFlag text="Notification preference changes are applied immediately when you toggle them." />
@@ -279,5 +263,5 @@ export default function ProfilePage() {
   )
 }
 
-const field: React.CSSProperties = { display: 'grid', gap: 6 }
-const inputStyle: React.CSSProperties = { ...projectInputField }
+const field: CSSProperties = { display: 'grid', gap: 6 }
+const inputStyle: CSSProperties = { ...projectInputField }

@@ -7,6 +7,7 @@ import { loadSession } from '../lib/auth'
 import { apiUrl, createApiKey, createMcpKey, getApiKeys, getMcpKeys, revokeApiKey, revokeMcpKey } from '../lib/api'
 import { deleteTextAction, labelText, metaLabelText, projectInputField, sectionLabelText } from '../lib/theme'
 import { panel } from './app-shell'
+import { InfoFlag } from './info-flag'
 
 type KeyItem = {
   id: string
@@ -37,7 +38,14 @@ export function PersonalApiKeysPanel() {
   const [error, setError] = useState<string | null>(null)
 
   const endpoint = apiUrl('/mcp')
-  const hostedConfig = useMemo(() => JSON.stringify({ sally: { type: 'http', url: endpoint, headers: { Authorization: 'Bearer YOUR_HOSTED_MCP_KEY' } } }, null, 2), [endpoint])
+  const explicitAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()
+  const displayEndpoint = useMemo(() => {
+    if (/^https?:\/\//i.test(endpoint)) return endpoint
+    if (explicitAppUrl) return new URL('/api/mcp', explicitAppUrl).toString()
+    if (typeof window === 'undefined') return endpoint
+    return new URL(endpoint, window.location.origin).toString()
+  }, [endpoint, explicitAppUrl])
+  const hostedConfig = useMemo(() => JSON.stringify({ sally: { type: 'http', url: displayEndpoint, headers: { Authorization: 'Bearer YOUR_HOSTED_MCP_KEY' } } }, null, 2), [displayEndpoint])
   const restrictedWorkspace = memberships.find((membership) => membership.workspaceId === mcpWorkspaceId)
 
   const loadKeys = async () => {
@@ -73,15 +81,13 @@ export function PersonalApiKeysPanel() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ ...panel, display: 'grid', gap: 14 }}>
-        <div style={{ display: 'grid', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={sectionLabelText}>Hosted MCP</div>
-          <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>
-            This is the primary path. Create a hosted MCP key here, copy the endpoint/config below, and point your agent or MCP client at Sally directly. The older local `sally-mcp` stdio route is still possible for advanced setups, but it is intentionally de-emphasized.
-          </div>
+          <InfoFlag text="This is the primary path. Create a hosted MCP key here, copy the endpoint/config below, and point your agent or MCP client at Sally directly. The older local sally-mcp stdio route is still possible for advanced setups, but it is intentionally de-emphasized." />
         </div>
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <CopyRow label="Hosted endpoint" value={endpoint} copied={copied === 'endpoint'} onCopy={() => void copyValue(endpoint, 'endpoint')} />
+          <CopyRow label="Hosted endpoint" value={displayEndpoint} copied={copied === 'endpoint'} onCopy={() => void copyValue(displayEndpoint, 'endpoint')} />
           <CopyBlock label="Example MCP config" value={hostedConfig} copied={copied === 'config'} onCopy={() => void copyValue(hostedConfig, 'config')} />
         </div>
 
@@ -98,7 +104,7 @@ export function PersonalApiKeysPanel() {
 
       <KeySection
         title="Hosted MCP keys"
-        description="Hosted MCP keys use your Sally permissions. Optionally restrict a key to a single workspace to reduce accidental cross-workspace access."
+        info="Hosted MCP keys use your Sally permissions. Optionally restrict a key to a single workspace to reduce accidental cross-workspace access."
         createLabel={mcpKeyLabel}
         setCreateLabel={setMcpKeyLabel}
         secret={mcpKeySecret}
@@ -138,7 +144,8 @@ export function PersonalApiKeysPanel() {
 
       <KeySection
         title="Personal API keys"
-        description="Use these against Sally's normal REST API. Keys are shown once when created."
+        info="Use these against Sally's normal REST API. Keys are shown once when created."
+        description=""
         createLabel={apiKeyLabel}
         setCreateLabel={setApiKeyLabel}
         secret={apiKeySecret}
@@ -166,6 +173,7 @@ export function PersonalApiKeysPanel() {
 function KeySection({
   title,
   description,
+  info,
   createLabel,
   setCreateLabel,
   secret,
@@ -183,7 +191,8 @@ function KeySection({
   beforeForm,
 }: {
   title: string
-  description: string
+  description?: string
+  info?: string
   createLabel: string
   setCreateLabel: (value: string) => void
   secret: string | null
@@ -208,8 +217,11 @@ function KeySection({
   return (
     <div style={{ ...panel, display: 'grid', gap: 12 }}>
       <div style={{ display: 'grid', gap: 4 }}>
-        <div style={sectionLabelText}>{title}</div>
-        <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{description}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={sectionLabelText}>{title}</div>
+          {info ? <InfoFlag text={info} /> : null}
+        </div>
+        {description ? <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{description}</div> : null}
       </div>
       {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
       {secret ? (
@@ -242,7 +254,7 @@ function KeySection({
         </label>
       </form>
       <div style={{ ...labelText, color: loading ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
-        {loading ? 'Creating…' : 'Press Enter in the label field to create the key'}
+        {loading ? 'Creating…' : ''}
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
         {items.map((key) => (
@@ -285,7 +297,7 @@ function CopyRow({ label, value, copied, onCopy }: { label: string; value: strin
         <code>{value}</code>
       </button>
       <div style={{ ...labelText, color: copied ? 'var(--success-text)' : 'var(--text-muted)' }}>
-        {copied ? 'Copied' : 'Click the field to copy'}
+        {copied ? 'Copied' : ''}
       </div>
     </div>
   )

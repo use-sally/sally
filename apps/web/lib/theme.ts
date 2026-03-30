@@ -178,13 +178,24 @@ export const sectionHeaderRow: CSSProperties = {
 }
 
 export const infoFlagIconButton: CSSProperties = {
-  listStyle: 'none',
+  appearance: 'none',
+  WebkitAppearance: 'none',
+  border: 'none',
+  background: 'transparent',
+  padding: 0,
+  margin: 0,
+  width: 16,
+  height: 16,
+  display: 'inline-grid',
+  placeItems: 'center',
   cursor: 'pointer',
   color: 'var(--text-muted)',
   fontSize: 12,
   fontWeight: 700,
   lineHeight: 1,
   userSelect: 'none',
+  borderRadius: 999,
+  flex: '0 0 auto',
 }
 
 export const infoFlagPopover: CSSProperties = {
