@@ -340,6 +340,20 @@ async function logActivity(input: { workspaceId: string; projectId?: string | nu
   await prisma.activityLog.create({ data: { workspaceId: input.workspaceId, projectId: input.projectId ?? null, taskId: input.taskId ?? null, actorName: input.actorName ?? null, actorEmail: input.actorEmail ?? null, type: input.type, summary: input.summary, payload: payload ?? undefined } })
 }
 
+async function wouldCreateDependencyCycle(taskId: string, dependsOnId: string): Promise<boolean> {
+  const visited = new Set<string>()
+  const queue = [dependsOnId]
+  while (queue.length) {
+    const current = queue.shift()!
+    if (current === taskId) return true
+    if (visited.has(current)) continue
+    visited.add(current)
+    const deps = await prisma.taskDependency.findMany({ where: { taskId: current }, select: { dependsOnId: true } })
+    queue.push(...deps.map((d) => d.dependsOnId))
+  }
+  return false
+}
+
 function actorFromRequest(request: any) {
   const account = (request as any).account as { name?: string | null; email?: string | null } | undefined
   const apiKey = (request as any).apiKey as { label?: string | null } | undefined
@@ -2130,7 +2144,7 @@ const start = async () => {
     app.get('/tasks/:taskId', async (request, reply) => {
       const workspace = (request as any).workspace
       const { taskId } = request.params as { taskId: string }
-      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { project: { include: { client: true } }, status: true, comments: { orderBy: { createdAt: 'asc' } }, labels: { include: { label: true } }, todos: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 20 } } })
+      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { project: { include: { client: true } }, status: true, comments: { orderBy: { createdAt: 'asc' } }, labels: { include: { label: true } }, todos: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, dependencies: { include: { dependsOn: { select: { id: true, number: true, title: true } } } }, dependedOnBy: { include: { task: { select: { id: true, number: true, title: true } } } }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 20 } } })
       if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
       if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, task.projectId)
@@ -2139,7 +2153,7 @@ const start = async () => {
       const commentAvatars = await getAssigneeAvatarMap(workspace.id, task.comments.map((comment) => comment.author))
       const timesheetScope = await resolveTimesheetScope(request, workspace.id, task.projectId)
       const visibleTimesheets = timesheetScope.elevated || !timesheetScope.userId ? task.timesheets : task.timesheets.filter((entry) => entry.userId === timesheetScope.userId)
-      return { id: task.id, number: task.number, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString(), labels: task.labels.map((l) => l.label.name), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
+      return { id: task.id, number: task.number, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString(), labels: task.labels.map((l) => l.label.name), dependencies: task.dependencies.map((d) => ({ taskId: d.dependsOn.id, number: d.dependsOn.number, title: d.dependsOn.title })), dependedOnBy: task.dependedOnBy.map((d) => ({ taskId: d.task.id, number: d.task.number, title: d.task.title })), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
     })
 
     app.post('/tasks/:taskId/todos', async (request, reply) => {
@@ -2556,6 +2570,41 @@ const start = async () => {
       const taskScope = await getTaskAccessScope(request, task.projectId)
       if (!canAccessTaskAssignee(taskScope, task.assignee)) return reply.code(403).send({ ok: false, error: 'Task access denied' })
       await prisma.task.delete({ where: { id: taskId } })
+      return { ok: true }
+    })
+
+    app.post('/tasks/:taskId/dependencies', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { taskId } = request.params as { taskId: string }
+      const body = request.body as { dependsOnId: string }
+      if (!body.dependsOnId) return reply.code(400).send({ ok: false, error: 'dependsOnId is required' })
+      if (taskId === body.dependsOnId) return reply.code(400).send({ ok: false, error: 'A task cannot depend on itself' })
+      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } } })
+      if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
+      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const dependsOn = await prisma.task.findFirst({ where: { id: body.dependsOnId, projectId: task.projectId, archivedAt: null } })
+      if (!dependsOn) return reply.code(404).send({ ok: false, error: 'Dependency target task not found in the same project' })
+      const existing = await prisma.taskDependency.findUnique({ where: { taskId_dependsOnId: { taskId, dependsOnId: body.dependsOnId } } })
+      if (existing) return reply.code(409).send({ ok: false, error: 'Dependency already exists' })
+      if (await wouldCreateDependencyCycle(taskId, body.dependsOnId)) return reply.code(400).send({ ok: false, error: 'Adding this dependency would create a cycle' })
+      await prisma.taskDependency.create({ data: { taskId, dependsOnId: body.dependsOnId } })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, ...actorFromRequest(request), type: 'task.dependency.added', summary: `Added dependency: "${task.title}" depends on "${dependsOn.title}".`, payload: { dependsOnId: body.dependsOnId } })
+      return { ok: true }
+    })
+
+    app.delete('/tasks/:taskId/dependencies/:dependsOnId', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { taskId, dependsOnId } = request.params as { taskId: string; dependsOnId: string }
+      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } } })
+      if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
+      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const dep = await prisma.taskDependency.findUnique({ where: { taskId_dependsOnId: { taskId, dependsOnId } } })
+      if (!dep) return reply.code(404).send({ ok: false, error: 'Dependency not found' })
+      const dependsOn = await prisma.task.findFirst({ where: { id: dependsOnId }, select: { title: true } })
+      await prisma.taskDependency.delete({ where: { taskId_dependsOnId: { taskId, dependsOnId } } })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, ...actorFromRequest(request), type: 'task.dependency.removed', summary: `Removed dependency: "${task.title}" no longer depends on "${dependsOn?.title ?? dependsOnId}".`, payload: { dependsOnId } })
       return { ok: true }
     })
 

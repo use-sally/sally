@@ -63,6 +63,12 @@ export type StatusOption = {
   taskCount?: number
 }
 
+export type TaskDependencyRef = {
+  taskId: string
+  number: number | null
+  title: string
+}
+
 export type TodoItem = {
   id: string
   text: string
@@ -231,6 +237,8 @@ export type TaskDetail = {
   createdAt: string
   updatedAt: string
   labels: string[]
+  dependencies: TaskDependencyRef[]
+  dependedOnBy: TaskDependencyRef[]
   todos: TodoItem[]
   timesheetSummary: TimesheetSummary
   timesheets: TimesheetEntry[]
