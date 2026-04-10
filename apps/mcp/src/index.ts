@@ -140,6 +140,8 @@ const tools: ToolDefinition[] = [
   { name: 'task.reorder', description: 'Move/reorder tasks within a target status using the ordered list of task ids.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, targetStatusId: { type: 'string' }, orderedTaskIds: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'targetStatusId', 'orderedTaskIds'], additionalProperties: false } },
   { name: 'task.archive', description: 'Archive or unarchive a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.delete', description: 'Delete a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'task.dependencies.add', description: 'Add a dependency: the task depends on another task. Both must be in the same project. Cycles are rejected.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string', description: 'The task that depends on another' }, dependsOnId: { type: 'string', description: 'The task it depends on' } }, required: ['taskId', 'dependsOnId'], additionalProperties: false } },
+  { name: 'task.dependencies.remove', description: 'Remove a dependency between two tasks.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, dependsOnId: { type: 'string' } }, required: ['taskId', 'dependsOnId'], additionalProperties: false } },
   { name: 'task.comments', description: 'List comments for a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'comment.add', description: 'Add a comment to a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, body: { type: 'string' }, author: { type: 'string' }, mentions: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'body'], additionalProperties: false } },
   { name: 'task.labels.update', description: 'Replace a task label set, creating missing labels automatically.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, labels: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'labels'], additionalProperties: false } },
@@ -269,6 +271,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return ok(await api<Json>(workspacePath(`/tasks/${args.taskId}/archive`), { method: 'POST', body: JSON.stringify({ archived: args.archived }) }))
       case 'task.delete':
         return ok(await api<Json>(workspacePath(`/tasks/${args.taskId}`), { method: 'DELETE' }))
+      case 'task.dependencies.add':
+        return ok(await api<Json>(workspacePath(`/tasks/${args.taskId}/dependencies`), { method: 'POST', body: JSON.stringify({ dependsOnId: args.dependsOnId }) }))
+      case 'task.dependencies.remove':
+        return ok(await api<Json>(workspacePath(`/tasks/${args.taskId}/dependencies/${args.dependsOnId}`), { method: 'DELETE' }))
       case 'task.comments': {
         const task = await api<any>(workspacePath(`/tasks/${args.taskId}`))
         return ok({ items: task.comments || [] })
