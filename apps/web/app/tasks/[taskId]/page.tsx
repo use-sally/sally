@@ -286,6 +286,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                 <div><div style={sectionLabel}>Assignee</div><div style={{ marginTop: 6 }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={36} /></div></div>
                 <div><div style={sectionLabel}>Priority</div><div style={{ marginTop: 4, fontSize: 18, color: 'var(--text-primary)' }}>{priorityStars(task.priority)}</div></div>
                 <div><div style={sectionLabel}>Status</div><div style={{ marginTop: 4 }}><span style={tagStyle()}>{task.status}</span></div></div>
+                <div><div style={sectionLabel}>Created</div><div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-secondary)' }}>{new Date(task.createdAt).toLocaleDateString()}</div></div>
+                <div><div style={sectionLabel}>Last updated</div><div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-secondary)' }}>{new Date(task.updatedAt).toLocaleDateString()}</div></div>
               </div>
             </div>
           </div>
