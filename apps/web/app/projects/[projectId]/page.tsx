@@ -487,6 +487,31 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
               </div>
             </div>
 
+            {project.dependencies?.length || project.dependedOnBy?.length ? (
+              <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 8 }}>
+                {project.dependencies?.length ? (
+                  <div>
+                    <div style={labelText}>Depends on</div>
+                    <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
+                      {project.dependencies.map((dep: { projectId: string; name: string }) => (
+                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{dep.name}</a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {project.dependedOnBy?.length ? (
+                  <div>
+                    <div style={labelText}>Blocks</div>
+                    <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
+                      {project.dependedOnBy.map((dep: { projectId: string; name: string }) => (
+                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{dep.name}</a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 8 }}>
               <div style={labelText}>Total tasks</div>
               <div style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>{project.taskCount} {project.taskCount === 1 ? 'task' : 'tasks'}</div>

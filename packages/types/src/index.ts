@@ -63,6 +63,11 @@ export type StatusOption = {
   taskCount?: number
 }
 
+export type ProjectDependencyRef = {
+  projectId: string
+  name: string
+}
+
 export type TaskDependencyRef = {
   taskId: string
   number: number | null
@@ -202,6 +207,8 @@ export type ProjectDetail = {
   reviewTasks: number
   statuses: StatusOption[]
   labels: LabelOption[]
+  dependencies: ProjectDependencyRef[]
+  dependedOnBy: ProjectDependencyRef[]
   timesheetSummary: TimesheetSummary
   recentTimesheets: TimesheetEntry[]
   timesheetUsers: TimesheetUser[]
