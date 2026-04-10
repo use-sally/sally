@@ -377,6 +377,34 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
           />
           {busy ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>Saving…</div> : null}
         </div>
+        {task.dependencies?.length || task.dependedOnBy?.length ? (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {task.dependencies?.length ? (
+              <div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Depends on</div>
+                <div style={{ marginTop: 4, display: 'grid', gap: 2 }}>
+                  {task.dependencies.map((dep: { taskId: string; number: number | null; title: string }) => (
+                    <div key={dep.taskId} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {task.dependedOnBy?.length ? (
+              <div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Blocks</div>
+                <div style={{ marginTop: 4, display: 'grid', gap: 2 }}>
+                  {task.dependedOnBy.map((dep: { taskId: string; number: number | null; title: string }) => (
+                    <div key={dep.taskId} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div style={{ display: 'grid', gap: 10 }}>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Checklist</div>
           {taskEditDecision.visible ? <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && taskEditDecision.allowed) { e.preventDefault(); void addTodo() } }} style={inputStyle} placeholder="Add checklist item and press Enter" disabled={!taskEditDecision.allowed} /> : null}
