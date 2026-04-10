@@ -175,9 +175,9 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                   style={taskHeaderTitleInput}
                 />
               ) : (
-                <button type="button" onClick={() => setEditingTitle(true)} style={taskHeaderTitleButton}>{task.title}</button>
+                <button type="button" onClick={() => setEditingTitle(true)} style={taskHeaderTitleButton}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.6em', marginRight: 8 }}>#{task.number}</span> : null}{task.title}</button>
               )
-            ) : <div style={taskHeaderTitleText}>{task.title}</div>}
+            ) : <div style={taskHeaderTitleText}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.6em', marginRight: 8 }}>#{task.number}</span> : null}{task.title}</div>}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>

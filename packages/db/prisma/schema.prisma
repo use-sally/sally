@@ -313,6 +313,7 @@ model Project {
   name        String
   slug        String
   description String?
+  taskCounter Int              @default(0)
   archivedAt  DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -346,6 +347,7 @@ model Task {
   id          String           @id @default(cuid())
   projectId   String
   statusId    String
+  number      Int?
   title       String
   description String?
   priority    TaskPriority     @default(P2)
@@ -363,6 +365,8 @@ model Task {
   timesheets  TimesheetEntry[]
   activityLogs ActivityLog[]
   notifications Notification[]
+
+  @@unique([projectId, number])
 }
 
 model Comment {

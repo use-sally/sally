@@ -816,6 +816,7 @@ async function getBoardData(request: any, workspaceId: string, projectId?: strin
       .filter((task) => canAccessTaskAssignee(taskScopes.get(status.projectId) || { restricted: false, allowedAssignees: [] }, task.assignee))
       .map((task) => ({
         id: task.id,
+        number: task.number,
         title: task.title,
         meta: `${task.assignee ?? 'Unassigned'} · ${task.priority}`,
         description: task.description ?? 'No description yet.',
@@ -2076,7 +2077,7 @@ const start = async () => {
         timesheetSummary: summarizeTimesheets(visibleTimesheets),
         timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()),
         recentTimesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })),
-        recentTasks: visibleTasks.slice(0, 8).map((t) => ({ id: t.id, title: t.title, assignee: t.assignee ?? 'Unassigned', assigneeAvatarUrl: t.assignee ? assigneeAvatars.get(t.assignee) ?? null : null, priority: t.priority, status: t.status.name, statusId: t.statusId, statusColor: t.status.color, dueDate: t.dueDate?.toISOString() ?? null, labels: t.labels.map((l) => l.label.name), todoProgress: t.todos.length ? `${t.todos.filter((td) => td.done).length}/${t.todos.length}` : null })),
+        recentTasks: visibleTasks.slice(0, 8).map((t) => ({ id: t.id, number: t.number, title: t.title, assignee: t.assignee ?? 'Unassigned', assigneeAvatarUrl: t.assignee ? assigneeAvatars.get(t.assignee) ?? null : null, priority: t.priority, status: t.status.name, statusId: t.statusId, statusColor: t.status.color, dueDate: t.dueDate?.toISOString() ?? null, labels: t.labels.map((l) => l.label.name), todoProgress: t.todos.length ? `${t.todos.filter((td) => td.done).length}/${t.todos.length}` : null })),
       }
     })
 
@@ -2105,6 +2106,7 @@ const start = async () => {
       const assigneeAvatars = await getAssigneeAvatarMap(workspace.id, tasks.map((t) => t.assignee))
       return tasks.map((t) => ({
         id: t.id,
+        number: t.number,
         title: t.title,
         assignee: t.assignee ?? 'Unassigned',
         assigneeAvatarUrl: t.assignee ? assigneeAvatars.get(t.assignee) ?? null : null,
@@ -2131,7 +2133,7 @@ const start = async () => {
       const commentAvatars = await getAssigneeAvatarMap(workspace.id, task.comments.map((comment) => comment.author))
       const timesheetScope = await resolveTimesheetScope(request, workspace.id, task.projectId)
       const visibleTimesheets = timesheetScope.elevated || !timesheetScope.userId ? task.timesheets : task.timesheets.filter((entry) => entry.userId === timesheetScope.userId)
-      return { id: task.id, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, labels: task.labels.map((l) => l.label.name), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
+      return { id: task.id, number: task.number, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, labels: task.labels.map((l) => l.label.name), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
     })
 
     app.post('/tasks/:taskId/todos', async (request, reply) => {
@@ -2457,7 +2459,8 @@ const start = async () => {
         if (!allowedAssignee) return reply.code(400).send({ ok: false, error: 'Assignee must already be a member of this project' })
       }
       const task = await prisma.$transaction(async (tx) => {
-        const createdTask = await tx.task.create({ data: { projectId: body.projectId, statusId: targetStatus.id, title: body.title.trim(), description: body.description?.trim() || null, assignee: defaultAssignee, priority: body.priority ?? 'P2', dueDate: toIsoOrNull(body.dueDate), position: count } })
+        const updatedProject = await tx.project.update({ where: { id: body.projectId }, data: { taskCounter: { increment: 1 } } })
+        const createdTask = await tx.task.create({ data: { projectId: body.projectId, statusId: targetStatus.id, number: updatedProject.taskCounter, title: body.title.trim(), description: body.description?.trim() || null, assignee: defaultAssignee, priority: body.priority ?? 'P2', dueDate: toIsoOrNull(body.dueDate), position: count } })
         if (labels.length) {
           const labelIds: string[] = []
           for (const name of labels) {

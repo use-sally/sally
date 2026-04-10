@@ -134,7 +134,7 @@ export function EditableTaskRow({
               style={inputStyle}
             />
           ) : (
-            <div style={{ ...taskTitleText, fontWeight: 700 }}>{task.title}</div>
+            <div style={{ ...taskTitleText, fontWeight: 700 }}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{task.number}</span> : null}{task.title}</div>
           )}
         </div>
 

@@ -141,6 +141,7 @@ export type TimesheetReport = {
 
 export type ProjectTaskListItem = {
   id: string
+  number: number | null
   title: string
   assignee: string
   assigneeAvatarUrl?: string | null
@@ -156,6 +157,7 @@ export type ProjectTaskListItem = {
 
 export type BoardCard = {
   id: string
+  number: number | null
   title: string
   meta: string
   description: string
@@ -191,6 +193,7 @@ export type ProjectDetail = {
   timesheetUsers: TimesheetUser[]
   recentTasks: {
     id: string
+    number: number | null
     title: string
     assignee: string
     assigneeAvatarUrl?: string | null
@@ -206,6 +209,7 @@ export type ProjectDetail = {
 
 export type TaskDetail = {
   id: string
+  number: number | null
   title: string
   description: string
   assignee: string
