@@ -326,8 +326,20 @@ model Project {
   memberships ProjectMembership[]
   activityLogs ActivityLog[]
   notifications Notification[]
+  dependencies   ProjectDependency[] @relation("projectDependencies")
+  dependedOnBy   ProjectDependency[] @relation("projectDependedOnBy")
 
   @@unique([workspaceId, slug])
+}
+
+model ProjectDependency {
+  projectId    String
+  dependsOnId  String
+  createdAt    DateTime @default(now())
+  project      Project  @relation("projectDependencies", fields: [projectId], references: [id], onDelete: Cascade)
+  dependsOn    Project  @relation("projectDependedOnBy", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, dependsOnId])
 }
 
 model TaskStatus {
