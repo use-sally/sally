@@ -263,7 +263,26 @@ These are the useful shapes exposed by the handlers, simplified from Prisma.
   "lead": "alex@example.com",
   "tasks": 12,
   "status": "Review",
+  "createdAt": "2026-04-07T13:00:00.000Z",
+  "updatedAt": "2026-04-10T12:00:00.000Z",
   "archivedAt": null
+}
+```
+
+### Project detail (additional fields beyond list item)
+```json
+{
+  "description": "...",
+  "taskCount": 12,
+  "openTasks": 8,
+  "reviewTasks": 2,
+  "createdAt": "2026-04-07T13:00:00.000Z",
+  "updatedAt": "2026-04-10T12:00:00.000Z",
+  "dependencies": [{ "projectId": "...", "name": "Infrastructure" }],
+  "dependedOnBy": [{ "projectId": "...", "name": "Mobile app" }],
+  "statuses": [],
+  "labels": [],
+  "recentTasks": []
 }
 ```
 
@@ -271,6 +290,7 @@ These are the useful shapes exposed by the handlers, simplified from Prisma.
 ```json
 {
   "id": "...",
+  "number": 5,
   "title": "Ship onboarding flow",
   "assignee": "alex@example.com",
   "assigneeAvatarUrl": null,
@@ -279,9 +299,46 @@ These are the useful shapes exposed by the handlers, simplified from Prisma.
   "statusId": "...",
   "statusColor": "#172554",
   "dueDate": null,
+  "createdAt": "2026-04-07T13:06:00.000Z",
+  "updatedAt": "2026-04-10T12:00:00.000Z",
   "labels": ["frontend", "priority"],
   "todoProgress": "1/3",
   "archivedAt": null
+}
+```
+
+### Task detail (additional fields beyond list item)
+```json
+{
+  "number": 5,
+  "description": "...",
+  "createdAt": "2026-04-07T13:06:00.000Z",
+  "updatedAt": "2026-04-10T12:00:00.000Z",
+  "dependencies": [{ "taskId": "...", "number": 3, "title": "Set up auth" }],
+  "dependedOnBy": [{ "taskId": "...", "number": 8, "title": "Write tests" }],
+  "todos": [],
+  "comments": [],
+  "project": { "id": "...", "name": "Website relaunch", "client": null }
+}
+```
+
+### Board card
+```json
+{
+  "id": "...",
+  "number": 5,
+  "title": "Ship onboarding flow",
+  "meta": "alex@example.com · P2",
+  "description": "...",
+  "assignee": "alex@example.com",
+  "priority": "P2",
+  "status": "In Progress",
+  "statusId": "...",
+  "dueDate": null,
+  "createdAt": "2026-04-07T13:06:00.000Z",
+  "updatedAt": "2026-04-10T12:00:00.000Z",
+  "labels": ["frontend"],
+  "todoProgress": "1/3"
 }
 ```
 
@@ -702,6 +759,17 @@ If `archived` is omitted, it archives by default.
 ### `DELETE /projects/:projectId`
 Project owner only.
 
+### Project dependencies
+- `POST /projects/:projectId/dependencies` — add a project dependency (same workspace, cycles rejected)
+- `DELETE /projects/:projectId/dependencies/:dependsOnId` — remove a project dependency
+
+Request for add:
+```json
+{ "dependsOnId": "target-project-id" }
+```
+
+Dependencies are returned in `GET /projects/:projectId` as `dependencies[]` and `dependedOnBy[]`.
+
 ### Project members
 - `GET /projects/:projectId/members`
 - `POST /projects/:projectId/members`
@@ -841,6 +909,19 @@ Request:
 
 ### `DELETE /tasks/:taskId`
 Workspace owner only.
+
+### `POST /tasks/:taskId/dependencies`
+Add a task dependency. Both tasks must be in the same project. Cycles are rejected.
+
+Request:
+```json
+{ "dependsOnId": "target-task-id" }
+```
+
+Returns `{ "ok": true }` or error with reason (cycle, self-reference, duplicate, not found).
+
+### `DELETE /tasks/:taskId/dependencies/:dependsOnId`
+Remove a task dependency.
 
 ### `POST /tasks/:taskId/move`
 Moves by target status name.

@@ -259,6 +259,57 @@ This catches:
 
 ---
 
+## Available tools
+
+Both hosted and stdio MCP expose the following tools:
+
+### Workspace & project
+- `workspace.list` — list workspaces
+- `project.list` — list projects (returns `createdAt`, `updatedAt`)
+- `project.get` — project detail (returns `dependencies[]`, `dependedOnBy[]`)
+- `project.create` / `project.update` / `project.archive` / `project.delete`
+- `project.dependencies.add` — add a project dependency (same workspace, cycles rejected)
+- `project.dependencies.remove` — remove a project dependency
+- `project.members.*` — manage project memberships
+- `project.labels.create` / `project.statuses.*`
+
+### Tasks
+- `task.list` — list tasks for a project (returns `number`, `createdAt`, `updatedAt`)
+- `task.get` — full task detail (returns `number`, `createdAt`, `updatedAt`, `dependencies[]`, `dependedOnBy[]`)
+- `task.create` / `task.update` / `task.move` / `task.reorder`
+- `task.archive` / `task.delete`
+- `task.dependencies.add` — add a task dependency (same project, cycles rejected)
+- `task.dependencies.remove` — remove a task dependency
+
+### Task sub-resources
+- `task.comments` / `comment.add`
+- `task.labels.update`
+- `task.todos.create` / `task.todos.update` / `task.todos.delete` / `task.todos.reorder`
+- `task.image_upload`
+
+### Board
+- `board.get` — board columns with cards (cards include `number`, `createdAt`, `updatedAt`)
+
+### Timesheets
+- `timesheet.add` / `timesheet.update` / `timesheet.delete`
+- `timesheet.project_list` / `timesheet.task_list`
+- `timesheet.users` / `timesheet.report`
+
+### Key response fields for agents
+
+All task responses include:
+- `number` — stable project-local sequential number (immutable after creation)
+- `createdAt` / `updatedAt` — ISO timestamps for lifecycle tracking
+
+Task detail additionally includes:
+- `dependencies[]` — tasks this task depends on (`{ taskId, number, title }`)
+- `dependedOnBy[]` — tasks that depend on this task
+
+Project detail includes:
+- `dependencies[]` / `dependedOnBy[]` — project-level dependency graph (`{ projectId, name }`)
+
+---
+
 ## Source of truth
 
 Primary references:
