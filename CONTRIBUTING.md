@@ -183,10 +183,17 @@ If needed, create narrower child branches under that workstream.
 - keep PRs scoped to one concern when possible
 - prefer clear titles that match the branch intent
 
+## Important: `main` is protected
+
+- **Never push directly to `main`.** The `main` branch triggers a CI workflow that builds and publishes packages to npm immediately — any push goes live instantly.
+- All work happens in `develop` or feature/fix branches. PRs go into `develop`.
+- Merging `develop` → `main` requires explicit review and approval from the CTO before proceeding.
+- Contributors with write access should only work in their own branches and submit PRs into `develop`. Do not merge into `main` under any circumstances.
+
 ## Summary
 
 Use this mental model:
-- `main` = production-ready
+- `main` = production-ready (auto-publishes to npm — do not touch)
 - `develop` = next integrated state
 - `feature/*` = new work
 - `fix/*` = standard bug fixes
