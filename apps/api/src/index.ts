@@ -889,6 +889,10 @@ const hostedMcpTools: McpTool[] = [
   { name: 'project.status.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'name'], additionalProperties: false } },
   { name: 'project.status.update', description: 'Update a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, name: { type: 'string' }, color: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
   { name: 'project.status.delete', description: 'Delete a project status, optionally moving tasks to a replacement status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, targetStatusId: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
+  { name: 'workspace.members.list', description: 'List members in a workspace with their roles.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' } }, additionalProperties: false } },
+  { name: 'workspace.members.add', description: 'Add a workspace member by accountId or by email/name.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, accountId: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, role: { type: 'string', enum: ['OWNER', 'MEMBER'] } }, required: ['role'], additionalProperties: false } },
+  { name: 'workspace.members.update', description: 'Change a workspace member role.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, membershipId: { type: 'string' }, role: { type: 'string', enum: ['OWNER', 'MEMBER'] } }, required: ['membershipId', 'role'], additionalProperties: false } },
+  { name: 'workspace.members.remove', description: 'Remove a workspace member.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, membershipId: { type: 'string' } }, required: ['membershipId'], additionalProperties: false } },
   { name: 'workspace.invite', description: 'Invite a user into a workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, email: { type: 'string' }, role: { type: 'string' } }, required: ['email', 'role'], additionalProperties: false } },
   { name: 'project.member.list', description: 'List project members.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'project.member.add', description: 'Add a member to a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, accountId: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, role: { type: 'string' } }, required: ['projectId', 'role'], additionalProperties: false } },
@@ -1001,6 +1005,30 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}/statuses/${args.statusId}`, args, payload: { name: args.name, color: args.color } })
     case 'project.status.delete':
       return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses/${args.statusId}/delete`, args, payload: { targetStatusId: args.targetStatusId } })
+    case 'workspace.members.list': {
+      const resolved = await injectJson(request, { method: 'GET', url: '/workspaces', args })
+      const wsId = args.workspaceId || resolved?.[0]?.id
+      if (!wsId) throw new Error('Could not resolve workspace')
+      return { items: await injectJson(request, { method: 'GET', url: `/workspaces/${wsId}/members`, args }) }
+    }
+    case 'workspace.members.add': {
+      const resolved = await injectJson(request, { method: 'GET', url: '/workspaces', args })
+      const wsId = args.workspaceId || resolved?.[0]?.id
+      if (!wsId) throw new Error('Could not resolve workspace')
+      return await injectJson(request, { method: 'POST', url: `/workspaces/${wsId}/members`, args, payload: { accountId: args.accountId, email: args.email, name: args.name, role: args.role } })
+    }
+    case 'workspace.members.update': {
+      const resolved = await injectJson(request, { method: 'GET', url: '/workspaces', args })
+      const wsId = args.workspaceId || resolved?.[0]?.id
+      if (!wsId) throw new Error('Could not resolve workspace')
+      return await injectJson(request, { method: 'PATCH', url: `/workspaces/${wsId}/members/${args.membershipId}`, args, payload: { role: args.role } })
+    }
+    case 'workspace.members.remove': {
+      const resolved = await injectJson(request, { method: 'GET', url: '/workspaces', args })
+      const wsId = args.workspaceId || resolved?.[0]?.id
+      if (!wsId) throw new Error('Could not resolve workspace')
+      return await injectJson(request, { method: 'DELETE', url: `/workspaces/${wsId}/members/${args.membershipId}`, args })
+    }
     case 'workspace.invite':
       return await injectJson(request, { method: 'POST', url: '/auth/invite', args, payload: { email: args.email, role: args.role } })
     case 'project.member.list':

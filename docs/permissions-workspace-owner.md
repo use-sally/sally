@@ -39,6 +39,18 @@ The API enforces this through explicit workspace owner checks in every permissio
 
 Both hosted and stdio MCP inherit the same permission model. An MCP key tied to a workspace owner account gets the same full visibility as the UI. If the MCP key is restricted to a specific workspace, visibility is scoped to that workspace only.
 
+### Workspace member management tools (available in both hosted and stdio MCP)
+
+| Tool | Description |
+|------|-------------|
+| `workspace.members.list` | List all workspace members with roles |
+| `workspace.members.add` | Add a member by accountId or email |
+| `workspace.members.update` | Change a member's role (OWNER/MEMBER) |
+| `workspace.members.remove` | Remove a member from the workspace |
+| `workspace.invite` | Invite a user by email |
+
+Agents can use `workspace.members.list` to identify workspace owners and understand the permission structure.
+
 ## Implications for new features
 
 When adding new features:
