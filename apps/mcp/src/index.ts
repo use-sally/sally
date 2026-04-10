@@ -135,7 +135,8 @@ const tools: ToolDefinition[] = [
   { name: 'project.dependencies.add', description: 'Add a project dependency: the project depends on another project. Both must be in the same workspace. Cycles are rejected.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string', description: 'The project that depends on another' }, dependsOnId: { type: 'string', description: 'The project it depends on' } }, required: ['projectId', 'dependsOnId'], additionalProperties: false } },
   { name: 'project.dependencies.remove', description: 'Remove a dependency between two projects.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, dependsOnId: { type: 'string' } }, required: ['projectId', 'dependsOnId'], additionalProperties: false } },
   { name: 'task.list', description: 'List tasks for a project.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, status: { type: 'string' }, assignee: { type: 'string' }, search: { type: 'string' }, label: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
-  { name: 'task.get', description: 'Get full task details.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'task.get', description: 'Get full task details by ID.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'task.getByNumber', description: 'Get full task details by project-local number (e.g. #5).', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, number: { type: 'number' } }, required: ['projectId', 'number'], additionalProperties: false } },
   { name: 'task.create', description: 'Create a task in a project.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, title: { type: 'string' }, assignee: { type: 'string' }, description: { type: 'string' }, priority: { type: 'string', enum: ['P1', 'P2', 'P3'] }, status: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string', 'null'] }, labels: { type: 'array', items: { type: 'string' } }, todos: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } } }, required: ['projectId', 'title'], additionalProperties: false } },
   { name: 'task.update', description: 'Update a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, assignee: { type: 'string' }, priority: { type: 'string', enum: ['P1', 'P2', 'P3'] }, statusId: { type: 'string' }, dueDate: { type: ['string', 'null'] } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.move', description: 'Move a task to a target status name.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, targetStatus: { type: 'string' } }, required: ['taskId', 'targetStatus'], additionalProperties: false } },
@@ -261,6 +262,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return ok({ items: await api<any[]>(workspacePath(pathWithParams(`/projects/${args.projectId}/tasks`, pick(args, ['status', 'assignee', 'search', 'label', 'archived'])))) })
       case 'task.get':
         return ok(await api<Json>(workspacePath(`/tasks/${args.taskId}`)))
+      case 'task.getByNumber': {
+        const tasks = await api<any[]>(workspacePath(`/projects/${args.projectId}/tasks`))
+        const match = tasks.find((t: any) => t.number === args.number)
+        if (!match) return fail(new Error(`Task #${args.number} not found in this project`))
+        return ok(await api<Json>(workspacePath(`/tasks/${match.id}`)))
+      }
       case 'task.create': {
         const { workspaceId: _w1, workspaceSlug: _w2, ...payload } = args
         return ok(await api<Json>(workspacePath('/tasks'), { method: 'POST', body: JSON.stringify(payload) }))
