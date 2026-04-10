@@ -19,6 +19,8 @@ export type Project = {
   lead: string
   tasks: number
   status: ProjectStatus
+  createdAt: string
+  updatedAt: string
   archivedAt: string | null
 }
 
@@ -150,6 +152,8 @@ export type ProjectTaskListItem = {
   statusId: string
   statusColor?: string | null
   dueDate: string | null
+  createdAt: string
+  updatedAt: string
   labels: string[]
   todoProgress: TodoProgress
   archivedAt: string | null
@@ -167,6 +171,8 @@ export type BoardCard = {
   status: string
   statusId: string
   dueDate: string | null
+  createdAt: string
+  updatedAt: string
   labels: string[]
   todoProgress: TodoProgress
 }
@@ -183,6 +189,8 @@ export type ProjectDetail = {
   name: string
   description: string | null
   client: { id: string; name: string } | null
+  createdAt: string
+  updatedAt: string
   taskCount: number
   openTasks: number
   reviewTasks: number
@@ -202,6 +210,8 @@ export type ProjectDetail = {
     statusId: string
     statusColor?: string | null
     dueDate: string | null
+    createdAt: string
+    updatedAt: string
     labels: string[]
     todoProgress: TodoProgress
   }[]
@@ -218,6 +228,8 @@ export type TaskDetail = {
   status: string
   statusId: string
   dueDate: string | null
+  createdAt: string
+  updatedAt: string
   labels: string[]
   todos: TodoItem[]
   timesheetSummary: TimesheetSummary
