@@ -86,14 +86,15 @@ That means deployed Sally images should know their version without asking end us
 8. stack file generation
 9. fresh image pull before startup
 10. Postgres startup + readiness wait
-11. Prisma DB push
-12. bootstrap of first workspace + superadmin
-13. health verification
-14. final welcome output with login details
-15. post-install path points users toward hosted MCP inside Sally
-16. guided update flow for installer-managed Sally deployments
-17. update-time image tag refresh in `.env`
-18. update-time image pull + migration deploy + service restart + health verification
+11. automatic baseline reconciliation for initialized databases that are missing Prisma migration history
+12. Prisma migration deploy
+13. bootstrap of first workspace + superadmin
+14. health verification
+15. final welcome output with login details
+16. post-install path points users toward hosted MCP inside Sally
+17. guided update flow for installer-managed Sally deployments
+18. update-time image tag refresh in `.env`
+19. update-time image pull + migration deploy + service restart + health verification
 
 ---
 
@@ -110,12 +111,30 @@ Current scope:
 - supports both `managed-simple` and `existing-infra`
 - updates the managed Sally image references in `.env`
 - pulls fresh images
-- reapplies schema changes
+- starts Postgres if needed
+- inspects the live database before migration deploy
+- if the app schema already exists but `_prisma_migrations` is missing, marks baseline migration `20260410182000_init` as applied before continuing
+- runs committed Prisma migrations with `prisma migrate deploy`
 - reruns bootstrap safely
 - restarts services
 - verifies health
 
 This is intentionally narrower than trying to manage arbitrary custom Docker setups.
+
+### Baseline reconciliation behavior
+
+A specific recovery path now exists for installs where:
+- the Sally schema already exists
+- core tables such as `Workspace`, `Project`, `TaskStatus`, and `Task` are present
+- but Prisma migration history is missing because `_prisma_migrations` does not exist
+
+In that case, `create-sally update`:
+1. inspects Postgres directly through `docker compose exec postgres psql`
+2. confirms whether the schema is already initialized
+3. marks `20260410182000_init` as applied
+4. runs normal migration deploy for the remaining migrations
+
+This avoids the previous failure mode where updates could not proceed on initialized databases with missing migration history.
 
 ---
 
@@ -172,5 +191,52 @@ The same bootstrap step is rerun during managed updates so installer-managed ins
 5. Test one fresh `managed-simple` install on a clean Linux host
 6. Test one fresh `existing-infra` install on a clean Linux host
 7. Test one `create-sally update` run against an installer-managed deployment
-8. Verify SMTP, login, invite flow, hosted MCP key UX, and hosted `/mcp` behavior
-9. Verify reported Sally version after update matches the deployed image tag
+8. Specifically test the initialized-schema / missing-`_prisma_migrations` recovery path during update
+9. Verify SMTP, login, invite flow, hosted MCP key UX, and hosted `/mcp` behavior
+10. Verify reported Sally version after update matches the deployed image tag
+
+---
+
+## Product changes included in this release line
+
+### Task workflow model
+
+Task workflow now distinguishes between:
+- `Task.number`: stable human-facing task reference
+- `Task.position`: mutable canonical project-wide task order
+
+`Task.position` is now the source of truth for:
+- project task list ordering
+- board/task ordering reads
+- “next task in line” style sequencing
+- reorder persistence
+
+### Status model
+
+Project task statuses now include `BLOCKED` as a first-class `TaskStatusType`.
+
+Default seeded/project-created workflows now use:
+1. Backlog
+2. In Progress
+3. Blocked
+4. Review
+5. Done
+
+### Reordering capabilities
+
+Sally now supports three distinct reorder behaviors:
+- project status reorder, with the first status pinned
+- board task reorder inside a target status
+- project-wide task reorder without changing task status
+
+The project-wide reorder path is exposed through:
+- API: `POST /projects/:projectId/tasks/reorder`
+- MCP: `project.tasks.reorder`
+
+### UI changes
+
+The task experience now includes:
+- drag-and-drop task ordering in the project list view
+- drag-and-drop status ordering in workflow settings
+- `Blocked` surfaced across task and status management UI
+- task/project responses carrying canonical `position` values so the UI can render consistent order across list and board views
