@@ -93,6 +93,7 @@ function workspaceFields() {
 
 const tools: ToolDefinition[] = [
   { name: 'workspace.list', description: 'List accessible workspaces.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'workspace.update', description: 'Update a workspace.', inputSchema: { type: 'object', properties: { ...workspaceFields(), targetWorkspaceId: { type: 'string' }, name: { type: 'string' } }, required: ['name'], additionalProperties: false } },
   { name: 'workspace.members.list', description: 'List members in a workspace.', inputSchema: { type: 'object', properties: { ...workspaceFields(), targetWorkspaceId: { type: 'string' } }, additionalProperties: false } },
   { name: 'workspace.members.add', description: 'Add a workspace member by accountId or by email/name.', inputSchema: { type: 'object', properties: { ...workspaceFields(), targetWorkspaceId: { type: 'string' }, accountId: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, role: { type: 'string', enum: ['OWNER', 'MEMBER'] } }, required: ['role'], additionalProperties: false } },
   { name: 'workspace.members.update', description: 'Change a workspace member role.', inputSchema: { type: 'object', properties: { ...workspaceFields(), targetWorkspaceId: { type: 'string' }, membershipId: { type: 'string' }, role: { type: 'string', enum: ['OWNER', 'MEMBER'] } }, required: ['membershipId', 'role'], additionalProperties: false } },
@@ -128,9 +129,10 @@ const tools: ToolDefinition[] = [
   { name: 'project.members.remove', description: 'Remove a project member.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, membershipId: { type: 'string' } }, required: ['projectId', 'membershipId'], additionalProperties: false } },
   { name: 'project.activity', description: 'List recent project activity.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'project.labels.create', description: 'Create or ensure a project label exists.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'name'], additionalProperties: false } },
-  { name: 'project.statuses.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'name'], additionalProperties: false } },
+  { name: 'project.statuses.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, name: { type: 'string' }, type: { type: 'string', enum: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE'] } }, required: ['projectId', 'name', 'type'], additionalProperties: false } },
   { name: 'project.statuses.update', description: 'Update a project status.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, statusId: { type: 'string' }, name: { type: 'string' }, color: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
   { name: 'project.statuses.delete', description: 'Delete a project status, optionally moving tasks to another status.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, statusId: { type: 'string' }, targetStatusId: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
+  { name: 'project.statuses.reorder', description: 'Reorder project statuses while keeping the first status pinned.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, orderedStatusIds: { type: 'array', items: { type: 'string' } } }, required: ['projectId', 'orderedStatusIds'], additionalProperties: false } },
   { name: 'board.get', description: 'Get board columns/cards, optionally for one project.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' } }, additionalProperties: false } },
   { name: 'project.dependencies.add', description: 'Add a project dependency: the project depends on another project. Both must be in the same workspace. Cycles are rejected.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string', description: 'The project that depends on another' }, dependsOnId: { type: 'string', description: 'The project it depends on' } }, required: ['projectId', 'dependsOnId'], additionalProperties: false } },
   { name: 'project.dependencies.remove', description: 'Remove a dependency between two projects.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, dependsOnId: { type: 'string' } }, required: ['projectId', 'dependsOnId'], additionalProperties: false } },
@@ -140,6 +142,7 @@ const tools: ToolDefinition[] = [
   { name: 'task.update', description: 'Update a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, assignee: { type: 'string' }, priority: { type: 'string', enum: ['P1', 'P2', 'P3'] }, statusId: { type: 'string' }, dueDate: { type: ['string', 'null'] } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.move', description: 'Move a task to a target status name.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, targetStatus: { type: 'string' } }, required: ['taskId', 'targetStatus'], additionalProperties: false } },
   { name: 'task.reorder', description: 'Move/reorder tasks within a target status using the ordered list of task ids.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, targetStatusId: { type: 'string' }, orderedTaskIds: { type: 'array', items: { type: 'string' } } }, required: ['taskId', 'targetStatusId', 'orderedTaskIds'], additionalProperties: false } },
+  { name: 'project.tasks.reorder', description: 'Reorder the canonical project-wide task sequence without changing statuses.', inputSchema: { type: 'object', properties: { ...workspaceFields(), projectId: { type: 'string' }, orderedTaskIds: { type: 'array', items: { type: 'string' } } }, required: ['projectId', 'orderedTaskIds'], additionalProperties: false } },
   { name: 'task.archive', description: 'Archive or unarchive a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.delete', description: 'Delete a task.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.dependencies.add', description: 'Add a dependency: the task depends on another task. Both must be in the same project. Cycles are rejected.', inputSchema: { type: 'object', properties: { ...workspaceFields(), taskId: { type: 'string', description: 'The task that depends on another' }, dependsOnId: { type: 'string', description: 'The task it depends on' } }, required: ['taskId', 'dependsOnId'], additionalProperties: false } },
@@ -173,6 +176,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case 'workspace.list':
         return ok({ items: await api<any[]>('/workspaces') })
+      case 'workspace.update':
+        return ok(await api<Json>(workspacePath(`/workspaces/${args.targetWorkspaceId || args.workspaceId}`), { method: 'PATCH', body: JSON.stringify({ name: args.name }) }))
       case 'workspace.members.list':
         return ok({ items: await api<any[]>(workspacePath(`/workspaces/${args.targetWorkspaceId || args.workspaceId}/members`)) })
       case 'workspace.members.add':
@@ -246,11 +251,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'project.labels.create':
         return ok(await api<Json>(workspacePath(`/projects/${args.projectId}/labels`), { method: 'POST', body: JSON.stringify({ name: args.name }) }))
       case 'project.statuses.create':
-        return ok(await api<Json>(workspacePath(`/projects/${args.projectId}/statuses`), { method: 'POST', body: JSON.stringify({ name: args.name }) }))
+        return ok(await api<Json>(workspacePath(`/projects/${args.projectId}/statuses`), { method: 'POST', body: JSON.stringify({ name: args.name, type: args.type }) }))
       case 'project.statuses.update':
         return ok(await api<Json>(workspacePath(`/projects/${args.projectId}/statuses/${args.statusId}`), { method: 'PATCH', body: JSON.stringify(pick(args, ['name', 'color'])) }))
       case 'project.statuses.delete':
         return ok(await api<Json>(workspacePath(`/projects/${args.projectId}/statuses/${args.statusId}/delete`), { method: 'POST', body: JSON.stringify({ targetStatusId: args.targetStatusId }) }))
+      case 'project.statuses.reorder':
+        return ok(await api<Json>(workspacePath(`/projects/${args.projectId}/statuses/reorder`), { method: 'POST', body: JSON.stringify({ orderedStatusIds: args.orderedStatusIds }) }))
       case 'board.get':
         return ok({ items: await api<any[]>(workspacePath(pathWithParams('/board', { projectId: args.projectId }))) })
       case 'project.dependencies.add':
@@ -273,6 +280,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return ok(await api<Json>(workspacePath(`/tasks/${args.taskId}/move`), { method: 'POST', body: JSON.stringify({ targetStatus: args.targetStatus }) }))
       case 'task.reorder':
         return ok(await api<Json>(workspacePath('/tasks/reorder'), { method: 'POST', body: JSON.stringify(pick(args, ['taskId', 'targetStatusId', 'orderedTaskIds'])) }))
+      case 'project.tasks.reorder':
+        return ok(await api<Json>(workspacePath(`/projects/${args.projectId}/tasks/reorder`), { method: 'POST', body: JSON.stringify({ orderedTaskIds: args.orderedTaskIds }) }))
       case 'task.archive':
         return ok(await api<Json>(workspacePath(`/tasks/${args.taskId}/archive`), { method: 'POST', body: JSON.stringify({ archived: args.archived }) }))
       case 'task.delete':

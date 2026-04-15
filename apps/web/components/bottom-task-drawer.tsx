@@ -32,12 +32,16 @@ export function BottomTaskDrawer({ taskId, closeHref, projectId }: { taskId: str
 
   const rowTask = {
     id: task.id,
+    number: task.number,
+    position: task.position,
     title: task.title,
     assignee: task.assignee,
     priority: task.priority,
     status: task.status,
     statusId: task.statusId,
     dueDate: task.dueDate,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
     labels: task.labels,
     todoProgress: task.todos.length ? `${task.todos.filter((todo) => todo.done).length}/${task.todos.length}` : null,
     archivedAt: null,

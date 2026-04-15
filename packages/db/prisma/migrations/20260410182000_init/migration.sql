@@ -2,7 +2,7 @@
 CREATE TYPE "TaskPriority" AS ENUM ('P1', 'P2', 'P3');
 
 -- CreateEnum
-CREATE TYPE "TaskStatusType" AS ENUM ('BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE');
+CREATE TYPE "TaskStatusType" AS ENUM ('BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE');
 
 -- CreateEnum
 CREATE TYPE "PlatformRole" AS ENUM ('NONE', 'SUPERADMIN');
@@ -281,7 +281,7 @@ CREATE TABLE "Task" (
     "id" TEXT NOT NULL,
     "projectId" TEXT NOT NULL,
     "statusId" TEXT NOT NULL,
-    "number" INTEGER,
+    "number" INTEGER NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT,
     "priority" "TaskPriority" NOT NULL DEFAULT 'P2',

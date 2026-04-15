@@ -484,6 +484,39 @@ async function waitForPostgres(targetDir: string, attempts = 30, delayMs = 2000)
   throw new Error('Postgres did not become ready in time')
 }
 
+async function maybeResolveBaselineMigration(targetDir: string) {
+  const sql = [
+    'DO $$',
+    'DECLARE has_migrations_table boolean;',
+    'DECLARE core_table_count integer;',
+    'DECLARE baseline_applied boolean := false;',
+    'BEGIN',
+    "  SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_prisma_migrations') INTO has_migrations_table;",
+    "  SELECT COUNT(*)::int FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Workspace', 'Project', 'TaskStatus', 'Task') INTO core_table_count;",
+    '  IF has_migrations_table THEN',
+    "    EXECUTE 'SELECT EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name = ''20260410182000_init'')' INTO baseline_applied;",
+    '  END IF;',
+    "  RAISE NOTICE '%', json_build_object('hasMigrationsTable', has_migrations_table, 'coreTableCount', core_table_count, 'baselineApplied', baseline_applied)::text;",
+    'END $$;',
+  ].join(' ')
+
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', 'sally', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    targetDir,
+  )
+  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop()
+  if (!jsonLine) throw new Error(`Could not inspect migration state. Output was:\n${raw}`)
+  const state = JSON.parse(jsonLine) as { hasMigrationsTable: boolean; coreTableCount: number; baselineApplied: boolean }
+
+  if (state.baselineApplied) return
+  if (state.coreTableCount < 4) return
+
+  section('Reconciling baseline migration history')
+  console.log(paint('Detected an initialized Sally schema without recorded baseline migration. Marking init migration as applied before deploy.', color.yellow))
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate resolve --applied 20260410182000_init --schema prisma/schema.prisma'], targetDir)
+}
+
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string) {
   section('Pulling fresh Sally images')
   await runCommand('docker', ['compose', 'pull', 'api', 'web'], targetDir)
@@ -492,8 +525,10 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
   await runCommand('docker', ['compose', 'up', '-d', 'postgres'], targetDir)
   await waitForPostgres(targetDir)
 
-  section('Applying database schema')
-  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma db push --schema prisma/schema.prisma'], targetDir)
+  await maybeResolveBaselineMigration(targetDir)
+
+  section('Applying database migrations')
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate deploy --schema prisma/schema.prisma'], targetDir)
 
   section('Bootstrapping superadmin')
   await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir, { quiet: true })

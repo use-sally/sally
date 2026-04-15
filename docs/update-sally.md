@@ -45,7 +45,7 @@ It will:
 4. update the managed Sally image references in `.env`
 5. pull the new Sally images
 6. start Postgres if needed
-7. apply schema changes
+7. apply committed Prisma migrations automatically
 8. rerun bootstrap safely
 9. restart the Sally services
 10. verify health checks

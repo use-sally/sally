@@ -1,10 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ProjectMember, ProjectTaskListItem } from '@sally/types/src'
-import { archiveTask, createTask, getProjectMembers } from '../lib/api'
+import { archiveTask, createTask, getProjectMembers, reorderProjectTasks } from '../lib/api'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { qk, useProjectQuery, useProjectTasksQuery } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
@@ -16,7 +19,7 @@ import { labelText, projectInputField, sortableHeaderButton } from '../lib/theme
 
 const inputStyle: React.CSSProperties = { ...projectInputField }
 
-type SortKey = 'title' | 'assignee' | 'priority' | 'dueDate' | 'status'
+type SortKey = 'position' | 'title' | 'assignee' | 'priority' | 'dueDate' | 'status'
 type SortDir = 'asc' | 'desc'
 
 export function ProjectTasksTable({ projectId, showFilters = true, limit, archived = false }: { projectId: string; showFilters?: boolean; limit?: number; archived?: boolean }) {
@@ -34,11 +37,12 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
   const [newStatusId, setNewStatusId] = useState('')
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([])
   const [creating, setCreating] = useState(false)
-  const [sortKey, setSortKey] = useState<SortKey>('dueDate')
+  const [sortKey, setSortKey] = useState<SortKey>('position')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [showArchived, setShowArchived] = useState(archived)
   const [restoringId, setRestoringId] = useState<string | null>(null)
   const session = loadSession()
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   const filters = useMemo(() => ({ status: status.startsWith('!') ? '' : status, assignee, search, label, archived: showArchived }), [status, assignee, search, label, showArchived])
 
@@ -130,7 +134,11 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
     })
     list.sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1
-      const titleTieBreak = a.title.localeCompare(b.title) || a.id.localeCompare(b.id)
+      const titleTieBreak = a.position - b.position || a.title.localeCompare(b.title) || a.id.localeCompare(b.id)
+      if (sortKey === 'position') {
+        if (a.position !== b.position) return (a.position - b.position) * dir
+        return titleTieBreak
+      }
       if (sortKey === 'dueDate') {
         const av = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER
         const bv = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER
@@ -201,6 +209,22 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
     }
   }
 
+  async function persistListOrder(reordered: ProjectTaskListItem[], _taskId: string) {
+    await reorderProjectTasks(projectId, reordered.map((item) => item.id))
+    await invalidateAll()
+  }
+
+  async function handleListDragEnd(event: DragEndEvent) {
+    const activeId = String(event.active.id)
+    const overId = event.over ? String(event.over.id) : null
+    if (!overId || activeId === overId) return
+    const oldIndex = sortedTasks.findIndex((task) => task.id === activeId)
+    const newIndex = sortedTasks.findIndex((task) => task.id === overId)
+    if (oldIndex === -1 || newIndex === -1) return
+    const reordered = arrayMove(sortedTasks, oldIndex, newIndex)
+    await persistListOrder(reordered, activeId)
+  }
+
   if (error) return <div style={{ color: 'var(--danger-text)' }}>{error instanceof Error ? error.message : 'Failed to load tasks'}</div>
 
   return (
@@ -244,33 +268,22 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
           />
         ) : null}
 
-        {sortedTasks.map((task) => {
-          if (showArchived) {
-            return (
-              <div key={task.id} style={{ border: '1px solid var(--panel-border)', borderRadius: 16, overflow: 'hidden', background: 'var(--form-bg)' }}>
-                <ArchivedTaskRow task={task} restoring={restoringId === task.id} onRestore={() => void restoreTask(task.id)} />
+        {showArchived ? sortedTasks.map((task) => (
+          <div key={task.id} style={{ border: '1px solid var(--panel-border)', borderRadius: 16, overflow: 'hidden', background: 'var(--form-bg)' }}>
+            <ArchivedTaskRow task={task} restoring={restoringId === task.id} onRestore={() => void restoreTask(task.id)} />
+          </div>
+        )) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => { void handleListDragEnd(event) }}>
+            <SortableContext items={sortedTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {sortedTasks.map((task) => {
+                  const expanded = expandedTaskId === task.id
+                  return <SortableTaskListItem key={task.id} task={task} expanded={expanded} projectId={projectId} statuses={project?.statuses || []} taskPermissionViewer={taskPermissionViewer} setExpandedTaskParam={setExpandedTaskParam} rowRefs={rowRefs} />
+                })}
               </div>
-            )
-          }
-
-          const expanded = expandedTaskId === task.id
-          return (
-            <div
-              key={task.id}
-              ref={(node) => { rowRefs.current[task.id] = node }}
-              style={{
-                border: expanded ? '1px solid color-mix(in srgb, var(--form-border-focus) 55%, var(--panel-border))' : '1px solid var(--panel-border)',
-                borderRadius: 16,
-                overflow: 'hidden',
-                background: expanded ? 'color-mix(in srgb, var(--panel-bg) 92%, white)' : 'var(--form-bg)',
-                boxShadow: expanded ? '0 10px 24px rgba(16, 185, 129, 0.07)' : 'none',
-              }}
-            >
-              <EditableTaskRow task={task} projectId={projectId} statuses={project?.statuses || []} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} taskPermissionViewer={taskPermissionViewer} />
-              {expanded ? <InlineTaskPanel taskId={task.id} projectId={projectId} /> : null}
-            </div>
-          )
-        })}
+            </SortableContext>
+          </DndContext>
+        )}
         {!sortedTasks.length ? <div style={{ padding: 18, color: 'rgba(209, 250, 229, 0.58)', border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)' }}>No tasks match the current filters.</div> : null}
       </div>
     </div>
@@ -291,6 +304,31 @@ function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskList
         {task.labels?.length ? task.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>) : <span style={{ color: 'rgba(209, 250, 229, 0.34)' }}>—</span>}
       </div>
       <button onClick={onRestore} disabled={restoring} style={{ background: 'rgba(250, 204, 21, 0.12)', color: '#fde68a', border: '1px solid rgba(250, 204, 21, 0.28)', borderRadius: 10, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }}>{restoring ? 'Restoring…' : 'Restore'}</button>
+    </div>
+  )
+}
+
+function SortableTaskListItem({ task, expanded, projectId, statuses, taskPermissionViewer, setExpandedTaskParam, rowRefs }: { task: ProjectTaskListItem; expanded: boolean; projectId: string; statuses: any[]; taskPermissionViewer: any; setExpandedTaskParam: (taskId: string | null) => void; rowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>> }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  return (
+    <div
+      ref={(node) => { setNodeRef(node); rowRefs.current[task.id] = node }}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : 1,
+        border: expanded ? '1px solid color-mix(in srgb, var(--form-border-focus) 55%, var(--panel-border))' : '1px solid var(--panel-border)',
+        borderRadius: 16,
+        overflow: 'hidden',
+        background: expanded ? 'color-mix(in srgb, var(--panel-bg) 92%, white)' : 'var(--form-bg)',
+        boxShadow: expanded ? '0 10px 24px rgba(16, 185, 129, 0.07)' : 'none',
+      }}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', alignItems: 'stretch' }}>
+        <div {...attributes} {...listeners} style={{ display: 'grid', placeItems: 'center', padding: '10px 8px', borderRight: '1px solid var(--panel-border)', background: expanded ? 'color-mix(in srgb, var(--panel-bg) 92%, white)' : 'var(--form-bg)', cursor: 'grab', color: 'var(--text-muted)', userSelect: 'none' }} aria-label="Drag to reorder" title="Drag to reorder">⋮⋮</div>
+        <EditableTaskRow task={task} projectId={projectId} statuses={statuses} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} taskPermissionViewer={taskPermissionViewer} />
+      </div>
+      {expanded ? <InlineTaskPanel taskId={task.id} projectId={projectId} /> : null}
     </div>
   )
 }

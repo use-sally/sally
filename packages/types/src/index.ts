@@ -70,7 +70,7 @@ export type ProjectDependencyRef = {
 
 export type TaskDependencyRef = {
   taskId: string
-  number: number | null
+  number: number
   title: string
 }
 
@@ -154,7 +154,8 @@ export type TimesheetReport = {
 
 export type ProjectTaskListItem = {
   id: string
-  number: number | null
+  number: number
+  position: number
   title: string
   assignee: string
   assigneeAvatarUrl?: string | null
@@ -172,7 +173,8 @@ export type ProjectTaskListItem = {
 
 export type BoardCard = {
   id: string
-  number: number | null
+  number: number
+  position: number
   title: string
   meta: string
   description: string
@@ -181,6 +183,7 @@ export type BoardCard = {
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
+  statusColor?: string | null
   dueDate: string | null
   createdAt: string
   updatedAt: string
@@ -192,6 +195,7 @@ export type BoardColumn = {
   id: string
   title: string
   type: string
+  color?: string | null
   cards: BoardCard[]
 }
 
@@ -214,7 +218,8 @@ export type ProjectDetail = {
   timesheetUsers: TimesheetUser[]
   recentTasks: {
     id: string
-    number: number | null
+    number: number
+    position: number
     title: string
     assignee: string
     assigneeAvatarUrl?: string | null
@@ -232,7 +237,8 @@ export type ProjectDetail = {
 
 export type TaskDetail = {
   id: string
-  number: number | null
+  number: number
+  position: number
   title: string
   description: string
   assignee: string
@@ -280,6 +286,18 @@ export type WorkspaceMember = {
   inviteId?: string | null
   inviteAcceptedAt?: string | null
   inviteExpiresAt?: string | null
+}
+
+export type ProjectActivityEvent = {
+  id: string
+  type: string
+  summary: string
+  actorName: string | null
+  actorEmail: string | null
+  actorApiKeyLabel: string | null
+  actorMcpKeyLabel: string | null
+  details: string[]
+  createdAt: string
 }
 
 export type ProjectMember = {

@@ -333,9 +333,14 @@ function canAccessTaskAssignee(scope: { restricted: boolean; allowedAssignees: s
   return scope.allowedAssignees.includes(assignee)
 }
 
-async function logActivity(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; actorName?: string | null; actorEmail?: string | null; actorApiKeyLabel?: string | null; type: string; summary: string; payload?: any }) {
-  const payload = input.actorApiKeyLabel
-    ? { ...(input.payload && typeof input.payload === 'object' && !Array.isArray(input.payload) ? input.payload : {}), actorApiKeyLabel: input.actorApiKeyLabel }
+async function logActivity(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; actorName?: string | null; actorEmail?: string | null; actorApiKeyLabel?: string | null; actorMcpKeyLabel?: string | null; type: string; summary: string; payload?: any }) {
+  const basePayload = input.payload && typeof input.payload === 'object' && !Array.isArray(input.payload) ? input.payload : {}
+  const payload = input.actorApiKeyLabel || input.actorMcpKeyLabel
+    ? {
+        ...basePayload,
+        ...(input.actorApiKeyLabel ? { actorApiKeyLabel: input.actorApiKeyLabel } : {}),
+        ...(input.actorMcpKeyLabel ? { actorMcpKeyLabel: input.actorMcpKeyLabel } : {}),
+      }
     : input.payload
   await prisma.activityLog.create({ data: { workspaceId: input.workspaceId, projectId: input.projectId ?? null, taskId: input.taskId ?? null, actorName: input.actorName ?? null, actorEmail: input.actorEmail ?? null, type: input.type, summary: input.summary, payload: payload ?? undefined } })
 }
@@ -371,7 +376,8 @@ async function wouldCreateProjectDependencyCycle(projectId: string, dependsOnId:
 function actorFromRequest(request: any) {
   const account = (request as any).account as { name?: string | null; email?: string | null } | undefined
   const apiKey = (request as any).apiKey as { label?: string | null } | undefined
-  return { actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null }
+  const mcpKey = (request as any).mcpKey as { label?: string | null } | undefined
+  return { actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null, actorMcpKeyLabel: mcpKey?.label ?? null }
 }
 
 async function deleteOrphanPlaceholderAccountByEmail(email?: string | null) {
@@ -840,11 +846,13 @@ async function getBoardData(request: any, workspaceId: string, projectId?: strin
     id: status.id,
     title: status.name,
     type: status.type,
+    color: status.color,
     cards: status.tasks
       .filter((task) => canAccessTaskAssignee(taskScopes.get(status.projectId) || { restricted: false, allowedAssignees: [] }, task.assignee))
       .map((task) => ({
         id: task.id,
         number: task.number,
+        position: task.position,
         title: task.title,
         meta: `${task.assignee ?? 'Unassigned'} · ${task.priority}`,
         description: task.description ?? 'No description yet.',
@@ -853,6 +861,7 @@ async function getBoardData(request: any, workspaceId: string, projectId?: strin
         priority: task.priority,
         status: status.name,
         statusId: status.id,
+        statusColor: status.color,
         dueDate: task.dueDate?.toISOString() ?? null,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt.toISOString(),
@@ -886,9 +895,10 @@ const hostedMcpTools: McpTool[] = [
   { name: 'project.update', description: 'Update a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' }, clientId: { type: ['string', 'null'] } }, required: ['projectId'], additionalProperties: false } },
   { name: 'project.archive', description: 'Archive or unarchive a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'project.delete', description: 'Delete a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' } }, required: ['projectId'], additionalProperties: false } },
-  { name: 'project.status.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' } }, required: ['projectId', 'name'], additionalProperties: false } },
+  { name: 'project.status.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' }, type: { type: 'string', enum: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE'] } }, required: ['projectId', 'name', 'type'], additionalProperties: false } },
   { name: 'project.status.update', description: 'Update a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, name: { type: 'string' }, color: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
   { name: 'project.status.delete', description: 'Delete a project status, optionally moving tasks to a replacement status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, targetStatusId: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
+  { name: 'project.status.reorder', description: 'Reorder project statuses while keeping the first status pinned.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, orderedStatusIds: { type: 'array', items: { type: 'string' } } }, required: ['projectId', 'orderedStatusIds'], additionalProperties: false } },
   { name: 'workspace.invite', description: 'Invite a user into a workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, email: { type: 'string' }, role: { type: 'string' } }, required: ['email', 'role'], additionalProperties: false } },
   { name: 'project.member.list', description: 'List project members.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'project.member.add', description: 'Add a member to a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, accountId: { type: 'string' }, email: { type: 'string' }, name: { type: 'string' }, role: { type: 'string' } }, required: ['projectId', 'role'], additionalProperties: false } },
@@ -1001,6 +1011,8 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}/statuses/${args.statusId}`, args, payload: { name: args.name, color: args.color } })
     case 'project.status.delete':
       return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses/${args.statusId}/delete`, args, payload: { targetStatusId: args.targetStatusId } })
+    case 'project.status.reorder':
+      return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses/reorder`, args, payload: { orderedStatusIds: args.orderedStatusIds } })
     case 'workspace.invite':
       return await injectJson(request, { method: 'POST', url: '/auth/invite', args, payload: { email: args.email, role: args.role } })
     case 'project.member.list':
@@ -1688,6 +1700,21 @@ const start = async () => {
       return { ok: true, accountId: account.id }
     })
 
+    app.patch('/workspaces/:workspaceId', async (request, reply) => {
+      const { workspaceId } = request.params as { workspaceId: string }
+      if (!(await requireWorkspaceRoleForWorkspaceId(request, reply, workspaceId, [WorkspaceRole.OWNER]))) return
+      const body = request.body as { name?: string }
+      const workspace = await prisma.workspace.findFirst({ where: { id: workspaceId } })
+      if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      const nextName = body.name?.trim()
+      if (!nextName) return reply.code(400).send({ ok: false, error: 'name is required' })
+      await prisma.workspace.update({ where: { id: workspaceId }, data: { name: nextName } })
+      if (nextName !== workspace.name) {
+        await logActivity({ workspaceId, ...actorFromRequest(request), type: 'workspace.updated', summary: `Updated workspace ${workspace.name}.`, payload: { details: [activityChange('name', workspace.name, nextName)] } })
+      }
+      return { ok: true }
+    })
+
     app.get('/workspaces/:workspaceId/members', async (request, reply) => {
       const { workspaceId } = request.params as { workspaceId: string }
       if (!(await requireWorkspaceRoleForWorkspaceId(request, reply, workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
@@ -1965,7 +1992,7 @@ const start = async () => {
       const projectWhere = { workspaceId: workspace.id, archivedAt: null, ...visibleProjectWhere(projectIds) }
       const [activeProjects, openTasks, inReview] = await Promise.all([
         prisma.project.count({ where: projectWhere }),
-        prisma.task.count({ where: { archivedAt: null, project: projectWhere, status: { type: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW'] } } } }),
+        prisma.task.count({ where: { archivedAt: null, project: projectWhere, status: { type: { in: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW'] } } } }),
         prisma.task.count({ where: { archivedAt: null, project: projectWhere, status: { type: 'REVIEW' } } }),
       ])
       return { activeProjects, openTasks, cycleHealth: inReview > 3 ? 'Needs review' : 'Good' }
@@ -2080,7 +2107,7 @@ const start = async () => {
       const { projectId } = request.params as { projectId: string }
       const query = request.query as { archived?: string }
       const archivedFilter = query.archived === 'true'
-      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, ...(archivedFilter ? { archivedAt: { not: null } } : { archivedAt: null }) }, include: { client: true, tasks: { where: { archivedAt: null }, include: { status: true, labels: { include: { label: true } }, todos: true }, orderBy: [{ createdAt: 'asc' }] }, statuses: { orderBy: [{ position: 'asc' }] }, labels: { orderBy: [{ name: 'asc' }] }, dependencies: { include: { dependsOn: { select: { id: true, name: true } } } }, dependedOnBy: { include: { project: { select: { id: true, name: true } } } }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 12 } } })
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, ...(archivedFilter ? { archivedAt: { not: null } } : { archivedAt: null }) }, include: { client: true, tasks: { where: { archivedAt: null }, include: { status: true, labels: { include: { label: true } }, todos: true }, orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, statuses: { orderBy: [{ position: 'asc' }] }, labels: { orderBy: [{ name: 'asc' }] }, dependencies: { include: { dependsOn: { select: { id: true, name: true } } } }, dependedOnBy: { include: { project: { select: { id: true, name: true } } } }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 12 } } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, projectId)
@@ -2111,7 +2138,7 @@ const start = async () => {
         recentTimesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })),
         dependencies: project.dependencies.map((d) => ({ projectId: d.dependsOn.id, name: d.dependsOn.name })),
         dependedOnBy: project.dependedOnBy.map((d) => ({ projectId: d.project.id, name: d.project.name })),
-        recentTasks: visibleTasks.slice(0, 8).map((t) => ({ id: t.id, number: t.number, title: t.title, assignee: t.assignee ?? 'Unassigned', assigneeAvatarUrl: t.assignee ? assigneeAvatars.get(t.assignee) ?? null : null, priority: t.priority, status: t.status.name, statusId: t.statusId, statusColor: t.status.color, dueDate: t.dueDate?.toISOString() ?? null, createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(), labels: t.labels.map((l) => l.label.name), todoProgress: t.todos.length ? `${t.todos.filter((td) => td.done).length}/${t.todos.length}` : null })),
+        recentTasks: visibleTasks.slice(0, 8).map((t) => ({ id: t.id, number: t.number, position: t.position, title: t.title, assignee: t.assignee ?? 'Unassigned', assigneeAvatarUrl: t.assignee ? assigneeAvatars.get(t.assignee) ?? null : null, priority: t.priority, status: t.status.name, statusId: t.statusId, statusColor: t.status.color, dueDate: t.dueDate?.toISOString() ?? null, createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(), labels: t.labels.map((l) => l.label.name), todoProgress: t.todos.length ? `${t.todos.filter((td) => td.done).length}/${t.todos.length}` : null })),
       }
     })
 
@@ -2135,12 +2162,13 @@ const start = async () => {
           ...(query.label ? { labels: { some: { label: { name: query.label } } } } : {}),
         },
         include: { status: true, labels: { include: { label: true } }, todos: true },
-        orderBy: [{ dueDate: 'asc' }, { updatedAt: 'desc' }, { createdAt: 'desc' }],
+        orderBy: [{ position: 'asc' }, { dueDate: 'asc' }, { createdAt: 'asc' }],
       })
       const assigneeAvatars = await getAssigneeAvatarMap(workspace.id, tasks.map((t) => t.assignee))
       return tasks.map((t) => ({
         id: t.id,
         number: t.number,
+        position: t.position,
         title: t.title,
         assignee: t.assignee ?? 'Unassigned',
         assigneeAvatarUrl: t.assignee ? assigneeAvatars.get(t.assignee) ?? null : null,
@@ -2169,7 +2197,7 @@ const start = async () => {
       const commentAvatars = await getAssigneeAvatarMap(workspace.id, task.comments.map((comment) => comment.author))
       const timesheetScope = await resolveTimesheetScope(request, workspace.id, task.projectId)
       const visibleTimesheets = timesheetScope.elevated || !timesheetScope.userId ? task.timesheets : task.timesheets.filter((entry) => entry.userId === timesheetScope.userId)
-      return { id: task.id, number: task.number, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString(), labels: task.labels.map((l) => l.label.name), dependencies: task.dependencies.map((d) => ({ taskId: d.dependsOn.id, number: d.dependsOn.number, title: d.dependsOn.title })), dependedOnBy: task.dependedOnBy.map((d) => ({ taskId: d.task.id, number: d.task.number, title: d.task.title })), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
+      return { id: task.id, number: task.number, position: task.position, title: task.title, description: task.description ?? 'No description yet.', assignee: task.assignee ?? 'Unassigned', assigneeAvatarUrl: task.assignee ? assigneeAvatars.get(task.assignee) ?? null : null, priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString(), labels: task.labels.map((l) => l.label.name), dependencies: task.dependencies.map((d) => ({ taskId: d.dependsOn.id, number: d.dependsOn.number, title: d.dependsOn.title })), dependedOnBy: task.dependedOnBy.map((d) => ({ taskId: d.task.id, number: d.task.number, title: d.task.title })), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
     })
 
     app.post('/tasks/:taskId/todos', async (request, reply) => {
@@ -2296,6 +2324,7 @@ const start = async () => {
         actorName: event.actorName,
         actorEmail: event.actorEmail,
         actorApiKeyLabel: event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) ? ((event.payload as Record<string, unknown>).actorApiKeyLabel as string | null | undefined) ?? null : null,
+        actorMcpKeyLabel: event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) ? ((event.payload as Record<string, unknown>).actorMcpKeyLabel as string | null | undefined) ?? null : null,
         details: event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) && Array.isArray((event.payload as Record<string, unknown>).details)
           ? ((event.payload as Record<string, unknown>).details as unknown[]).filter((value): value is string => typeof value === 'string')
           : [],
@@ -2307,15 +2336,16 @@ const start = async () => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
       const { projectId } = request.params as { projectId: string }
-      const body = request.body as { name: string }
+      const body = request.body as { name: string; type: TaskStatusType }
       const name = body.name?.trim()
       if (!name) return reply.code(400).send({ ok: false, error: 'name is required' })
+      if (!body.type || !['BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE'].includes(body.type)) return reply.code(400).send({ ok: false, error: 'valid type is required' })
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
       const maxPos = await prisma.taskStatus.aggregate({ where: { projectId }, _max: { position: true } })
-      const status = await prisma.taskStatus.create({ data: { projectId, name, type: 'TODO', position: (maxPos._max.position ?? -1) + 1, color: '#1F2937' } })
-      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.created', summary: `Created status ${name}.`, payload: { statusId: status.id, name } })
+      const status = await prisma.taskStatus.create({ data: { projectId, name, type: body.type, position: (maxPos._max.position ?? -1) + 1, color: '#1F2937' } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.created', summary: `Created status ${name}.`, payload: { statusId: status.id, name, semanticType: body.type } })
       return { ok: true, statusId: status.id }
     })
 
@@ -2337,6 +2367,35 @@ const start = async () => {
       return { ok: true }
     })
 
+    app.post('/projects/:projectId/statuses/reorder', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      const { projectId } = request.params as { projectId: string }
+      const body = request.body as { orderedStatusIds?: string[] }
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null } })
+      if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
+      const statuses = await prisma.taskStatus.findMany({ where: { projectId }, orderBy: { position: 'asc' } })
+      const pinned = statuses[0]
+      if (!pinned) return reply.code(400).send({ ok: false, error: 'No statuses found' })
+      const movable = statuses.slice(1)
+      const orderedStatusIds = Array.isArray(body.orderedStatusIds) ? body.orderedStatusIds : []
+      if (orderedStatusIds.length !== movable.length) return reply.code(400).send({ ok: false, error: 'orderedStatusIds must include all movable statuses exactly once' })
+      if (orderedStatusIds.includes(pinned.id)) return reply.code(400).send({ ok: false, error: 'The first status is pinned and cannot be reordered' })
+      const movableIds = new Set(movable.map((status) => status.id))
+      if (new Set(orderedStatusIds).size !== orderedStatusIds.length || orderedStatusIds.some((id) => !movableIds.has(id))) {
+        return reply.code(400).send({ ok: false, error: 'orderedStatusIds must match the movable project statuses exactly' })
+      }
+      await prisma.$transaction(async (tx) => {
+        await tx.taskStatus.update({ where: { id: pinned.id }, data: { position: 0 } })
+        for (let index = 0; index < orderedStatusIds.length; index += 1) {
+          await tx.taskStatus.update({ where: { id: orderedStatusIds[index] }, data: { position: index + 1 } })
+        }
+      })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.reordered', summary: `Reordered statuses for ${project.name}.`, payload: { orderedStatusIds } })
+      return { ok: true }
+    })
+
     app.post('/projects/:projectId/statuses/:statusId/delete', async (request, reply) => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
@@ -2351,10 +2410,14 @@ const start = async () => {
       }
       const status = statuses.find((s) => s.id === statusId)
       if (!status) return reply.code(404).send({ ok: false, error: 'Status not found' })
-      if (status.id === statuses[0]?.id) return reply.code(400).send({ ok: false, error: 'Cannot delete the default status' })
       if (statuses.length <= 1) return reply.code(400).send({ ok: false, error: 'Cannot delete the last status' })
+      const remainingStatuses = statuses.filter((s) => s.id !== statusId)
+      if (remainingStatuses.length === 0) return reply.code(400).send({ ok: false, error: 'Cannot delete the last status' })
+      if (status.type === 'BACKLOG' && !remainingStatuses.some((s) => s.type === 'BACKLOG')) {
+        return reply.code(400).send({ ok: false, error: 'Cannot delete the last backlog status' })
+      }
       const taskCount = await prisma.task.count({ where: { statusId } })
-      const fallbackTarget = statuses.find((s) => s.id !== statusId)
+      const fallbackTarget = remainingStatuses.find((s) => s.type === status.type) || remainingStatuses.find((s) => s.type === 'BACKLOG') || remainingStatuses[0]
       const targetStatusId = body.targetStatusId || fallbackTarget?.id
       if (taskCount > 0 && !targetStatusId) return reply.code(400).send({ ok: false, error: 'Target status required' })
       if (targetStatusId === statusId) return reply.code(400).send({ ok: false, error: 'Target status must differ' })
@@ -2493,8 +2556,9 @@ const start = async () => {
           statuses: { create: [
             { name: 'Backlog', type: 'BACKLOG', position: 0, color: '#1F2937' },
             { name: 'In Progress', type: 'IN_PROGRESS', position: 1, color: '#172554' },
-            { name: 'Review', type: 'REVIEW', position: 2, color: '#422006' },
-            { name: 'Done', type: 'DONE', position: 3, color: '#14532D' },
+            { name: 'Blocked', type: 'BLOCKED', position: 2, color: '#7f1d1d' },
+            { name: 'Review', type: 'REVIEW', position: 3, color: '#422006' },
+            { name: 'Done', type: 'DONE', position: 4, color: '#14532D' },
           ] },
           ...(defaultOwnerIds.length ? { memberships: { create: defaultOwnerIds.map((accountId) => ({ accountId, role: PROJECT_ROLE.OWNER })) } } : {}),
         },
@@ -2521,7 +2585,7 @@ const start = async () => {
       if (!targetStatus && body.status) targetStatus = await prisma.taskStatus.findFirst({ where: { projectId: body.projectId, name: body.status } })
       if (!targetStatus) targetStatus = await prisma.taskStatus.findFirst({ where: { projectId: body.projectId }, orderBy: { position: 'asc' } })
       if (!targetStatus) return reply.code(404).send({ ok: false, error: 'Target status not found for project' })
-      const count = await prisma.task.count({ where: { statusId: targetStatus.id } })
+      const maxPositionTask = await prisma.task.findFirst({ where: { projectId: body.projectId, archivedAt: null }, orderBy: [{ position: 'desc' }], select: { position: true } })
       const labels = normalizeTaskLabels(body.labels)
       const todos = normalizeTaskTodoTexts(body.todos)
       const defaultAssignee = body.assignee?.trim() || (((request as any).account as { email?: string } | undefined)?.email ?? null)
@@ -2531,7 +2595,7 @@ const start = async () => {
       }
       const task = await prisma.$transaction(async (tx) => {
         const updatedProject = await tx.project.update({ where: { id: body.projectId }, data: { taskCounter: { increment: 1 } } })
-        const createdTask = await tx.task.create({ data: { projectId: body.projectId, statusId: targetStatus.id, number: updatedProject.taskCounter, title: body.title.trim(), description: body.description?.trim() || null, assignee: defaultAssignee, priority: body.priority ?? 'P2', dueDate: toIsoOrNull(body.dueDate), position: count } })
+        const createdTask = await tx.task.create({ data: { projectId: body.projectId, statusId: targetStatus.id, number: updatedProject.taskCounter, title: body.title.trim(), description: body.description?.trim() || null, assignee: defaultAssignee, priority: body.priority ?? 'P2', dueDate: toIsoOrNull(body.dueDate), position: (maxPositionTask?.position ?? -1) + 1 } })
         if (labels.length) {
           const labelIds: string[] = []
           for (const name of labels) {
@@ -2965,6 +3029,26 @@ const start = async () => {
         await tx.task.update({ where: { id: body.taskId }, data: { statusId: targetStatus.id } })
         for (const [index, id] of body.orderedTaskIds.entries()) await tx.task.update({ where: { id }, data: { statusId: targetStatus.id, position: index } })
       })
+      return { ok: true }
+    })
+
+    app.post('/projects/:projectId/tasks/reorder', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { projectId } = request.params as { projectId: string }
+      const body = request.body as { orderedTaskIds: string[] }
+      if (!Array.isArray(body.orderedTaskIds) || body.orderedTaskIds.length === 0) return reply.code(400).send({ ok: false, error: 'orderedTaskIds is required' })
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null } })
+      if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const taskScope = await getTaskAccessScope(request, projectId)
+      const tasks = await prisma.task.findMany({ where: { id: { in: body.orderedTaskIds }, projectId, archivedAt: null }, select: { id: true, assignee: true } })
+      if (tasks.length !== body.orderedTaskIds.length) return reply.code(400).send({ ok: false, error: 'One or more tasks in ordered list were not found in this project' })
+      if (tasks.some((item) => !canAccessTaskAssignee(taskScope, item.assignee))) return reply.code(403).send({ ok: false, error: 'Task access denied' })
+      await prisma.$transaction(async (tx) => {
+        for (const [index, id] of body.orderedTaskIds.entries()) await tx.task.update({ where: { id }, data: { position: index } })
+      })
+      await logActivity({ workspaceId: workspace.id, projectId, ...actorFromRequest(request), type: 'tasks.reordered', summary: `Updated project task order for ${project.name}.`, payload: { orderedTaskIds: body.orderedTaskIds } })
       return { ok: true }
     })
 

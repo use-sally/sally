@@ -17,6 +17,7 @@ enum TaskStatusType {
   BACKLOG
   TODO
   IN_PROGRESS
+  BLOCKED
   REVIEW
   DONE
 }
@@ -359,7 +360,7 @@ model Task {
   id          String           @id @default(cuid())
   projectId   String
   statusId    String
-  number      Int?
+  number      Int
   title       String
   description String?
   priority    TaskPriority     @default(P2)

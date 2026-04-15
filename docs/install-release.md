@@ -93,7 +93,7 @@ That means deployed Sally images should know their version without asking end us
 15. post-install path points users toward hosted MCP inside Sally
 16. guided update flow for installer-managed Sally deployments
 17. update-time image tag refresh in `.env`
-18. update-time image pull + schema + service restart + health verification
+18. update-time image pull + migration deploy + service restart + health verification
 
 ---
 
