@@ -16,6 +16,8 @@ type ParsedEnv = {
   webImage: string
   imageTag: string
   superadminEmail: string
+  postgresUser: string
+  postgresDb: string
 }
 
 type CliOptions = {
@@ -473,27 +475,76 @@ async function waitForHealth(url: string, label: string, attempts = 30, delayMs 
   throw new Error(`${label} did not become healthy at ${url}`)
 }
 
-async function waitForPostgres(targetDir: string, attempts = 30, delayMs = 2000) {
+async function waitForPostgres(targetDir: string, postgresUser: string, postgresDb: string, attempts = 30, delayMs = 2000) {
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      await runCommand('docker', ['compose', 'exec', '-T', 'postgres', 'pg_isready', '-U', 'postgres'], targetDir)
+      await runCommand('docker', ['compose', 'exec', '-T', 'postgres', 'pg_isready', '-U', postgresUser, '-d', postgresDb], targetDir)
       return
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, delayMs))
   }
-  throw new Error('Postgres did not become ready in time')
+  throw new Error(`Postgres did not become ready in time for database ${postgresDb}`)
 }
 
-async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string) {
+type MigrationState = {
+  hasMigrationsTable: boolean
+  coreTableCount: number
+  baselineApplied: boolean
+}
+
+async function inspectMigrationState(targetDir: string, postgresUser: string, postgresDb: string) {
+  const sql = [
+    'SELECT json_build_object(',
+    "  'hasMigrationsTable', EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_prisma_migrations'),",
+    "  'coreTableCount', (SELECT COUNT(*)::int FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Workspace', 'Project', 'TaskStatus', 'Task')),",
+    "  'baselineApplied', CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_prisma_migrations') THEN EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name = '20260410182000_init') ELSE false END",
+    ');',
+  ].join(' ')
+
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    targetDir,
+  )
+  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
+  if (!jsonLine) throw new Error(`Could not inspect migration state. Output was:\n${raw}`)
+  return JSON.parse(jsonLine) as MigrationState
+}
+
+async function maybeResolveBaselineMigration(targetDir: string, postgresUser: string, postgresDb: string) {
+  const state = await inspectMigrationState(targetDir, postgresUser, postgresDb)
+
+  if (state.baselineApplied) {
+    console.log(paint('Baseline migration already recorded', color.green))
+    return
+  }
+
+  if (state.coreTableCount === 0) {
+    console.log(paint('Fresh database detected', color.green))
+    return
+  }
+
+  if (state.coreTableCount < 4) {
+    throw new Error(`Detected partial Sally schema (${state.coreTableCount}/4 core tables present) without a recorded baseline migration. Refusing automatic reconciliation because this looks like schema drift or an incomplete install.`)
+  }
+
+  section('Reconciling baseline migration history')
+  console.log(paint('Detected an initialized Sally schema without recorded baseline migration. Marking init migration as applied before deploy.', color.yellow))
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate resolve --applied 20260410182000_init --schema prisma/schema.prisma'], targetDir)
+}
+
+async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string, postgresUser: string, postgresDb: string) {
   section('Pulling fresh Sally images')
   await runCommand('docker', ['compose', 'pull', 'api', 'web'], targetDir)
 
   section('Starting database')
   await runCommand('docker', ['compose', 'up', '-d', 'postgres'], targetDir)
-  await waitForPostgres(targetDir)
+  await waitForPostgres(targetDir, postgresUser, postgresDb)
 
-  section('Applying database schema')
-  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma db push --schema prisma/schema.prisma'], targetDir)
+  await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)
+
+  section('Applying database migrations')
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate deploy --schema prisma/schema.prisma'], targetDir)
 
   section('Bootstrapping superadmin')
   await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir, { quiet: true })
@@ -552,7 +603,10 @@ async function parseEnvFile(targetDir: string): Promise<ParsedEnv> {
     throw new Error('docker-compose.yml does not look like a create-sally managed deployment. Refusing update.')
   }
 
-  return { mode, appUrl, apiImage, webImage, imageTag, superadminEmail }
+  const postgresUser = values.get('POSTGRES_USER') || 'postgres'
+  const postgresDb = values.get('POSTGRES_DB') || 'sally'
+
+  return { mode, appUrl, apiImage, webImage, imageTag, superadminEmail, postgresUser, postgresDb }
 }
 
 async function updateEnvImageTag(targetDir: string, imageTag: string) {
@@ -732,7 +786,7 @@ async function installFlow(options: CliOptions) {
   }
   await fs.writeFile(path.join(targetDir, 'SETUP_NOTES.txt'), setupNotes(mode, bootstrapPassword, targetDir, appUrl, smtpConfigured))
 
-  await runInstallerCommands(mode, targetDir, appUrl)
+  await runInstallerCommands(mode, targetDir, appUrl, 'postgres', 'sally')
   await writeHostedMcpNotes(targetDir, appUrl)
   printWelcome(mode, appUrl, superadminEmail, bootstrapPassword)
 }
@@ -763,7 +817,7 @@ async function updateFlow(options: CliOptions) {
   }
 
   await updateEnvImageTag(targetDir, imageTag)
-  await runInstallerCommands(current.mode, targetDir, current.appUrl)
+  await runInstallerCommands(current.mode, targetDir, current.appUrl, current.postgresUser, current.postgresDb)
   printUpdateSuccess(current.mode, current.appUrl, imageTag)
 }
 

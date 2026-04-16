@@ -175,9 +175,9 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                   style={taskHeaderTitleInput}
                 />
               ) : (
-                <button type="button" onClick={() => setEditingTitle(true)} style={taskHeaderTitleButton}>{task.title}</button>
+                <button type="button" onClick={() => setEditingTitle(true)} style={taskHeaderTitleButton}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.6em', marginRight: 8 }}>#{task.number}</span> : null}{task.title}</button>
               )
-            ) : <div style={taskHeaderTitleText}>{task.title}</div>}
+            ) : <div style={taskHeaderTitleText}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.6em', marginRight: 8 }}>#{task.number}</span> : null}{task.title}</div>}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
@@ -286,6 +286,32 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                 <div><div style={sectionLabel}>Assignee</div><div style={{ marginTop: 6 }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={36} /></div></div>
                 <div><div style={sectionLabel}>Priority</div><div style={{ marginTop: 4, fontSize: 18, color: 'var(--text-primary)' }}>{priorityStars(task.priority)}</div></div>
                 <div><div style={sectionLabel}>Status</div><div style={{ marginTop: 4 }}><span style={tagStyle()}>{task.status}</span></div></div>
+                <div><div style={sectionLabel}>Created</div><div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-secondary)' }}>{new Date(task.createdAt).toLocaleDateString()}</div></div>
+                <div><div style={sectionLabel}>Last updated</div><div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-secondary)' }}>{new Date(task.updatedAt).toLocaleDateString()}</div></div>
+                {task.dependencies?.length ? (
+                  <div>
+                    <div style={sectionLabel}>Depends on</div>
+                    <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
+                      {task.dependencies.map((dep) => (
+                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
+                          {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {task.dependedOnBy?.length ? (
+                  <div>
+                    <div style={sectionLabel}>Blocks</div>
+                    <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
+                      {task.dependedOnBy.map((dep) => (
+                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
+                          {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

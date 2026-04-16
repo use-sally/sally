@@ -19,6 +19,8 @@ export type Project = {
   lead: string
   tasks: number
   status: ProjectStatus
+  createdAt: string
+  updatedAt: string
   archivedAt: string | null
 }
 
@@ -59,6 +61,17 @@ export type StatusOption = {
   position: number
   color?: string | null
   taskCount?: number
+}
+
+export type ProjectDependencyRef = {
+  projectId: string
+  name: string
+}
+
+export type TaskDependencyRef = {
+  taskId: string
+  number: number
+  title: string
 }
 
 export type TodoItem = {
@@ -141,6 +154,8 @@ export type TimesheetReport = {
 
 export type ProjectTaskListItem = {
   id: string
+  number: number
+  position: number
   title: string
   assignee: string
   assigneeAvatarUrl?: string | null
@@ -149,6 +164,8 @@ export type ProjectTaskListItem = {
   statusId: string
   statusColor?: string | null
   dueDate: string | null
+  createdAt: string
+  updatedAt: string
   labels: string[]
   todoProgress: TodoProgress
   archivedAt: string | null
@@ -156,6 +173,8 @@ export type ProjectTaskListItem = {
 
 export type BoardCard = {
   id: string
+  number: number
+  position: number
   title: string
   meta: string
   description: string
@@ -164,7 +183,10 @@ export type BoardCard = {
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
+  statusColor?: string | null
   dueDate: string | null
+  createdAt: string
+  updatedAt: string
   labels: string[]
   todoProgress: TodoProgress
 }
@@ -173,6 +195,7 @@ export type BoardColumn = {
   id: string
   title: string
   type: string
+  color?: string | null
   cards: BoardCard[]
 }
 
@@ -181,16 +204,22 @@ export type ProjectDetail = {
   name: string
   description: string | null
   client: { id: string; name: string } | null
+  createdAt: string
+  updatedAt: string
   taskCount: number
   openTasks: number
   reviewTasks: number
   statuses: StatusOption[]
   labels: LabelOption[]
+  dependencies: ProjectDependencyRef[]
+  dependedOnBy: ProjectDependencyRef[]
   timesheetSummary: TimesheetSummary
   recentTimesheets: TimesheetEntry[]
   timesheetUsers: TimesheetUser[]
   recentTasks: {
     id: string
+    number: number
+    position: number
     title: string
     assignee: string
     assigneeAvatarUrl?: string | null
@@ -199,6 +228,8 @@ export type ProjectDetail = {
     statusId: string
     statusColor?: string | null
     dueDate: string | null
+    createdAt: string
+    updatedAt: string
     labels: string[]
     todoProgress: TodoProgress
   }[]
@@ -206,6 +237,8 @@ export type ProjectDetail = {
 
 export type TaskDetail = {
   id: string
+  number: number
+  position: number
   title: string
   description: string
   assignee: string
@@ -214,7 +247,11 @@ export type TaskDetail = {
   status: string
   statusId: string
   dueDate: string | null
+  createdAt: string
+  updatedAt: string
   labels: string[]
+  dependencies: TaskDependencyRef[]
+  dependedOnBy: TaskDependencyRef[]
   todos: TodoItem[]
   timesheetSummary: TimesheetSummary
   timesheets: TimesheetEntry[]
@@ -249,6 +286,18 @@ export type WorkspaceMember = {
   inviteId?: string | null
   inviteAcceptedAt?: string | null
   inviteExpiresAt?: string | null
+}
+
+export type ProjectActivityEvent = {
+  id: string
+  type: string
+  summary: string
+  actorName: string | null
+  actorEmail: string | null
+  actorApiKeyLabel: string | null
+  actorMcpKeyLabel: string | null
+  details: string[]
+  createdAt: string
 }
 
 export type ProjectMember = {

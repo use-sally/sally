@@ -45,10 +45,12 @@ It will:
 4. update the managed Sally image references in `.env`
 5. pull the new Sally images
 6. start Postgres if needed
-7. apply schema changes
-8. rerun bootstrap safely
-9. restart the Sally services
-10. verify health checks
+7. inspect the live database state before migration deploy
+8. if needed, reconcile missing baseline migration history for initialized databases
+9. apply committed Prisma migrations automatically with `prisma migrate deploy`
+10. rerun bootstrap safely
+11. restart the Sally services
+12. verify health checks
 
 ---
 
@@ -85,6 +87,28 @@ That limitation is intentional.
 
 ---
 
+## Missing `_prisma_migrations` recovery
+
+The updater now includes a recovery path for a specific broken-but-common state:
+- the Sally schema is already initialized
+- core tables like `Workspace`, `Project`, `TaskStatus`, and `Task` exist
+- but `_prisma_migrations` does not exist, so Prisma has no baseline history recorded
+
+When that happens, the updater:
+1. checks Postgres directly through `docker compose exec postgres psql`
+2. confirms whether the schema looks initialized
+3. marks `20260410182000_init` as applied
+4. runs `prisma migrate deploy` for the remaining migrations
+
+This is designed to let official installer-managed updates recover safely instead of failing during migration deploy.
+
+Important boundaries:
+- this recovery is for installer-managed Sally deployments only
+- it is not a generic repair tool for arbitrary custom schemas
+- if the schema is only partially initialized, the updater will not fake the baseline
+
+---
+
 ## Notes
 
 - Sally is deployed from official published container images.
@@ -93,6 +117,31 @@ That limitation is intentional.
 - Updating a running Sally instance updates the deployed Sally images.
 - Hosted MCP remains the default MCP path after upgrade.
 - Existing SMTP and instance settings remain in `.env`; only the managed Sally image references are updated during the normal update flow.
+- The updater now relies on committed Prisma migrations rather than schema push semantics.
+
+---
+
+## Product changes relevant to this update
+
+This update line also carries application-level changes that affect live behavior after upgrade:
+
+### Workflow/status changes
+- `BLOCKED` is now a first-class task status type
+- default project workflows now include: Backlog, In Progress, Blocked, Review, Done
+
+### Task ordering changes
+- `Task.number` remains the stable human-facing task reference
+- `Task.position` is now the canonical mutable project-wide order
+- list and board views consume persisted `position` ordering
+
+### New reorder capabilities
+- project statuses can be reordered while keeping the first status pinned
+- tasks can be reordered within a board column
+- tasks can also be reordered across the whole project without changing status
+
+Relevant interfaces:
+- API: `POST /projects/:projectId/tasks/reorder`
+- MCP: `project.tasks.reorder`
 
 ---
 

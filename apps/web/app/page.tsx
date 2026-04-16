@@ -1,15 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getWorkspaceId, loadSession } from '../lib/auth'
+import { getWorkspaceId, loadSession, saveSession } from '../lib/auth'
 import { workspaceRoleLabel } from '../lib/roles'
 import type { Health, ProjectsSummary } from '@sally/types/src'
-import { getHealth, getProjectsSummary } from '../lib/api'
+import { getHealth, getMe, getProjectsSummary, updateWorkspace } from '../lib/api'
 import { AppShell, panel, pill } from '../components/app-shell'
 import { WorkspaceMembersCard, WorkspaceOverviewPanels } from '../components/workspace-overview-panels'
-import { labelText, metaLabelText } from '../lib/theme'
+import { labelText, metaLabelText, projectInputField } from '../lib/theme'
 import { appVersion } from '../lib/version'
 import { compareVersions, normalizeVersion, updateManifestUrl, type UpdateManifest } from '../lib/update-manifest'
+
+const workspaceHeaderNameButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, textAlign: 'left', color: 'var(--text-primary)', fontSize: 34, lineHeight: 1.1, fontWeight: 800, cursor: 'text' }
+const workspaceHeaderNameInput: React.CSSProperties = { ...projectInputField, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 34, lineHeight: 1.1, fontWeight: 800 }
+const workspaceHeaderMetaText: React.CSSProperties = { ...labelText }
 
 export default function Home() {
   const [health, setHealth] = useState<Health | null>(null)
@@ -19,12 +23,18 @@ export default function Home() {
   const [workspaceName, setWorkspaceName] = useState('Overview')
   const [workspaceMeta, setWorkspaceMeta] = useState('Minimal workspace status for humans and agents.')
   const [workspaceRoleLine, setWorkspaceRoleLine] = useState<string | undefined>(undefined)
+  const [editingWorkspaceName, setEditingWorkspaceName] = useState(false)
+  const [workspaceNameDraft, setWorkspaceNameDraft] = useState('')
+  const [workspaceNameSaving, setWorkspaceNameSaving] = useState(false)
 
   useEffect(() => {
     const session = loadSession()
     const workspaceId = getWorkspaceId()
     const activeWorkspace = session?.memberships?.find((membership) => membership.workspaceId === workspaceId) ?? session?.memberships?.[0]
-    if (activeWorkspace?.workspaceName) setWorkspaceName(activeWorkspace.workspaceName)
+    if (activeWorkspace?.workspaceName) {
+      setWorkspaceName(activeWorkspace.workspaceName)
+      setWorkspaceNameDraft(activeWorkspace.workspaceName)
+    }
     if (activeWorkspace?.workspaceId || workspaceId) setWorkspaceMeta(`workspace / ${(activeWorkspace?.workspaceId || workspaceId) ?? '—'}`)
     if (activeWorkspace?.role) setWorkspaceRoleLine(`You are ${workspaceRoleLabel(activeWorkspace.role)} in this workspace`)
 
@@ -57,8 +67,55 @@ export default function Home() {
   const latestVersion = updateManifest?.latestVersion ?? null
   const updateAvailable = latestVersion ? compareVersions(latestVersion, appVersion) > 0 : false
 
+  const activeWorkspaceId = getWorkspaceId() || loadSession()?.memberships?.[0]?.workspaceId || ''
+
+  const saveWorkspaceName = async () => {
+    const nextName = workspaceNameDraft.trim()
+    if (!activeWorkspaceId || !nextName || nextName === workspaceName || workspaceNameSaving) {
+      setEditingWorkspaceName(false)
+      setWorkspaceNameDraft(workspaceName)
+      return
+    }
+    try {
+      setWorkspaceNameSaving(true)
+      await updateWorkspace(activeWorkspaceId, { name: nextName })
+      setWorkspaceName(nextName)
+      const session = loadSession()
+      const me = await getMe()
+      if (session?.token) saveSession({ token: session.token, expiresAt: session.expiresAt, account: me.account, memberships: me.memberships })
+    } finally {
+      setWorkspaceNameSaving(false)
+      setEditingWorkspaceName(false)
+    }
+  }
+
   return (
-    <AppShell title={workspaceName} subtitle={workspaceMeta} actions={workspaceRoleLine ? <div style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700 }}>{workspaceRoleLine}</div> : undefined}>
+    <AppShell title="" subtitle="" actions={workspaceRoleLine ? <div style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700 }}>{workspaceRoleLine}</div> : undefined}>
+      <div style={{ display: 'grid', gap: 6, marginBottom: 18 }}>
+        {editingWorkspaceName ? (
+          <input
+            autoFocus
+            value={workspaceNameDraft}
+            onChange={(event) => setWorkspaceNameDraft(event.target.value)}
+            onBlur={() => { void saveWorkspaceName() }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                event.currentTarget.blur()
+              }
+              if (event.key === 'Escape') {
+                setWorkspaceNameDraft(workspaceName)
+                setEditingWorkspaceName(false)
+              }
+            }}
+            disabled={workspaceNameSaving}
+            style={workspaceHeaderNameInput}
+          />
+        ) : (
+          <button type="button" onClick={() => setEditingWorkspaceName(true)} style={workspaceHeaderNameButton}>{workspaceName}</button>
+        )}
+        <div style={workspaceHeaderMetaText}>{workspaceMeta}</div>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
         <div style={panel}>
           <div style={metaLabelText}>Active projects</div>

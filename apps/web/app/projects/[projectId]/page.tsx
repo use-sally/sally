@@ -17,9 +17,11 @@ import { labelText, projectInputField } from '../../../lib/theme'
 import { projectRoleOptions } from '../../../lib/roles'
 import { canAddProjectMember, canChangeProjectClient, canChangeProjectMemberRole, canEditProject, canInviteProjectMember, canManageProjectWorkflow, canRemoveProjectMember } from '../../../lib/permissions'
 
-function formatActivityActor(event: { actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null }) {
+function formatActivityActor(event: { actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null }) {
   const actor = event.actorName || event.actorEmail || 'System'
-  return event.actorApiKeyLabel ? `${actor} · API key: ${event.actorApiKeyLabel}` : actor
+  if (event.actorApiKeyLabel) return `${actor} · API key: ${event.actorApiKeyLabel}`
+  if (event.actorMcpKeyLabel) return `${actor} · MCP key: ${event.actorMcpKeyLabel}`
+  return actor
 }
 
 function formatActivityTimestamp(value: string) {
@@ -139,7 +141,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const qc = useQueryClient()
   const archivedParam = searchParams.get('archived') === 'true'
   const [projectId, setProjectId] = useState<string>('')
-  const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; details: string[]; createdAt: string }[]>([])
+  const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null; details: string[]; createdAt: string }[]>([])
   const [members, setMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; createdAt: string; locked?: boolean; workspaceRole?: string | null; platformRole?: string | null }[]>([])
   const [workspaceMembers, setWorkspaceMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; role: string }[]>([])
   const [selectedWorkspaceMemberId, setSelectedWorkspaceMemberId] = useState('')
@@ -486,6 +488,31 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                 <span style={project.client ? linkedText : unlinkedText}>{project.client ? 'Linked' : 'Unlinked'}</span>
               </div>
             </div>
+
+            {project.dependencies?.length || project.dependedOnBy?.length ? (
+              <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 8 }}>
+                {project.dependencies?.length ? (
+                  <div>
+                    <div style={labelText}>Depends on</div>
+                    <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
+                      {project.dependencies.map((dep: { projectId: string; name: string }) => (
+                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{dep.name}</a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {project.dependedOnBy?.length ? (
+                  <div>
+                    <div style={labelText}>Blocks</div>
+                    <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
+                      {project.dependedOnBy.map((dep: { projectId: string; name: string }) => (
+                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{dep.name}</a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 8 }}>
               <div style={labelText}>Total tasks</div>
