@@ -1,5 +1,12 @@
 # create-sally changelog
 
+## 0.1.8
+
+- make install and update flows inspect live Postgres migration state before deploy
+- automatically reconcile missing Prisma baseline history only when the Sally schema is fully initialized
+- fail explicitly on partial Sally schemas instead of guessing through broken drift states
+- keep updater path on committed migrations via `prisma migrate deploy`
+
 ## 0.1.5
 
 - add first-class `update` command for installer-managed Sally deployments
