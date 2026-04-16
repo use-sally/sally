@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { confirm, input, select } from '@inquirer/prompts'
 import crypto from 'node:crypto'
+import { createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -393,6 +394,71 @@ function printUpdateSuccess(mode: InstallMode, appUrl: string, imageTag: string)
   }
 }
 
+async function backupExistingInstance(targetDir: string, postgresUser: string, postgresDb: string) {
+  const backupRoot = path.join(targetDir, '.backups')
+  const stamp = new Date().toISOString().replace(/[:]/g, '-').replace(/\.\d+Z$/, 'Z')
+  const backupDir = path.join(backupRoot, stamp)
+
+  section('Backing up current Sally instance')
+  await fs.mkdir(backupDir, { recursive: true })
+
+  const envPath = path.join(targetDir, '.env')
+  const composePath = path.join(targetDir, 'docker-compose.yml')
+  await fs.copyFile(envPath, path.join(backupDir, '.env'))
+  await fs.copyFile(composePath, path.join(backupDir, 'docker-compose.yml'))
+
+  const dbDumpPath = path.join(backupDir, 'database.dump')
+  await new Promise<void>((resolve, reject) => {
+    const out = createWriteStream(dbDumpPath)
+    const child = spawn('docker', ['compose', 'exec', '-T', 'postgres', 'pg_dump', '-U', postgresUser, '-d', postgresDb, '-Fc'], { cwd: targetDir, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+    let stderr = ''
+    child.stdout.pipe(out)
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk)
+    })
+    child.on('error', reject)
+    child.on('exit', (code) => {
+      out.close()
+      if (code === 0) resolve()
+      else reject(new Error(stderr.trim() || `pg_dump failed with exit code ${code ?? 'unknown'}`))
+    })
+  })
+
+  const uploadsArchive = path.join(backupDir, 'uploads.tgz')
+  const apiContainerId = (await runCommandCapture('docker', ['compose', 'ps', '-q', 'api'], targetDir).catch(() => '')).trim()
+
+  if (!apiContainerId) {
+    await fs.writeFile(path.join(backupDir, 'uploads.txt'), 'api container not present during backup; no uploads archive captured\n')
+  } else {
+    await new Promise<void>((resolve, reject) => {
+      const out = createWriteStream(uploadsArchive)
+      const child = spawn('docker', ['cp', `${apiContainerId}:/app/apps/api/uploads/.`, '-'], { cwd: targetDir, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+      let stderr = ''
+      let stdoutSeen = false
+      child.stdout.on('data', (chunk) => {
+        stdoutSeen = true
+        out.write(chunk)
+      })
+      child.stderr.on('data', (chunk) => {
+        stderr += String(chunk)
+      })
+      child.on('error', reject)
+      child.on('exit', async (code) => {
+        out.close()
+        if (code === 0 && stdoutSeen) return resolve()
+        if (code === 0 && !stdoutSeen) {
+          await fs.writeFile(path.join(backupDir, 'uploads.txt'), 'api uploads directory empty or unavailable during backup\n')
+          return resolve()
+        }
+        await fs.writeFile(path.join(backupDir, 'uploads.txt'), `uploads backup skipped: ${stderr.trim() || `docker cp failed with exit code ${code ?? 'unknown'}`}\n`)
+        resolve()
+      })
+    })
+  }
+
+  console.log(paint(`Backup written to ${backupDir}`, color.green))
+}
+
 async function hasCommand(command: string) {
   try {
     await runCommandCapture('sh', ['-lc', `command -v ${command}`])
@@ -493,22 +559,36 @@ type MigrationState = {
 }
 
 async function inspectMigrationState(targetDir: string, postgresUser: string, postgresDb: string) {
-  const sql = [
+  const stateSql = [
     'SELECT json_build_object(',
     "  'hasMigrationsTable', EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_prisma_migrations'),",
-    "  'coreTableCount', (SELECT COUNT(*)::int FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Workspace', 'Project', 'TaskStatus', 'Task')),",
-    "  'baselineApplied', CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_prisma_migrations') THEN EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name = '20260410182000_init') ELSE false END",
+    "  'coreTableCount', (SELECT COUNT(*)::int FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Workspace', 'Project', 'TaskStatus', 'Task'))",
     ');',
   ].join(' ')
 
-  const raw = await runCommandCapture(
+  const rawState = await runCommandCapture(
     'docker',
-    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', stateSql],
     targetDir,
   )
-  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
-  if (!jsonLine) throw new Error(`Could not inspect migration state. Output was:\n${raw}`)
-  return JSON.parse(jsonLine) as MigrationState
+  const stateLine = rawState.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
+  if (!stateLine) throw new Error(`Could not inspect migration state. Output was:\n${rawState}`)
+
+  const state = JSON.parse(stateLine) as Omit<MigrationState, 'baselineApplied'>
+  if (!state.hasMigrationsTable) {
+    return { ...state, baselineApplied: false }
+  }
+
+  const baselineSql = "SELECT EXISTS (SELECT 1 FROM \"_prisma_migrations\" WHERE migration_name = '20260410182000_init');"
+  const rawBaseline = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', baselineSql],
+    targetDir,
+  )
+  const baselineValue = rawBaseline.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop()
+  if (!baselineValue) throw new Error(`Could not inspect baseline migration state. Output was:\n${rawBaseline}`)
+
+  return { ...state, baselineApplied: baselineValue === 't' || baselineValue === 'true' }
 }
 
 async function maybeResolveBaselineMigration(targetDir: string, postgresUser: string, postgresDb: string) {
@@ -533,6 +613,171 @@ async function maybeResolveBaselineMigration(targetDir: string, postgresUser: st
   await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate resolve --applied 20260410182000_init --schema prisma/schema.prisma'], targetDir)
 }
 
+type StatusRepairState = {
+  blockedEnumExists: boolean
+  projectsMissingBlocked: number
+  legacyBlockedCount: number
+}
+
+async function inspectStatusRepairState(targetDir: string, postgresUser: string, postgresDb: string) {
+  const sql = [
+    'SELECT json_build_object(',
+    "  'blockedEnumExists', EXISTS (SELECT 1 FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid WHERE t.typname = 'TaskStatusType' AND e.enumlabel = 'BLOCKED'),",
+    `  'projectsMissingBlocked', (
+         SELECT COUNT(*)::int FROM (
+           SELECT p."id"
+           FROM "Project" p
+           WHERE NOT EXISTS (
+             SELECT 1 FROM "TaskStatus" s
+             WHERE s."projectId" = p."id" AND s.type::text = 'BLOCKED'
+           )
+         ) missing
+       ),`,
+    "  'legacyBlockedCount', (SELECT COUNT(*)::int FROM \"TaskStatus\" WHERE lower(name) = 'blocked' AND type::text = 'TODO')",
+    ');',
+  ].join(' ')
+
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    targetDir,
+  )
+  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
+  if (!jsonLine) throw new Error(`Could not inspect status repair state. Output was:\n${raw}`)
+  return JSON.parse(jsonLine) as StatusRepairState
+}
+
+type ProjectStatusRow = {
+  id: string
+  projectId: string
+  name: string
+  type: string
+  position: number
+}
+
+function sqlLiteral(value: string) {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+async function maybeRepairBlockedStatuses(targetDir: string, postgresUser: string, postgresDb: string) {
+  const state = await inspectStatusRepairState(targetDir, postgresUser, postgresDb)
+  if (state.legacyBlockedCount === 0 && state.projectsMissingBlocked === 0) return
+
+  section('Repairing blocked statuses')
+  console.log(paint(`Detected ${state.legacyBlockedCount} legacy Blocked rows and ${state.projectsMissingBlocked} projects missing a proper BLOCKED status. Repairing them before migration.`, color.yellow))
+
+  if (!state.blockedEnumExists) {
+    await runCommand(
+      'docker',
+      ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-v', 'ON_ERROR_STOP=1', '-c', `ALTER TYPE "TaskStatusType" ADD VALUE IF NOT EXISTS 'BLOCKED';`],
+      targetDir,
+    )
+  }
+
+  const projectsSql = [
+    'SELECT json_agg(row_to_json(t)) FROM (',
+    '  SELECT p."id" AS "projectId"',
+    '  FROM "Project" p',
+    '  WHERE NOT EXISTS (',
+    '    SELECT 1 FROM "TaskStatus" s',
+    `    WHERE s."projectId" = p."id" AND s.type::text = 'BLOCKED'`,
+    '  )',
+    ') t;',
+  ].join(' ')
+  const rawProjects = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', projectsSql],
+    targetDir,
+  )
+  const projectJson = rawProjects.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop() || '[]'
+  const affectedProjects = ((projectJson === 'null' ? [] : JSON.parse(projectJson)) as Array<{ projectId: string }>).map((row) => row.projectId)
+
+  for (const projectId of affectedProjects) {
+    const statusSql = [
+      'SELECT json_agg(row_to_json(t) ORDER BY t.position, t.id) FROM (',
+      '  SELECT id, "projectId" AS "projectId", name, type::text AS type, position',
+      '  FROM "TaskStatus"',
+      `  WHERE "projectId" = ${sqlLiteral(projectId)}`,
+      '  ORDER BY position, id',
+      ') t;',
+    ].join(' ')
+    const rawStatuses = await runCommandCapture(
+      'docker',
+      ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', statusSql],
+      targetDir,
+    )
+    const statusJson = rawStatuses.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop() || '[]'
+    const statuses = (statusJson === 'null' ? [] : JSON.parse(statusJson)) as ProjectStatusRow[]
+    if (!statuses.length) continue
+
+    const legacyBlocked = statuses.find((s) => s.type === 'TODO' && s.name.trim().toLowerCase() === 'blocked')
+    const review = statuses.find((s) => s.type === 'REVIEW')
+    const done = statuses.find((s) => s.type === 'DONE')
+    const customStatuses = statuses.filter((s) => !['BACKLOG', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE'].includes(s.type) && s.id !== legacyBlocked?.id)
+
+    const sqlParts = ['BEGIN;']
+
+    statuses
+      .filter((s) => s.position >= 2)
+      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+      .forEach((status, index) => {
+        sqlParts.push(`UPDATE "TaskStatus" SET "position" = ${1000 + index} WHERE id = ${sqlLiteral(status.id)};`)
+      })
+
+    if (legacyBlocked) {
+      sqlParts.push(
+        `UPDATE "TaskStatus" SET name = 'Blocked', type = 'BLOCKED'::"TaskStatusType", "position" = 2, color = '#7f1d1d' WHERE id = ${sqlLiteral(legacyBlocked.id)};`,
+      )
+    } else {
+      sqlParts.push(
+        `INSERT INTO "TaskStatus" ("id", "projectId", "name", "type", "position", "color") VALUES ('blocked_' || substr(md5(${sqlLiteral(projectId)} || '_blocked'), 1, 24), ${sqlLiteral(projectId)}, 'Blocked', 'BLOCKED'::"TaskStatusType", 2, '#7f1d1d');`,
+      )
+    }
+
+    if (review) sqlParts.push(`UPDATE "TaskStatus" SET "position" = 3 WHERE id = ${sqlLiteral(review.id)};`)
+    if (done) sqlParts.push(`UPDATE "TaskStatus" SET "position" = 4 WHERE id = ${sqlLiteral(done.id)};`)
+
+    customStatuses
+      .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+      .forEach((status, index) => {
+        sqlParts.push(`UPDATE "TaskStatus" SET "position" = ${5 + index} WHERE id = ${sqlLiteral(status.id)};`)
+      })
+
+    sqlParts.push('COMMIT;')
+
+    await runCommand(
+      'docker',
+      ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-v', 'ON_ERROR_STOP=1', '-c', sqlParts.join(' ')],
+      targetDir,
+    )
+  }
+
+  await runCommand(
+    'docker',
+    ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate resolve --rolled-back 20260415162500_add_blocked_status --schema prisma/schema.prisma'],
+    targetDir,
+  )
+}
+
+async function maybeResolveFailedBlockedMigration(targetDir: string) {
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', 'sally', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', `SELECT COUNT(*) FROM "_prisma_migrations" WHERE migration_name = '20260415162500_add_blocked_status' AND finished_at IS NULL AND rolled_back_at IS NULL;`],
+    targetDir,
+  ).catch(() => '0')
+
+  const count = Number(raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop() || '0')
+  if (!count) return
+
+  section('Resolving failed blocked-status migration state')
+  console.log(paint('Found failed 20260415162500_add_blocked_status migration record. Marking it rolled back so deploy can retry cleanly.', color.yellow))
+  await runCommand(
+    'docker',
+    ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate resolve --rolled-back 20260415162500_add_blocked_status --schema prisma/schema.prisma'],
+    targetDir,
+  )
+}
+
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string, postgresUser: string, postgresDb: string) {
   section('Pulling fresh Sally images')
   await runCommand('docker', ['compose', 'pull', 'api', 'web'], targetDir)
@@ -542,12 +787,19 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
   await waitForPostgres(targetDir, postgresUser, postgresDb)
 
   await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)
+  await maybeRepairBlockedStatuses(targetDir, postgresUser, postgresDb)
+  await maybeResolveFailedBlockedMigration(targetDir)
 
   section('Applying database migrations')
   await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate deploy --schema prisma/schema.prisma'], targetDir)
 
-  section('Bootstrapping superadmin')
-  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir, { quiet: true })
+  const envText = await fs.readFile(path.join(targetDir, '.env'), 'utf8')
+  if (/^BOOTSTRAP_SUPERADMIN_PASSWORD=.+$/m.test(envText)) {
+    section('Bootstrapping superadmin')
+    await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir, { quiet: true })
+  } else {
+    console.log(paint('Skipping superadmin bootstrap because BOOTSTRAP_SUPERADMIN_PASSWORD is not present in .env', color.yellow))
+  }
 
   if (mode === 'managed-simple') {
     section('Starting Sally services')
@@ -795,7 +1047,8 @@ async function updateFlow(options: CliOptions) {
   banner('update')
   await ensureDockerInstalled()
 
-  const targetDir = path.resolve(options.dir ?? await promptText('Where is the existing sally_ install?', '/opt/sally-instance'))
+  const nonInteractive = options.yes || !process.stdin.isTTY || !process.stdout.isTTY
+  const targetDir = path.resolve(options.dir ?? (nonInteractive ? '/opt/sally-instance' : await promptText('Where is the existing sally_ install?', '/opt/sally-instance')))
   const current = await parseEnvFile(targetDir)
 
   section('Detected Sally install')
@@ -804,18 +1057,21 @@ async function updateFlow(options: CliOptions) {
   console.log(`${paint('CURRENT VERSION', color.brightYellow)}: ${current.imageTag}`)
   console.log(`${paint('SUPERADMIN', color.brightYellow)}: ${current.superadminEmail}`)
 
-  const imageTag = await resolveTextOption(options.version, 'Target Sally version', 'latest')
+  const imageTag = options.version ?? (nonInteractive ? 'latest' : await resolveTextOption(undefined, 'Target Sally version', 'latest'))
 
-  const proceed = await resolveConfirm(
-    options.yes,
-    `Proceed with Sally update in ${targetDir}? This updates the deployed images, applies schema changes, and restarts services. Back up Postgres first if this matters.`,
-    false,
-  )
+  const proceed = nonInteractive
+    ? true
+    : await resolveConfirm(
+        false,
+        `Proceed with Sally update in ${targetDir}? This updates the deployed images, applies schema changes, restarts services. A local backup will be written first.`,
+        false,
+      )
 
   if (!proceed) {
     throw new Error('Update cancelled.')
   }
 
+  await backupExistingInstance(targetDir, current.postgresUser, current.postgresDb)
   await updateEnvImageTag(targetDir, imageTag)
   await runInstallerCommands(current.mode, targetDir, current.appUrl, current.postgresUser, current.postgresDb)
   printUpdateSuccess(current.mode, current.appUrl, imageTag)
