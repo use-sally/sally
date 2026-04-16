@@ -21,6 +21,15 @@ type ParsedEnv = {
   postgresDb: string
 }
 
+type SchemaDriftState = {
+  projectTableExists: boolean
+  taskTableExists: boolean
+  missingProjectTaskCounter: boolean
+  missingTaskNumber: boolean
+  missingTaskProjectNumberIndex: boolean
+  missingProjectDependencyTable: boolean
+}
+
 type CliOptions = {
   command: CommandMode
   dir?: string
@@ -778,6 +787,98 @@ async function maybeResolveFailedBlockedMigration(targetDir: string) {
   )
 }
 
+async function inspectSchemaDriftState(targetDir: string, postgresUser: string, postgresDb: string) {
+  const sql = [
+    'SELECT json_build_object(',
+    "  'projectTableExists', EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Project'),",
+    "  'taskTableExists', EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Task'),",
+    "  'missingProjectTaskCounter', NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Project' AND column_name = 'taskCounter'),",
+    "  'missingTaskNumber', NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'number'),",
+    "  'missingTaskProjectNumberIndex', NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'Task' AND indexname = 'Task_projectId_number_key'),",
+    "  'missingProjectDependencyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ProjectDependency')",
+    ');',
+  ].join(' ')
+
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    targetDir,
+  )
+  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
+  if (!jsonLine) throw new Error(`Could not inspect schema drift state. Output was:\n${raw}`)
+  return JSON.parse(jsonLine) as SchemaDriftState
+}
+
+async function maybeRepairInitSchemaDrift(targetDir: string, postgresUser: string, postgresDb: string) {
+  const state = await inspectSchemaDriftState(targetDir, postgresUser, postgresDb)
+  if (!state.projectTableExists || !state.taskTableExists) return
+  if (!state.missingProjectTaskCounter && !state.missingTaskNumber && !state.missingTaskProjectNumberIndex && !state.missingProjectDependencyTable) return
+
+  section('Repairing missing init schema columns')
+  console.log(paint('Detected missing legacy init-schema columns/indexes. Repairing taskCounter/task.number/project-dependency drift before continuing.', color.yellow))
+
+  const sqlParts = ['BEGIN;']
+  if (state.missingProjectTaskCounter) sqlParts.push('ALTER TABLE "Project" ADD COLUMN "taskCounter" INTEGER NOT NULL DEFAULT 0;')
+  if (state.missingTaskNumber) sqlParts.push('ALTER TABLE "Task" ADD COLUMN "number" INTEGER;')
+  if (state.missingProjectDependencyTable) {
+    sqlParts.push(
+      'CREATE TABLE "ProjectDependency" (',
+      '  "projectId" TEXT NOT NULL,',
+      '  "dependsOnId" TEXT NOT NULL,',
+      '  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+      '  CONSTRAINT "ProjectDependency_pkey" PRIMARY KEY ("projectId","dependsOnId")',
+      ');',
+      'ALTER TABLE "ProjectDependency" ADD CONSTRAINT "ProjectDependency_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;',
+      'ALTER TABLE "ProjectDependency" ADD CONSTRAINT "ProjectDependency_dependsOnId_fkey" FOREIGN KEY ("dependsOnId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;',
+    )
+  }
+  if (state.missingTaskNumber) {
+    sqlParts.push(
+      'WITH ordered_tasks AS (',
+      '  SELECT id, ROW_NUMBER() OVER (PARTITION BY "projectId" ORDER BY "createdAt", id) AS next_number',
+      '  FROM "Task"',
+      '),',
+      'updated_tasks AS (',
+      '  UPDATE "Task" t',
+      '  SET "number" = ordered_tasks.next_number',
+      '  FROM ordered_tasks',
+      '  WHERE t.id = ordered_tasks.id',
+      '  RETURNING t."projectId", t."number"',
+      ')',
+      'UPDATE "Project" p',
+      'SET "taskCounter" = COALESCE(project_max.max_number, 0)',
+      'FROM (',
+      '  SELECT "projectId", MAX("number") AS max_number',
+      '  FROM "Task"',
+      '  GROUP BY "projectId"',
+      ') project_max',
+      'WHERE p.id = project_max."projectId";',
+      'UPDATE "Project" SET "taskCounter" = 0 WHERE "taskCounter" IS NULL;',
+      'ALTER TABLE "Task" ALTER COLUMN "number" SET NOT NULL;',
+    )
+  } else if (state.missingProjectTaskCounter) {
+    sqlParts.push(
+      'UPDATE "Project" p',
+      'SET "taskCounter" = COALESCE(project_max.max_number, 0)',
+      'FROM (',
+      '  SELECT "projectId", MAX("number") AS max_number',
+      '  FROM "Task"',
+      '  GROUP BY "projectId"',
+      ') project_max',
+      'WHERE p.id = project_max."projectId";',
+      'UPDATE "Project" SET "taskCounter" = 0 WHERE "taskCounter" IS NULL;',
+    )
+  }
+  if (state.missingTaskProjectNumberIndex) sqlParts.push('CREATE UNIQUE INDEX "Task_projectId_number_key" ON "Task"("projectId", "number");')
+  sqlParts.push('COMMIT;')
+
+  await runCommand(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-v', 'ON_ERROR_STOP=1', '-c', sqlParts.join(' ')],
+    targetDir,
+  )
+}
+
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string, postgresUser: string, postgresDb: string) {
   section('Pulling fresh Sally images')
   await runCommand('docker', ['compose', 'pull', 'api', 'web'], targetDir)
@@ -787,6 +888,7 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
   await waitForPostgres(targetDir, postgresUser, postgresDb)
 
   await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)
+  await maybeRepairInitSchemaDrift(targetDir, postgresUser, postgresDb)
   await maybeRepairBlockedStatuses(targetDir, postgresUser, postgresDb)
   await maybeResolveFailedBlockedMigration(targetDir)
 
@@ -955,6 +1057,20 @@ async function doctorFlow(options: CliOptions) {
     console.log(`${paint('url', color.brightYellow)}: ${current.appUrl}`)
     console.log(`${paint('version', color.brightYellow)}: ${current.imageTag}`)
     console.log(`${paint('superadmin', color.brightYellow)}: ${current.superadminEmail}`)
+
+    section('Schema checks')
+    try {
+      const drift = await inspectSchemaDriftState(targetDir, current.postgresUser, current.postgresDb)
+      const problems = [
+        drift.missingProjectTaskCounter ? 'Project.taskCounter missing' : null,
+        drift.missingTaskNumber ? 'Task.number missing' : null,
+        drift.missingTaskProjectNumberIndex ? 'Task_projectId_number_key missing' : null,
+        drift.missingProjectDependencyTable ? 'ProjectDependency table missing' : null,
+      ].filter(Boolean)
+      console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
+    } catch (error) {
+      console.log(`${paint('schema', color.brightYellow)}: ${paint(`failed (${error instanceof Error ? error.message : String(error)})`, color.red)}`)
+    }
 
     section('Health checks')
     try {
