@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { getProjectMembers } from '../lib/api'
 import { canAddTimesheet, canDeleteTimesheet, canEditTimesheet, canValidateTimesheet } from '../lib/timesheet-permissions'
+import { findCurrentTimesheetUserId } from '../lib/timesheet-user-defaults'
 import { useProjectTasksQuery } from '../lib/query'
 import { sortableHeaderButton } from '../lib/theme'
 import { TimesheetsFiltersBar, TimesheetsSummaryBar } from './timesheets-table-chrome'
@@ -134,7 +135,7 @@ export function TimesheetsTable({
     return () => { cancelled = true }
   }, [activeProjectId, report?.entries, session?.account?.id])
 
-  const currentTimesheetUserId = users.find((user) => user.name === session?.account?.name || user.name === session?.account?.email)?.id ?? null
+  const currentTimesheetUserId = findCurrentTimesheetUserId(users, session?.account)
   const activeViewer = { timesheetUserId: currentTimesheetUserId, platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: activeProjectId ? (projectRoles[activeProjectId] ?? null) : null }
   const addDecision = canAddTimesheet(activeViewer)
   const validateDecision = canValidateTimesheet(activeViewer)
