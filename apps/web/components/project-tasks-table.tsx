@@ -294,8 +294,8 @@ function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskList
   const dueLabel = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr 110px', gap: 10, padding: '14px 16px', alignItems: 'center', background: 'var(--form-bg)' }}>
-      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{task.number}</span> : null}{task.title}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) 1fr 0.9fr 1fr 1fr 1.4fr 110px', gap: 10, padding: '14px 16px', alignItems: 'center', background: 'var(--form-bg)' }}>
+      <div style={{ fontWeight: 700, color: 'var(--text-primary)', overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0 }}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{task.number}</span> : null}{task.title}</div>
       <div style={{ display: 'flex', alignItems: 'center' }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} /></div>
       <div style={{ color: 'rgba(209, 250, 229, 0.34)' }}>{priorityStars(task.priority)}</div>
       <div>{task.dueDate ? <span style={pill('#eef2ff', '#3730a3')}>{dueLabel}</span> : <span style={{ color: 'rgba(209, 250, 229, 0.34)' }}>—</span>}</div>

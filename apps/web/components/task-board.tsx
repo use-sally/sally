@@ -204,10 +204,10 @@ function SortableTaskCard({ card, taskBaseHref }: { card: BoardCard; taskBaseHre
   const badge = dueBadge(card.dueDate)
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}>
-      <Link href={`${taskBaseHref}?task=${card.id}`} style={{ ...boardCardStyle(card.statusColor), textAlign: 'left', textDecoration: 'none', color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'block' }}>
-        <div {...attributes} {...listeners} style={{ cursor: 'grab' }}>
-          <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35 }}>{card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}{card.title}</div>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, minWidth: 0 }}>
+      <Link href={`${taskBaseHref}?task=${card.id}`} style={{ ...boardCardStyle(card.statusColor), textAlign: 'left', textDecoration: 'none', color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'block', minWidth: 0, overflow: 'hidden' }}>
+        <div {...attributes} {...listeners} style={{ cursor: 'grab', minWidth: 0 }}>
+          <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}{card.title}</div>
           <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}><AssigneeAvatar name={card.assignee} avatarUrl={card.assigneeAvatarUrl} size={26} /><span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span><span className="status-chip" style={statusChipStyle(card.statusColor)}>{card.status}</span></div>
           {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -232,6 +232,8 @@ function boardColumnStyle(color?: string | null): React.CSSProperties {
     borderRadius: 16,
     padding: 12,
     boxShadow: `0 10px 24px color-mix(in srgb, ${border} 12%, transparent)`,
+    minWidth: 0,
+    overflow: 'hidden',
   }
 }
 
