@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useProjectQuery, qk, useTaskQuery, useTimesheetUsersQuery } from '../lib/query'
 import { archiveTask, createComment, createProjectLabel, createTaskTodo, createTimesheetEntry, deleteTask, deleteTaskTodo, deleteTimesheetEntry, reorderTaskTodos, updateTask, updateTaskLabels, updateTaskTodo, updateTimesheetEntry, uploadTaskDescriptionImage } from '../lib/api'
+import { findCurrentTimesheetUserId, getDefaultTimesheetUserName, getPreferredTimesheetCreateUserId } from '../lib/timesheet-user-defaults'
 import { pill, tagStyle } from './app-shell'
 import { useEffect, useRef, useState } from 'react'
 import type { TodoItem, TimesheetEntry } from '@sally/types/src'
@@ -63,6 +64,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
   const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
   const assignDecision = canAssignTask({ platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole: 'MEMBER' }, false)
   const { data: timesheetUsers = [] } = useTimesheetUsersQuery(projectId)
+  const currentTimesheetUserId = findCurrentTimesheetUserId(timesheetUsers, session?.account)
   const [commentBody, setCommentBody] = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [newLabel, setNewLabel] = useState('')
@@ -75,7 +77,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
   const [timeMinutes, setTimeMinutes] = useState('')
   const [timeDescription, setTimeDescription] = useState('')
   const [timeUserId, setTimeUserId] = useState('')
-  const [timeUserName, setTimeUserName] = useState('Alex')
+  const [timeUserName, setTimeUserName] = useState(() => getDefaultTimesheetUserName(session?.account))
   const [timeDate, setTimeDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [timeBillable, setTimeBillable] = useState(true)
   const [timeBusy, setTimeBusy] = useState(false)
@@ -102,8 +104,9 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
   }, [editingTimesheetId])
 
   useEffect(() => {
-    if (!timeUserId && timesheetUsers.length) setTimeUserId(timesheetUsers[0].id)
-  }, [timesheetUsers, timeUserId])
+    const preferredUserId = getPreferredTimesheetCreateUserId(timesheetUsers, session?.account)
+    if (preferredUserId && timeUserId !== preferredUserId) setTimeUserId(preferredUserId)
+  }, [timesheetUsers, session?.account, timeUserId])
 
   async function invalidateAll() {
     await Promise.all([

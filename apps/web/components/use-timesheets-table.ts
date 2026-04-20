@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { TimesheetReportEntry } from '@sally/types/src'
+import { loadSession } from '../lib/auth'
 import { createTimesheetEntry, deleteTimesheetEntry, updateTimesheetEntry } from '../lib/api'
+import { getPreferredTimesheetCreateUserId } from '../lib/timesheet-user-defaults'
 import { qk, useClientsQuery, useProjectsQuery, useTimesheetReportQuery, useTimesheetUsersQuery } from '../lib/query'
 import type { ActiveCell, EditableField } from './timesheets-table-rows'
 
@@ -59,10 +61,12 @@ export function useTimesheetsTable({ lockedProjectId, lockedTaskId }: { lockedPr
   const { data: projects = [] } = useProjectsQuery()
   const { data: clients = [] } = useClientsQuery()
   const { data: users = [] } = useTimesheetUsersQuery(lockedProjectId || projectId || undefined)
+  const session = useMemo(() => loadSession(), [])
 
   useEffect(() => {
-    if (!newUserId && users.length) setNewUserId(users[0].id)
-  }, [users, newUserId])
+    const preferredUserId = getPreferredTimesheetCreateUserId(users, session?.account)
+    if (preferredUserId && newUserId !== preferredUserId) setNewUserId(preferredUserId)
+  }, [users, session?.account, newUserId])
 
   useEffect(() => {
     if (!clientId || !projectId) return
