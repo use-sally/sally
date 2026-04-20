@@ -122,8 +122,8 @@ export function EditableTaskRow({
 
   return (
     <div>
-      <div onClick={() => { if (!expanded) onActivate() }} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', background: expanded ? 'var(--task-row-active-bg)' : 'var(--panel-bg)', boxShadow: expanded ? 'inset 0 0 0 1px rgba(250, 204, 21, 0.18)' : 'none' }}>
-        <div onClick={handleFieldClick('title')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text' }}>
+      <div onClick={() => { if (!expanded) onActivate() }} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', background: expanded ? 'var(--task-row-active-bg)' : 'var(--panel-bg)', boxShadow: expanded ? 'inset 0 0 0 1px rgba(250, 204, 21, 0.18)' : 'none' }}>
+        <div onClick={handleFieldClick('title')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'text', minWidth: 0 }}>
           {activeField === 'title' ? (
             <input
               value={title}
@@ -134,7 +134,7 @@ export function EditableTaskRow({
               style={inputStyle}
             />
           ) : (
-            <div style={{ ...taskTitleText, fontWeight: 700 }}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{task.number}</span> : null}{task.title}</div>
+            <div style={{ ...taskTitleText, fontWeight: 700, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0 }}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{task.number}</span> : null}{task.title}</div>
           )}
         </div>
 
