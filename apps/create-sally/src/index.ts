@@ -28,6 +28,7 @@ type SchemaDriftState = {
   missingTaskNumber: boolean
   missingTaskProjectNumberIndex: boolean
   missingProjectDependencyTable: boolean
+  missingTaskDependencyTable: boolean
 }
 
 type CliOptions = {
@@ -795,7 +796,8 @@ async function inspectSchemaDriftState(targetDir: string, postgresUser: string, 
     "  'missingProjectTaskCounter', NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Project' AND column_name = 'taskCounter'),",
     "  'missingTaskNumber', NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'number'),",
     "  'missingTaskProjectNumberIndex', NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'Task' AND indexname = 'Task_projectId_number_key'),",
-    "  'missingProjectDependencyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ProjectDependency')",
+    "  'missingProjectDependencyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ProjectDependency'),",
+    "  'missingTaskDependencyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TaskDependency')",
     ');',
   ].join(' ')
 
@@ -812,10 +814,10 @@ async function inspectSchemaDriftState(targetDir: string, postgresUser: string, 
 async function maybeRepairInitSchemaDrift(targetDir: string, postgresUser: string, postgresDb: string) {
   const state = await inspectSchemaDriftState(targetDir, postgresUser, postgresDb)
   if (!state.projectTableExists || !state.taskTableExists) return
-  if (!state.missingProjectTaskCounter && !state.missingTaskNumber && !state.missingTaskProjectNumberIndex && !state.missingProjectDependencyTable) return
+  if (!state.missingProjectTaskCounter && !state.missingTaskNumber && !state.missingTaskProjectNumberIndex && !state.missingProjectDependencyTable && !state.missingTaskDependencyTable) return
 
   section('Repairing missing init schema columns')
-  console.log(paint('Detected missing legacy init-schema columns/indexes. Repairing taskCounter/task.number/project-dependency drift before continuing.', color.yellow))
+  console.log(paint('Detected missing legacy init-schema columns/indexes. Repairing taskCounter/task.number/project-dependency/task-dependency drift before continuing.', color.yellow))
 
   const sqlParts = ['BEGIN;']
   if (state.missingProjectTaskCounter) sqlParts.push('ALTER TABLE "Project" ADD COLUMN "taskCounter" INTEGER NOT NULL DEFAULT 0;')
@@ -830,6 +832,18 @@ async function maybeRepairInitSchemaDrift(targetDir: string, postgresUser: strin
       ');',
       'ALTER TABLE "ProjectDependency" ADD CONSTRAINT "ProjectDependency_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;',
       'ALTER TABLE "ProjectDependency" ADD CONSTRAINT "ProjectDependency_dependsOnId_fkey" FOREIGN KEY ("dependsOnId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;',
+    )
+  }
+  if (state.missingTaskDependencyTable) {
+    sqlParts.push(
+      'CREATE TABLE "TaskDependency" (',
+      '  "taskId" TEXT NOT NULL,',
+      '  "dependsOnId" TEXT NOT NULL,',
+      '  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,',
+      '  CONSTRAINT "TaskDependency_pkey" PRIMARY KEY ("taskId","dependsOnId")',
+      ');',
+      'ALTER TABLE "TaskDependency" ADD CONSTRAINT "TaskDependency_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;',
+      'ALTER TABLE "TaskDependency" ADD CONSTRAINT "TaskDependency_dependsOnId_fkey" FOREIGN KEY ("dependsOnId") REFERENCES "Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;',
     )
   }
   if (state.missingTaskNumber) {
@@ -1066,6 +1080,7 @@ async function doctorFlow(options: CliOptions) {
         drift.missingTaskNumber ? 'Task.number missing' : null,
         drift.missingTaskProjectNumberIndex ? 'Task_projectId_number_key missing' : null,
         drift.missingProjectDependencyTable ? 'ProjectDependency table missing' : null,
+        drift.missingTaskDependencyTable ? 'TaskDependency table missing' : null,
       ].filter(Boolean)
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {
