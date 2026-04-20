@@ -21,8 +21,8 @@ export function ProjectCurrentTasks({ project, archived = false }: { project: Pr
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       {recentTasks.map((task) => (
-        <div key={task.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)' }}>
-          <div style={{ ...taskTitleText, fontWeight: 700 }}>{task.title}</div>
+        <div key={task.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)' }}>
+          <div style={{ ...taskTitleText, fontWeight: 700, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0 }}>{task.title}</div>
           <div style={{ display: 'flex', alignItems: 'center' }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} /></div>
           <div style={{ color: 'var(--text-muted)' }}>{priorityStars(task.priority)}</div>
           <div>{task.dueDate ? <span style={pill('#eef2ff', '#3730a3')}>{new Date(task.dueDate).toLocaleDateString()}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}</div>

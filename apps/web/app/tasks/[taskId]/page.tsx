@@ -334,7 +334,7 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 const sectionLabel: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }
-const taskHeaderTitleText: React.CSSProperties = { fontSize: 30, fontWeight: 750, color: 'var(--text-primary)', lineHeight: 1.1 }
+const taskHeaderTitleText: React.CSSProperties = { fontSize: 30, fontWeight: 750, color: 'var(--text-primary)', lineHeight: 1.1, overflowWrap: 'anywhere', wordBreak: 'break-word' }
 const taskHeaderTitleButton: React.CSSProperties = { ...taskHeaderTitleText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', textAlign: 'left', cursor: 'text' }
 const taskHeaderTitleInput: React.CSSProperties = { ...projectInputField, fontSize: 30, fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
 const taskMiniDelete: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 12, cursor: 'pointer' }
