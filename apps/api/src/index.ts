@@ -10,6 +10,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { promisify } from 'node:util'
 import { hasExactTodoOrder, normalizeTaskLabels, normalizeTaskTodoTexts } from './task-helpers.js'
+import { chooseCreateTimesheetUserId } from './timesheet-helpers.js'
 import { serveProfileImage, saveProfileImage } from './profile-images.js'
 import { cleanupRemovedDescriptionImages, saveTaskImage, serveTaskImage } from './task-description-images.js'
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
@@ -707,13 +708,13 @@ async function ensureTimesheetUser(workspaceId: string, account: { id: string; n
 async function resolveTimesheetScope(request: any, workspaceId: string, projectId?: string) {
   const account = (request as any).account as { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: PlatformRole | null } | undefined
   if (!account) return { elevated: true, userId: null as string | null }
+  const user = await ensureTimesheetUser(workspaceId, account)
   const workspaceMembership = (request as any).membership as { role: WorkspaceRole } | undefined
-  if (isSuperadmin(request) || workspaceMembership?.role === WorkspaceRole.OWNER) return { elevated: true, userId: null as string | null }
+  if (isSuperadmin(request) || workspaceMembership?.role === WorkspaceRole.OWNER) return { elevated: true, userId: user?.id ?? null }
   if (projectId) {
     const projectMembership = await prisma.projectMembership.findFirst({ where: { projectId, accountId: account.id } })
-    if (projectMembership?.role === PROJECT_ROLE.OWNER) return { elevated: true, userId: null as string | null }
+    if (projectMembership?.role === PROJECT_ROLE.OWNER) return { elevated: true, userId: user?.id ?? null }
   }
-  const user = await ensureTimesheetUser(workspaceId, account)
   return { elevated: false, userId: user?.id ?? null }
 }
 
@@ -2879,11 +2880,8 @@ const start = async () => {
         if (!task) return reply.code(404).send({ ok: false, error: 'Task not found for project' })
       }
       const scope = await resolveTimesheetScope(request, workspace.id, body.projectId)
-      let userId = body.userId
-      if (!scope.elevated) {
-        if (!scope.userId) return reply.code(403).send({ ok: false, error: 'Timesheet user unavailable' })
-        userId = scope.userId
-      }
+      let userId = chooseCreateTimesheetUserId({ elevated: scope.elevated, requestedUserId: body.userId, currentUserId: scope.userId })
+      if (!userId) return reply.code(403).send({ ok: false, error: 'Timesheet user unavailable' })
       if (userId) {
         const user = await prisma.user.findFirst({ where: { id: userId, workspaceId: project.workspaceId } })
         if (!user) return reply.code(404).send({ ok: false, error: 'User not found for project workspace' })
