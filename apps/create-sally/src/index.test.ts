@@ -68,6 +68,8 @@ test('updater inspects and repairs task owner/participants rollout drift before 
   assert.ok(source.includes('inspectTaskPeopleMigrationState'))
   assert.ok(source.includes('TaskParticipant'))
   assert.ok(source.includes('TaskParticipantRole'))
+  assert.ok(source.includes(`WHEN NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'owner') THEN EXISTS (`))
+  assert.ok(source.includes(`COALESCE(NULLIF(BTRIM(t."assignee"), ''), '') <> '' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id)`))
 })
 
 test('updater refuses ambiguous task owner/participants drift states', () => {

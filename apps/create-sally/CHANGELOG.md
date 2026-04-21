@@ -1,5 +1,10 @@
 # create-sally changelog
 
+## 0.1.22
+
+- fix updater owner/participants preflight so it does not reference `Task.owner` before that column exists
+- keep live installer-managed updates working on databases that are still pre-migration for the task people rollout
+
 ## 0.1.21
 
 - inspect and repair task owner/participants rollout drift before `prisma migrate deploy`
