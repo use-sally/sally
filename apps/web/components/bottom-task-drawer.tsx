@@ -36,6 +36,7 @@ export function BottomTaskDrawer({ taskId, closeHref, projectId }: { taskId: str
     position: task.position,
     title: task.title,
     assignee: task.assignee,
+    collaborators: task.collaborators,
     priority: task.priority,
     status: task.status,
     statusId: task.statusId,

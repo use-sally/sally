@@ -357,31 +357,41 @@ model TaskStatus {
 }
 
 model Task {
-  id          String           @id @default(cuid())
-  projectId   String
-  statusId    String
-  number      Int
-  title       String
-  description String?
-  priority    TaskPriority     @default(P2)
-  assignee    String?
-  dueDate     DateTime?
-  position    Int              @default(0)
-  archivedAt  DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  status      TaskStatus       @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  comments    Comment[]
-  labels      TaskLabel[]
-  todos       TaskTodo[]
-  timesheets  TimesheetEntry[]
-  activityLogs ActivityLog[]
-  notifications Notification[]
-  dependencies   TaskDependency[] @relation("taskDependencies")
-  dependedOnBy   TaskDependency[] @relation("taskDependedOnBy")
+  id            String             @id @default(cuid())
+  projectId      String
+  statusId       String
+  number         Int
+  title          String
+  description    String?
+  priority       TaskPriority      @default(P2)
+  assignee       String?
+  dueDate        DateTime?
+  position       Int               @default(0)
+  archivedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status         TaskStatus        @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  comments       Comment[]
+  labels         TaskLabel[]
+  collaborators  TaskCollaborator[]
+  todos          TaskTodo[]
+  timesheets     TimesheetEntry[]
+  activityLogs   ActivityLog[]
+  notifications  Notification[]
+  dependencies   TaskDependency[]  @relation("taskDependencies")
+  dependedOnBy   TaskDependency[]  @relation("taskDependedOnBy")
 
   @@unique([projectId, number])
+}
+
+model TaskCollaborator {
+  taskId        String
+  collaborator  String
+  createdAt     DateTime @default(now())
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, collaborator])
 }
 
 model TaskDependency {
