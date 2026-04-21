@@ -1,5 +1,11 @@
 # create-sally changelog
 
+## 0.1.21
+
+- inspect and repair task owner/participants rollout drift before `prisma migrate deploy`
+- refuse ambiguous partial owner/participants rollout states instead of guessing through broken drift
+- keep installer-managed updates safe for the canonical task people migration
+
 ## 0.1.8
 
 - make install and update flows inspect live Postgres migration state before deploy
