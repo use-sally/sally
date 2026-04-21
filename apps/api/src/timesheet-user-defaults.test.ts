@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { chooseCreateTimesheetUserId } from './timesheet-helpers.js'
-import { findCurrentTimesheetUserId, getPreferredTimesheetCreateUserId } from '../../web/lib/timesheet-user-defaults.js'
+import { findCurrentTimesheetUserId, getPreferredTimesheetCreateUserId } from '../../../packages/types/src/index.js'
 
 test('chooseCreateTimesheetUserId defaults elevated creators to their own timesheet user when no explicit user is provided', () => {
   assert.equal(chooseCreateTimesheetUserId({ elevated: true, requestedUserId: undefined, currentUserId: 'user-current' }), 'user-current')

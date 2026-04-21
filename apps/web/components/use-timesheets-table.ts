@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { TimesheetReportEntry } from '@sally/types/src'
 import { loadSession } from '../lib/auth'
 import { createTimesheetEntry, deleteTimesheetEntry, updateTimesheetEntry } from '../lib/api'
-import { getPreferredTimesheetCreateUserId } from '../lib/timesheet-user-defaults'
+import { getPreferredTimesheetCreateUserId } from '@sally/types/src'
 import { qk, useClientsQuery, useProjectsQuery, useTimesheetReportQuery, useTimesheetUsersQuery } from '../lib/query'
 import type { ActiveCell, EditableField } from './timesheets-table-rows'
 
