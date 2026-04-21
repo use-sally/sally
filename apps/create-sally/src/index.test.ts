@@ -66,10 +66,11 @@ test('updater repairs missing init-schema drift before running migrations', () =
 
 test('updater inspects and repairs task owner/participants rollout drift before migrate deploy', () => {
   assert.ok(source.includes('inspectTaskPeopleMigrationState'))
+  assert.ok(source.includes('pg_temp.inspect_task_people_migration_state'))
   assert.ok(source.includes('TaskParticipant'))
   assert.ok(source.includes('TaskParticipantRole'))
-  assert.ok(source.includes(`WHEN NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'owner') THEN EXISTS (`))
-  assert.ok(source.includes(`COALESCE(NULLIF(BTRIM(t."assignee"), ''), '') <> '' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id)`))
+  assert.ok(source.includes(`EXECUTE 'SELECT EXISTS (`))
+  assert.ok(source.includes(`IF task_table_exists AND NOT missing_task_participant_table THEN`))
 })
 
 test('updater refuses ambiguous task owner/participants drift states', () => {

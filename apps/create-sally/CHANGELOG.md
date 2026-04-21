@@ -1,5 +1,10 @@
 # create-sally changelog
 
+## 0.1.23
+
+- fix updater owner/participants preflight so it also avoids parse-time references to `TaskParticipant` before that table exists
+- move the task people migration inspection into a plpgsql helper so pre-migration schemas can be inspected safely
+
 ## 0.1.22
 
 - fix updater owner/participants preflight so it does not reference `Task.owner` before that column exists
