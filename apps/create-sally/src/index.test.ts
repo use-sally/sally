@@ -24,6 +24,11 @@ test('updater skips bootstrap cleanly when BOOTSTRAP_SUPERADMIN_PASSWORD is miss
   assert.ok(source.includes('test(envText)'))
 })
 
+test('updater bootstraps superadmin through the api package script instead of a dist file path', () => {
+  assert.ok(source.includes("'compose', 'run', '--rm', 'api', 'pnpm', '--filter', 'api', 'bootstrap:install'"))
+  assert.ok(!source.includes("'node', 'apps/api/dist/bootstrap.js'"))
+})
+
 test('updater resolves failed blocked-status migration before deploy', () => {
   assert.ok(source.includes('maybeResolveFailedBlockedMigration(targetDir)'))
   assert.ok(source.includes('migrate resolve --rolled-back 20260415162500_add_blocked_status'))
