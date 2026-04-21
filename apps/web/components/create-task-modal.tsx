@@ -86,11 +86,11 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
         <div style={{ display: 'grid', gap: 12 }}>
           <label style={field}><span>Project</span><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={input}>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
           <label style={field}><span>Title</span><input value={title} onChange={(e) => setTitle(e.target.value)} style={input} placeholder="Add task title" /></label>
-          <label style={field}><span style={labelText}>Assignee</span><AssigneePicker projectId={projectId} value={assignee} onChange={setAssignee} onSaved={setAssignee} placeholder="Unassigned" canManage={assignDecision.allowed} /></label>
+          <label style={field}><span style={labelText}>People</span><AssigneePicker projectId={projectId} value={assignee} onChange={setAssignee} onSaved={setAssignee} placeholder="Choose task owner" canManage={assignDecision.allowed} /></label>
           <label style={field}>
-            <span>Collaborators</span>
+            <span>Additional people</span>
             <input value={collaboratorsInput} onChange={(e) => setCollaboratorsInput(e.target.value)} style={input} placeholder="alex@example.com, sam@example.com" />
-            <div style={hintText}>{parsedCollaborators.length ? `Will add ${parsedCollaborators.length} collaborator${parsedCollaborators.length === 1 ? '' : 's'}.` : 'Comma-separated names or emails. Primary assignee is excluded automatically.'}</div>
+            <div style={hintText}>{parsedCollaborators.length ? `Will add ${parsedCollaborators.length} additional ${parsedCollaborators.length === 1 ? 'person' : 'people'}.` : 'Comma-separated names or emails. The first person is the task owner.'}</div>
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={field}>

@@ -130,10 +130,10 @@ export function createProject(payload: { name: string; description?: string; cli
 export function moveTask(taskId: string, targetStatus: string): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/move`, { method: 'POST', body: JSON.stringify({ targetStatus }) }) }
 export function reorderTask(payload: { taskId: string; targetStatusId: string; orderedTaskIds: string[] }): Promise<{ ok: boolean }> { return getJson('/tasks/reorder', { method: 'POST', body: JSON.stringify(payload) }) }
 export function reorderProjectTasks(projectId: string, orderedTaskIds: string[]): Promise<{ ok: boolean }> { return getJson(`/projects/${projectId}/tasks/reorder`, { method: 'POST', body: JSON.stringify({ orderedTaskIds }) }) }
-export function updateTask(taskId: string, payload: { title?: string; description?: string; assignee?: string; collaborators?: string[]; priority?: 'P1'|'P2'|'P3'; dueDate?: string | null; statusId?: string }): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function updateTask(taskId: string, payload: { title?: string; description?: string; owner?: string; participants?: { participant: string; role: 'OWNER' | 'PARTICIPANT'; position: number }[]; assignee?: string; collaborators?: string[]; priority?: 'P1'|'P2'|'P3'; dueDate?: string | null; statusId?: string }): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function archiveTask(taskId: string, archived = true): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
 export function deleteTask(taskId: string): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}`, { method: 'DELETE' }) }
-export function createTask(payload: { projectId: string; title: string; assignee?: string; collaborators?: string[]; description?: string; priority?: 'P1'|'P2'|'P3'; status?: string; statusId?: string; dueDate?: string | null; labels?: string[]; todos?: { text: string }[] }): Promise<{ ok: boolean; taskId: string }> { return getJson('/tasks', { method: 'POST', body: JSON.stringify(payload) }) }
+export function createTask(payload: { projectId: string; title: string; owner?: string; participants?: { participant: string; role: 'OWNER' | 'PARTICIPANT'; position: number }[]; assignee?: string; collaborators?: string[]; description?: string; priority?: 'P1'|'P2'|'P3'; status?: string; statusId?: string; dueDate?: string | null; labels?: string[]; todos?: { text: string }[] }): Promise<{ ok: boolean; taskId: string }> { return getJson('/tasks', { method: 'POST', body: JSON.stringify(payload) }) }
 export function createComment(taskId: string, payload: { body: string; author?: string; mentions?: string[] }): Promise<{ ok: boolean; commentId: string }> { return getJson(`/tasks/${taskId}/comments`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function getMentionableUsers(projectId: string, query: string): Promise<MentionableUser[]> {
   const search = new URLSearchParams({ projectId, query })
@@ -147,7 +147,7 @@ export function deleteTaskTodo(taskId: string, todoId: string): Promise<{ ok: bo
 export function reorderTaskTodos(taskId: string, orderedTodoIds: string[]): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/todos/reorder`, { method: 'POST', body: JSON.stringify({ orderedTodoIds }) }) }
 export function uploadTaskDescriptionImage(taskId: string, payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string }> { return getJson(`/tasks/${taskId}/image-upload`, { method: 'POST', body: JSON.stringify(payload) }) }
 
-export function login(payload: { email: string; password: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[] }> {
+export function login(payload: { email: string; password: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }> {
   return getJson('/auth/login', { method: 'POST', body: JSON.stringify(payload) })
 }
 
@@ -155,7 +155,7 @@ export function requestPasswordReset(payload: { email: string; inviteToken?: str
   return getJson('/auth/request-password-reset', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-export function resetPassword(payload: { token: string; password: string; inviteToken?: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[] }> {
+export function resetPassword(payload: { token: string; password: string; inviteToken?: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }> {
   return getJson('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) })
 }
 
@@ -167,7 +167,7 @@ export function getInviteInfo(token: string): Promise<{ ok: boolean; invite: { e
   return getJson(`/auth/invite-info?token=${encodeURIComponent(token)}`)
 }
 
-export function acceptInvite(payload: { token: string; name?: string; password: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[] }> {
+export function acceptInvite(payload: { token: string; name?: string; password: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }> {
   return getJson('/auth/accept-invite', { method: 'POST', body: JSON.stringify(payload) })
 }
 
@@ -180,7 +180,7 @@ export function getApiKeys(): Promise<{ id: string; label: string; prefix: strin
 export function createApiKey(payload: { label: string }): Promise<{ ok: boolean; apiKeyId: string; token: string; key: string; prefix: string }> { return getJson('/auth/api-keys', { method: 'POST', body: JSON.stringify(payload) }) }
 export function revokeApiKey(apiKeyId: string): Promise<{ ok: boolean }> { return getJson(`/auth/api-keys/${apiKeyId}`, { method: 'DELETE' }) }
 
-export function getMe(): Promise<{ ok: boolean; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[] }> {
+export function getMe(): Promise<{ ok: boolean; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }> {
   return getJson('/auth/me')
 }
 

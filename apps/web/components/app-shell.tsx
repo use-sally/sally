@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ReactNode, useEffect, useRef, useState } from 'react'
 import type { Notification } from '@sally/types/src'
-import { getWorkspaceId, loadSession, saveSession, setWorkspaceId } from '../lib/auth'
+import { getWorkspaceId, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId } from '../lib/auth'
 import { apiUrl, createWorkspace, getMe, getNotifications, logout, readAllNotifications, readNotification } from '../lib/api'
 import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
@@ -66,11 +66,10 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     setWorkspaceOptions(options)
 
     const storedWorkspace = getWorkspaceId()
-    const fallbackWorkspace = options[0]?.id
-    const nextWorkspace = storedWorkspace || fallbackWorkspace || ''
+    const nextWorkspace = pickPreferredWorkspaceId(memberships, { storedWorkspaceId: storedWorkspace }) || ''
     if (nextWorkspace) {
       setActiveWorkspaceId(nextWorkspace)
-      if (!storedWorkspace) setWorkspaceId(nextWorkspace)
+      if (nextWorkspace !== storedWorkspace) setWorkspaceId(nextWorkspace)
     }
   }, [])
 

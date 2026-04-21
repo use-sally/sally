@@ -1,4 +1,4 @@
-export type Membership = { id: string; workspaceId: string; workspaceName: string; role: string }
+export type Membership = { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }
 export type AuthAccount = { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }
 export type AuthSession = {
   token: string
@@ -9,6 +9,8 @@ export type AuthSession = {
 
 const SESSION_KEY = 'atpm.session'
 const WORKSPACE_KEY = 'atpm.workspaceId'
+const CONFIGURED_WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID || null
+const CONFIGURED_WORKSPACE_SLUG = process.env.NEXT_PUBLIC_WORKSPACE_SLUG || null
 
 function hasWindow() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
@@ -44,6 +46,28 @@ export function getSessionToken() {
 export function getWorkspaceId() {
   if (!hasWindow()) return null
   return window.localStorage.getItem(WORKSPACE_KEY)
+}
+
+export function pickPreferredWorkspaceId(
+  memberships: Membership[],
+  options?: { requestedWorkspaceId?: string | null; storedWorkspaceId?: string | null; configuredWorkspaceId?: string | null; configuredWorkspaceSlug?: string | null },
+) {
+  const requestedWorkspaceId = options?.requestedWorkspaceId?.trim() || null
+  if (requestedWorkspaceId && memberships.some((membership) => membership.workspaceId === requestedWorkspaceId)) return requestedWorkspaceId
+
+  const configuredWorkspaceId = options?.configuredWorkspaceId?.trim() || CONFIGURED_WORKSPACE_ID
+  if (configuredWorkspaceId && memberships.some((membership) => membership.workspaceId === configuredWorkspaceId)) return configuredWorkspaceId
+
+  const configuredWorkspaceSlug = options?.configuredWorkspaceSlug?.trim() || CONFIGURED_WORKSPACE_SLUG
+  if (configuredWorkspaceSlug) {
+    const configuredMembership = memberships.find((membership) => membership.workspaceSlug === configuredWorkspaceSlug)
+    if (configuredMembership) return configuredMembership.workspaceId
+  }
+
+  const storedWorkspaceId = options?.storedWorkspaceId?.trim() || getWorkspaceId()
+  if (storedWorkspaceId && memberships.some((membership) => membership.workspaceId === storedWorkspaceId)) return storedWorkspaceId
+
+  return memberships[0]?.workspaceId || null
 }
 
 export function setWorkspaceId(workspaceId: string | null) {

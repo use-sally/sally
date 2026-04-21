@@ -893,6 +893,88 @@ async function maybeRepairInitSchemaDrift(targetDir: string, postgresUser: strin
   )
 }
 
+type TaskPeopleMigrationState = {
+  taskTableExists: boolean
+  missingTaskOwnerColumn: boolean
+  missingTaskParticipantTable: boolean
+  taskParticipantRoleEnumExists: boolean
+  taskParticipantBackfillIncomplete: boolean
+}
+
+async function inspectTaskPeopleMigrationState(targetDir: string, postgresUser: string, postgresDb: string) {
+  const sql = [
+    'SELECT json_build_object(',
+    "  'taskTableExists', EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Task'),",
+    "  'missingTaskOwnerColumn', NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'owner'),",
+    "  'missingTaskParticipantTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TaskParticipant'),",
+    "  'taskParticipantRoleEnumExists', EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskParticipantRole'),",
+    `  'taskParticipantBackfillIncomplete', CASE
+         WHEN NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TaskParticipant') THEN false
+         ELSE EXISTS (
+           SELECT 1
+           FROM "Task" t
+           WHERE (COALESCE(NULLIF(BTRIM(t."owner"), ''), '') <> '' OR COALESCE(NULLIF(BTRIM(t."assignee"), ''), '') <> '' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id))
+             AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = t.id)
+         )
+       END`,
+    ');',
+  ].join(' ')
+
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    targetDir,
+  )
+  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
+  if (!jsonLine) throw new Error(`Could not inspect task owner/participants migration state. Output was:\n${raw}`)
+  return JSON.parse(jsonLine) as TaskPeopleMigrationState
+}
+
+async function maybeRepairTaskPeopleMigrationState(targetDir: string, postgresUser: string, postgresDb: string) {
+  const state = await inspectTaskPeopleMigrationState(targetDir, postgresUser, postgresDb)
+  if (!state.taskTableExists) return
+  if (state.missingTaskOwnerColumn && state.missingTaskParticipantTable) return
+
+  if (state.missingTaskOwnerColumn || state.missingTaskParticipantTable || !state.taskParticipantRoleEnumExists) {
+    throw new Error('Detected ambiguous task owner/participants schema drift. Refusing automatic reconciliation because the database is only partially through the owner/participants rollout.')
+  }
+
+  if (!state.taskParticipantBackfillIncomplete) return
+
+  section('Repairing task owner/participants migration state')
+  console.log(paint('Detected task owner/participants schema drift. Repairing canonical task people data before migration deploy.', color.yellow))
+
+  const sqlParts = [
+    'BEGIN;',
+    'UPDATE "Task" SET "owner" = NULLIF(BTRIM("assignee"), \'\') WHERE COALESCE(NULLIF(BTRIM("owner"), \'\'), \'\') = \'\' AND COALESCE(NULLIF(BTRIM("assignee"), \'\'), \'\') <> \'\';',
+    'INSERT INTO "TaskParticipant" ("taskId", "participant", "role", "position")',
+    'SELECT t.id, t."owner", \'OWNER\'::"TaskParticipantRole", 0',
+    'FROM "Task" t',
+    'WHERE COALESCE(NULLIF(BTRIM(t."owner"), \'\'), \'\') <> \'\'',
+    '  AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = t.id AND tp."participant" = t."owner");',
+    'WITH collaborator_rows AS (',
+    '  SELECT tc."taskId", NULLIF(BTRIM(tc."collaborator"), \'\') AS "participant", ROW_NUMBER() OVER (PARTITION BY tc."taskId" ORDER BY BTRIM(tc."collaborator"), tc."createdAt", tc."collaborator") AS collaborator_position',
+    '  FROM "TaskCollaborator" tc',
+    '), owner_offsets AS (',
+    '  SELECT t.id AS "taskId", CASE WHEN COALESCE(NULLIF(BTRIM(t."owner"), \'\'), \'\') <> \'\' THEN 1 ELSE 0 END AS owner_offset',
+    '  FROM "Task" t',
+    ')',
+    'INSERT INTO "TaskParticipant" ("taskId", "participant", "role", "position")',
+    'SELECT c."taskId", c."participant", \'PARTICIPANT\'::"TaskParticipantRole", owner_offsets.owner_offset + c.collaborator_position - 1',
+    'FROM collaborator_rows c',
+    'JOIN owner_offsets ON owner_offsets."taskId" = c."taskId"',
+    'WHERE c."participant" IS NOT NULL',
+    '  AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = c."taskId" AND tp."participant" = c."participant");',
+    'COMMIT;',
+  ]
+
+  await runCommand(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-v', 'ON_ERROR_STOP=1', '-c', sqlParts.join(' ')],
+    targetDir,
+  )
+}
+
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string, postgresUser: string, postgresDb: string) {
   section('Pulling fresh Sally images')
   await runCommand('docker', ['compose', 'pull', 'api', 'web'], targetDir)
@@ -904,6 +986,7 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
   await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)
   await maybeRepairInitSchemaDrift(targetDir, postgresUser, postgresDb)
   await maybeRepairBlockedStatuses(targetDir, postgresUser, postgresDb)
+  await maybeRepairTaskPeopleMigrationState(targetDir, postgresUser, postgresDb)
   await maybeResolveFailedBlockedMigration(targetDir)
 
   section('Applying database migrations')
@@ -1075,12 +1158,16 @@ async function doctorFlow(options: CliOptions) {
     section('Schema checks')
     try {
       const drift = await inspectSchemaDriftState(targetDir, current.postgresUser, current.postgresDb)
+      const taskPeopleDrift = await inspectTaskPeopleMigrationState(targetDir, current.postgresUser, current.postgresDb)
       const problems = [
         drift.missingProjectTaskCounter ? 'Project.taskCounter missing' : null,
         drift.missingTaskNumber ? 'Task.number missing' : null,
         drift.missingTaskProjectNumberIndex ? 'Task_projectId_number_key missing' : null,
         drift.missingProjectDependencyTable ? 'ProjectDependency table missing' : null,
         drift.missingTaskDependencyTable ? 'TaskDependency table missing' : null,
+        taskPeopleDrift.missingTaskOwnerColumn ? 'Task.owner missing' : null,
+        taskPeopleDrift.missingTaskParticipantTable ? 'TaskParticipant table missing' : null,
+        taskPeopleDrift.taskParticipantBackfillIncomplete ? 'TaskParticipant backfill incomplete' : null,
       ].filter(Boolean)
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {

@@ -13,7 +13,7 @@ import { DndContext, PointerSensor, type DragEndEvent, useSensor, useSensors } f
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { MarkdownDescriptionEditor } from './markdown-description-editor'
-import { AssigneePicker } from './assignee-picker'
+import { TaskPeopleField } from './task-people-field'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { canAssignTask } from '../lib/task-permissions'
 import { deleteTextAction, formControlMd, theme } from '../lib/theme'
@@ -72,7 +72,6 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
   const [todoBusy, setTodoBusy] = useState(false)
   const [todoItems, setTodoItems] = useState<TodoItem[]>([])
   const [descriptionDraft, setDescriptionDraft] = useState('')
-  const [collaboratorsInput, setCollaboratorsInput] = useState('')
   const [descriptionBusy, setDescriptionBusy] = useState(false)
   const lastCommittedDescriptionRef = useRef('')
   const [timeMinutes, setTimeMinutes] = useState('')
@@ -100,9 +99,6 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
     lastCommittedDescriptionRef.current = nextDescription
   }, [task?.description])
 
-  useEffect(() => {
-    setCollaboratorsInput(task?.collaborators.map((entry) => entry.name).join(', ') ?? '')
-  }, [task?.collaborators])
 
   useEffect(() => {
     if (editingTimesheetId && editingTimesheetMinutesRef.current) editingTimesheetMinutesRef.current.focus()
@@ -140,10 +136,6 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
     }
   }
 
-  async function saveCollaborators() {
-    const collaborators = Array.from(new Set(collaboratorsInput.split(',').map((value) => value.trim()).filter(Boolean).filter((value) => value !== (task?.assignee === 'Unassigned' ? '' : (task?.assignee ?? '')))))
-    await save({ collaborators })
-  }
 
   async function handleDescriptionImageUpload(file: File) {
     if (!task) return null
@@ -393,12 +385,18 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
             </div>
 
             <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
-              <Row label="Assignee"><AssigneePicker projectId={task.project.id} taskId={task.id} value={task.assignee === 'Unassigned' ? '' : task.assignee} placeholder="Unassigned" canManage={assignDecision.allowed} /></Row>
-              <Row label="Collaborators">
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <input value={collaboratorsInput} onChange={(e) => setCollaboratorsInput(e.target.value)} onBlur={() => void saveCollaborators()} placeholder="alex@example.com, sam@example.com" style={inputStyle} />
-                  <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Comma-separated names or emails. Saved on blur. Primary assignee is excluded automatically.</div>
-                </div>
+              <Row label="People">
+                <TaskPeopleField
+                  projectId={task.project.id}
+                  taskId={task.id}
+                  owner={task.owner}
+                  ownerAvatarUrl={task.ownerAvatarUrl}
+                  participants={task.participants}
+                  assignee={task.assignee}
+                  assigneeAvatarUrl={task.assigneeAvatarUrl}
+                  collaborators={task.collaborators}
+                  canManage={assignDecision.allowed}
+                />
               </Row>
               <Row label="Priority">
                 <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>

@@ -157,11 +157,21 @@ export type TaskCollaborator = {
   avatarUrl?: string | null
 }
 
+export type TaskParticipant = {
+  name: string
+  role: 'OWNER' | 'PARTICIPANT'
+  position: number
+  avatarUrl?: string | null
+}
+
 export type ProjectTaskListItem = {
   id: string
   number: number
   position: number
   title: string
+  owner: string
+  ownerAvatarUrl?: string | null
+  participants: TaskParticipant[]
   assignee: string
   assigneeAvatarUrl?: string | null
   collaborators: TaskCollaborator[]
@@ -184,6 +194,9 @@ export type BoardCard = {
   title: string
   meta: string
   description: string
+  owner: string
+  ownerAvatarUrl?: string | null
+  participants: TaskParticipant[]
   assignee: string
   assigneeAvatarUrl?: string | null
   collaborators: TaskCollaborator[]
@@ -228,6 +241,9 @@ export type ProjectDetail = {
     number: number
     position: number
     title: string
+    owner: string
+    ownerAvatarUrl?: string | null
+    participants: TaskParticipant[]
     assignee: string
     assigneeAvatarUrl?: string | null
     collaborators: TaskCollaborator[]
@@ -249,6 +265,9 @@ export type TaskDetail = {
   position: number
   title: string
   description: string
+  owner: string
+  ownerAvatarUrl?: string | null
+  participants: TaskParticipant[]
   assignee: string
   assigneeAvatarUrl?: string | null
   collaborators: TaskCollaborator[]

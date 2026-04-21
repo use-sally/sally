@@ -36,3 +36,16 @@ test('canAccessTaskParticipants denies a restricted member when they are neither
     false,
   )
 })
+
+test('canAccessTaskParticipants allows a member when they are present in canonical participants', () => {
+  assert.equal(
+    canAccessTaskParticipants(
+      { restricted: true, allowedAssignees: ['member@company.com'] },
+      'other@company.com',
+      ['third@company.com'],
+      'owner@company.com',
+      ['owner@company.com', 'member@company.com'],
+    ),
+    true,
+  )
+})

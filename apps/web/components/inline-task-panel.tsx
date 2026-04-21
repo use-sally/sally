@@ -10,6 +10,7 @@ import { qk, useProjectQuery, useTaskQuery } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
 import { MarkdownDescriptionEditor } from './markdown-description-editor'
 import { TimesheetsTable } from './timesheets-table'
+import { TaskPeopleField } from './task-people-field'
 import { archiveTextAction, deleteTextAction, projectInputField } from '../lib/theme'
 async function compressImageForTask(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
   const imageUrl = URL.createObjectURL(file)
@@ -378,6 +379,20 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
           {busy ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>Saving…</div> : null}
         </div>
         <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>People</div>
+            <TaskPeopleField
+              projectId={projectId}
+              taskId={taskId}
+              owner={task.owner}
+              ownerAvatarUrl={task.ownerAvatarUrl}
+              participants={task.participants}
+              assignee={task.assignee}
+              assigneeAvatarUrl={task.assigneeAvatarUrl}
+              collaborators={task.collaborators}
+              canManage={taskEditDecision.allowed}
+            />
+          </div>
           <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Checklist</div>
           {taskEditDecision.visible ? <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && taskEditDecision.allowed) { e.preventDefault(); void addTodo() } }} style={inputStyle} placeholder="Add checklist item and press Enter" disabled={!taskEditDecision.allowed} /> : null}
           <div style={{ display: 'grid', gap: 8 }}>
