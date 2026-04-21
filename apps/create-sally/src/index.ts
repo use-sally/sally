@@ -910,6 +910,12 @@ async function inspectTaskPeopleMigrationState(targetDir: string, postgresUser: 
     "  'taskParticipantRoleEnumExists', EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskParticipantRole'),",
     `  'taskParticipantBackfillIncomplete', CASE
          WHEN NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TaskParticipant') THEN false
+         WHEN NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'owner') THEN EXISTS (
+           SELECT 1
+           FROM "Task" t
+           WHERE (COALESCE(NULLIF(BTRIM(t."assignee"), ''), '') <> '' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id))
+             AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = t.id)
+         )
          ELSE EXISTS (
            SELECT 1
            FROM "Task" t
