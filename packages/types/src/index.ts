@@ -173,6 +173,11 @@ export type TimesheetReport = {
   entries: TimesheetReportEntry[]
 }
 
+export type TaskCollaborator = {
+  name: string
+  avatarUrl?: string | null
+}
+
 export type ProjectTaskListItem = {
   id: string
   number: number
@@ -180,6 +185,7 @@ export type ProjectTaskListItem = {
   title: string
   assignee: string
   assigneeAvatarUrl?: string | null
+  collaborators: TaskCollaborator[]
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
@@ -201,6 +207,7 @@ export type BoardCard = {
   description: string
   assignee: string
   assigneeAvatarUrl?: string | null
+  collaborators: TaskCollaborator[]
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
@@ -244,6 +251,7 @@ export type ProjectDetail = {
     title: string
     assignee: string
     assigneeAvatarUrl?: string | null
+    collaborators: TaskCollaborator[]
     priority: 'P1' | 'P2' | 'P3'
     status: string
     statusId: string
@@ -264,6 +272,7 @@ export type TaskDetail = {
   description: string
   assignee: string
   assigneeAvatarUrl?: string | null
+  collaborators: TaskCollaborator[]
   priority: 'P1' | 'P2' | 'P3'
   status: string
   statusId: string
