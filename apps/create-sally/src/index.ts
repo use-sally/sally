@@ -912,7 +912,7 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
   const envText = await fs.readFile(path.join(targetDir, '.env'), 'utf8')
   if (/^BOOTSTRAP_SUPERADMIN_PASSWORD=.+$/m.test(envText)) {
     section('Bootstrapping superadmin')
-    await runCommand('docker', ['compose', 'run', '--rm', 'api', 'node', 'apps/api/dist/bootstrap.js'], targetDir, { quiet: true })
+    await runCommand('docker', ['compose', 'run', '--rm', 'api', 'pnpm', '--filter', 'api', 'bootstrap:install'], targetDir, { quiet: true })
   } else {
     console.log(paint('Skipping superadmin bootstrap because BOOTSTRAP_SUPERADMIN_PASSWORD is not present in .env', color.yellow))
   }
