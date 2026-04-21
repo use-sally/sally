@@ -903,27 +903,45 @@ type TaskPeopleMigrationState = {
 
 async function inspectTaskPeopleMigrationState(targetDir: string, postgresUser: string, postgresDb: string) {
   const sql = [
-    'SELECT json_build_object(',
-    "  'taskTableExists', EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Task'),",
-    "  'missingTaskOwnerColumn', NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'owner'),",
-    "  'missingTaskParticipantTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TaskParticipant'),",
-    "  'taskParticipantRoleEnumExists', EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskParticipantRole'),",
-    `  'taskParticipantBackfillIncomplete', CASE
-         WHEN NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TaskParticipant') THEN false
-         WHEN NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'owner') THEN EXISTS (
-           SELECT 1
-           FROM "Task" t
-           WHERE (COALESCE(NULLIF(BTRIM(t."assignee"), ''), '') <> '' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id))
-             AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = t.id)
-         )
-         ELSE EXISTS (
-           SELECT 1
-           FROM "Task" t
-           WHERE (COALESCE(NULLIF(BTRIM(t."owner"), ''), '') <> '' OR COALESCE(NULLIF(BTRIM(t."assignee"), ''), '') <> '' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id))
-             AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = t.id)
-         )
-       END`,
-    ');',
+    'CREATE OR REPLACE FUNCTION pg_temp.inspect_task_people_migration_state() RETURNS json AS $$',
+    'DECLARE',
+    '  task_table_exists boolean;',
+    '  missing_task_owner_column boolean;',
+    '  missing_task_participant_table boolean;',
+    '  task_participant_role_enum_exists boolean;',
+    '  task_participant_backfill_incomplete boolean := false;',
+    'BEGIN',
+    "  SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Task') INTO task_table_exists;",
+    "  SELECT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Task' AND column_name = 'owner') INTO missing_task_owner_column;",
+    "  SELECT NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TaskParticipant') INTO missing_task_participant_table;",
+    "  SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'TaskParticipantRole') INTO task_participant_role_enum_exists;",
+    '  IF task_table_exists AND NOT missing_task_participant_table THEN',
+    '    IF missing_task_owner_column THEN',
+    `      EXECUTE 'SELECT EXISTS (
+        SELECT 1
+        FROM "Task" t
+        WHERE (COALESCE(NULLIF(BTRIM(t."assignee"), ''''), '''') <> '''' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id))
+          AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = t.id)
+      )' INTO task_participant_backfill_incomplete;`,
+    '    ELSE',
+    `      EXECUTE 'SELECT EXISTS (
+        SELECT 1
+        FROM "Task" t
+        WHERE (COALESCE(NULLIF(BTRIM(t."owner"), ''''), '''') <> '''' OR COALESCE(NULLIF(BTRIM(t."assignee"), ''''), '''') <> '''' OR EXISTS (SELECT 1 FROM "TaskCollaborator" tc WHERE tc."taskId" = t.id))
+          AND NOT EXISTS (SELECT 1 FROM "TaskParticipant" tp WHERE tp."taskId" = t.id)
+      )' INTO task_participant_backfill_incomplete;`,
+    '    END IF;',
+    '  END IF;',
+    '  RETURN json_build_object(',
+    "    'taskTableExists', task_table_exists,",
+    "    'missingTaskOwnerColumn', missing_task_owner_column,",
+    "    'missingTaskParticipantTable', missing_task_participant_table,",
+    "    'taskParticipantRoleEnumExists', task_participant_role_enum_exists,",
+    "    'taskParticipantBackfillIncomplete', task_participant_backfill_incomplete",
+    '  );',
+    'END;',
+    '$$ LANGUAGE plpgsql;',
+    'SELECT pg_temp.inspect_task_people_migration_state();',
   ].join(' ')
 
   const raw = await runCommandCapture(
