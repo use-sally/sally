@@ -2,7 +2,7 @@
 
 import type { ProjectDetail } from '@sally/types/src'
 import { pill, priorityStars, tagStyle } from './app-shell'
-import { AssigneeAvatar } from './assignee-avatar'
+import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
 import { ProjectTasksTable } from './project-tasks-table'
 import { statusChipStyle } from '../lib/status-colors'
 import { taskTitleText } from '../lib/theme'
@@ -23,7 +23,7 @@ export function ProjectCurrentTasks({ project, archived = false }: { project: Pr
       {recentTasks.map((task) => (
         <div key={task.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) 1fr 0.9fr 1fr 1fr 1.4fr', gap: 10, padding: '14px 16px', alignItems: 'center', border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)' }}>
           <div style={{ ...taskTitleText, fontWeight: 700, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0 }}>{task.title}</div>
-          <div style={{ display: 'flex', alignItems: 'center' }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} /></div>
+          <div style={{ display: 'flex', alignItems: 'center' }}><TaskPeopleAvatarStack owner={task.owner} ownerAvatarUrl={task.ownerAvatarUrl} participants={task.participants} assignee={task.assignee} assigneeAvatarUrl={task.assigneeAvatarUrl} collaborators={task.collaborators} size={28} /></div>
           <div style={{ color: 'var(--text-muted)' }}>{priorityStars(task.priority)}</div>
           <div>{task.dueDate ? <span style={pill('#eef2ff', '#3730a3')}>{new Date(task.dueDate).toLocaleDateString()}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}</div>
           <div><span className="status-chip" style={statusChipStyle(task.statusColor)}>{task.status}</span></div>

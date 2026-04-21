@@ -63,3 +63,14 @@ test('updater repairs missing init-schema drift before running migrations', () =
   assert.ok(source.includes('ALTER TABLE "Task" ALTER COLUMN "number" SET NOT NULL;'))
   assert.ok(source.includes('CREATE UNIQUE INDEX "Task_projectId_number_key" ON "Task"("projectId", "number");'))
 })
+
+test('updater inspects and repairs task owner/participants rollout drift before migrate deploy', () => {
+  assert.ok(source.includes('inspectTaskPeopleMigrationState'))
+  assert.ok(source.includes('TaskParticipant'))
+  assert.ok(source.includes('TaskParticipantRole'))
+})
+
+test('updater refuses ambiguous task owner/participants drift states', () => {
+  assert.ok(source.includes('Detected ambiguous task owner/participants schema drift'))
+  assert.ok(source.includes('Refusing automatic reconciliation because the database is only partially through the owner/participants rollout.'))
+})

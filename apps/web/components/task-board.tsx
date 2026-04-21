@@ -10,7 +10,7 @@ import type { BoardCard, BoardColumn } from '@sally/types/src'
 import { createTask, reorderProjectStatuses, reorderTask } from '../lib/api'
 import { qk } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
-import { AssigneeAvatar } from './assignee-avatar'
+import { TaskPeopleField } from './task-people-field'
 import { projectInputField, taskTitleText } from '../lib/theme'
 import { resolveStatusPair, statusChipStyle, statusThemeVars } from '../lib/status-colors'
 
@@ -181,7 +181,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
 
       <SortableContext items={column.cards.map((c: BoardCard) => c.id)} strategy={verticalListSortingStrategy}>
         <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} taskBaseHref={taskBaseHref} />)}
+          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} taskBaseHref={taskBaseHref} projectId={column.projectId} />)}
         </div>
       </SortableContext>
 
@@ -199,23 +199,31 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
   )
 }
 
-function SortableTaskCard({ card, taskBaseHref }: { card: BoardCard; taskBaseHref: string }) {
+function SortableTaskCard({ card, taskBaseHref, projectId }: { card: BoardCard; taskBaseHref: string; projectId: string }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
   const badge = dueBadge(card.dueDate)
 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, minWidth: 0 }}>
-      <Link href={`${taskBaseHref}?task=${card.id}`} style={{ ...boardCardStyle(card.statusColor), textAlign: 'left', textDecoration: 'none', color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'block', minWidth: 0, overflow: 'hidden' }}>
-        <div {...attributes} {...listeners} style={{ cursor: 'grab', minWidth: 0 }}>
-          <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}{card.title}</div>
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}><AssigneeAvatar name={card.assignee} avatarUrl={card.assigneeAvatarUrl} size={26} /><span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span><span className="status-chip" style={statusChipStyle(card.statusColor)}>{card.status}</span></div>
-          {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {card.todoProgress ? <span style={pill('#ecfeff', '#155e75')}>Todos {card.todoProgress}</span> : null}
-            {badge ? <span style={pill(badge.bg, badge.color)}>{badge.label}</span> : null}
+      <div style={{ ...boardCardStyle(card.statusColor), color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+        <Link href={`${taskBaseHref}?task=${card.id}`} style={{ textAlign: 'left', textDecoration: 'none', color: 'inherit', display: 'block', minWidth: 0 }}>
+          <div {...attributes} {...listeners} style={{ cursor: 'grab', minWidth: 0 }}>
+            <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}{card.title}</div>
+          </div>
+        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
+          <TaskPeopleField projectId={projectId} taskId={card.id} owner={card.owner} ownerAvatarUrl={card.ownerAvatarUrl} participants={card.participants} assignee={card.assignee} assigneeAvatarUrl={card.assigneeAvatarUrl} collaborators={card.collaborators} compact />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+            <span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span>
+            <span className="status-chip" style={statusChipStyle(card.statusColor)}>{card.status}</span>
           </div>
         </div>
-      </Link>
+        {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {card.todoProgress ? <span style={pill('#ecfeff', '#155e75')}>Todos {card.todoProgress}</span> : null}
+          {badge ? <span style={pill(badge.bg, badge.color)}>{badge.label}</span> : null}
+        </div>
+      </div>
     </div>
   )
 }

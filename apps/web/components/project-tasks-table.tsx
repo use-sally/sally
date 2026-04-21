@@ -11,7 +11,7 @@ import { archiveTask, createTask, getProjectMembers, reorderProjectTasks } from 
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { qk, useProjectQuery, useProjectTasksQuery } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
-import { AssigneeAvatar } from './assignee-avatar'
+import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
 import { statusChipStyle } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
 import { InlineTaskPanel } from './inline-task-panel'
@@ -240,7 +240,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
             ])}
           </select>
           <select value={assignee} onChange={(e) => setAssignee(e.target.value)} style={inputStyle}>
-            <option value="">All assignees</option>
+            <option value="">All people</option>
             {assigneeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
           <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Filter by label" style={inputStyle} />
@@ -296,7 +296,7 @@ function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskList
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) 1fr 0.9fr 1fr 1fr 1.4fr 110px', gap: 10, padding: '14px 16px', alignItems: 'center', background: 'var(--form-bg)' }}>
       <div style={{ fontWeight: 700, color: 'var(--text-primary)', overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth: 0 }}>{task.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{task.number}</span> : null}{task.title}</div>
-      <div style={{ display: 'flex', alignItems: 'center' }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} /></div>
+      <div style={{ display: 'flex', alignItems: 'center' }}><TaskPeopleAvatarStack owner={task.owner} ownerAvatarUrl={task.ownerAvatarUrl} participants={task.participants} assignee={task.assignee} assigneeAvatarUrl={task.assigneeAvatarUrl} collaborators={task.collaborators} size={28} /></div>
       <div style={{ color: 'rgba(209, 250, 229, 0.34)' }}>{priorityStars(task.priority)}</div>
       <div>{task.dueDate ? <span style={pill('#eef2ff', '#3730a3')}>{dueLabel}</span> : <span style={{ color: 'rgba(209, 250, 229, 0.34)' }}>—</span>}</div>
       <div><span className="status-chip" style={statusChipStyle(task.statusColor)}>{task.status}</span></div>

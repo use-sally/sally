@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { MentionableUser, TaskDetail } from '@sally/types/src'
 import { AppShell, panel, priorityStars, tagStyle } from '../../../components/app-shell'
 import { AssigneeAvatar } from '../../../components/assignee-avatar'
+import { TaskPeopleAvatarStack } from '../../../components/task-people-avatar-stack'
 import { MarkdownDescriptionEditor } from '../../../components/markdown-description-editor'
 import { TaskDescriptionRender } from '../../../components/task-description-render'
 import { getWorkspaceId, loadSession } from '../../../lib/auth'
@@ -283,7 +284,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
             <div style={panel}>
               <div style={{ display: 'grid', gap: 12 }}>
                 <div><div style={sectionLabel}>Project</div><div style={{ marginTop: 4 }}><Link href={`/projects/${task.project.id}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontWeight: 700 }}>{task.project.name}</Link></div></div>
-                <div><div style={sectionLabel}>Assignee</div><div style={{ marginTop: 6 }}><AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={36} /></div></div>
+                <div><div style={sectionLabel}>People</div><div style={{ marginTop: 6 }}><TaskPeopleAvatarStack owner={task.owner} ownerAvatarUrl={task.ownerAvatarUrl} participants={task.participants} assignee={task.assignee} assigneeAvatarUrl={task.assigneeAvatarUrl} collaborators={task.collaborators} size={36} /></div></div>
                 <div><div style={sectionLabel}>Priority</div><div style={{ marginTop: 4, fontSize: 18, color: 'var(--text-primary)' }}>{priorityStars(task.priority)}</div></div>
                 <div><div style={sectionLabel}>Status</div><div style={{ marginTop: 4 }}><span style={tagStyle()}>{task.status}</span></div></div>
                 <div><div style={sectionLabel}>Created</div><div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-secondary)' }}>{new Date(task.createdAt).toLocaleDateString()}</div></div>

@@ -4,7 +4,7 @@ import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { getMe, login, requestPasswordReset } from '../lib/api'
-import { clearSession, getWorkspaceId, loadSession, saveSession, setWorkspaceId, type Membership } from '../lib/auth'
+import { clearSession, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId, type Membership } from '../lib/auth'
 import { projectInputField } from '../lib/theme'
 
 type AuthMode = 'login' | 'forgot'
@@ -81,10 +81,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const requestedWorkspaceId = searchParams.get('workspaceId')
 
   function pickWorkspaceId(memberships: Membership[]) {
-    if (requestedWorkspaceId && memberships.some((membership) => membership.workspaceId === requestedWorkspaceId)) return requestedWorkspaceId
-    const storedWorkspaceId = getWorkspaceId()
-    if (storedWorkspaceId && memberships.some((membership) => membership.workspaceId === storedWorkspaceId)) return storedWorkspaceId
-    return memberships[0]?.workspaceId || null
+    return pickPreferredWorkspaceId(memberships, { requestedWorkspaceId })
   }
 
   useEffect(() => {

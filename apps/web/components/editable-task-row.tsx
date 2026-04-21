@@ -6,14 +6,13 @@ import type { ProjectTaskListItem, StatusOption } from '@sally/types/src'
 import { createProjectLabel, updateTask, updateTaskLabels } from '../lib/api'
 import { qk } from '../lib/query'
 import { pill, tagStyle } from './app-shell'
-import { AssigneeAvatar } from './assignee-avatar'
-import { AssigneePicker } from './assignee-picker'
+import { TaskPeopleField } from './task-people-field'
 import { statusChipStyle } from '../lib/status-colors'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { canAssignTask } from '../lib/task-permissions'
 import { projectInputField, taskTitleText } from '../lib/theme'
 
-type ActiveField = 'title' | 'assignee' | 'dueDate' | 'status' | 'labels' | null
+type ActiveField = 'title' | 'dueDate' | 'status' | 'labels' | null
 
 function dueBadge(dueDate: string | null) {
   if (!dueDate) return null
@@ -46,7 +45,6 @@ export function EditableTaskRow({
   const qc = useQueryClient()
   const [activeField, setActiveField] = useState<ActiveField>(null)
   const [title, setTitle] = useState(task.title)
-  const [assignee, setAssignee] = useState(task.assignee === 'Unassigned' ? '' : task.assignee)
   const [priority, setPriority] = useState<'P1' | 'P2' | 'P3'>(task.priority)
   const [dueDate, setDueDate] = useState(task.dueDate ? String(task.dueDate).slice(0, 10) : '')
   const [statusId, setStatusId] = useState(task.statusId)
@@ -55,7 +53,6 @@ export function EditableTaskRow({
   useEffect(() => {
     setActiveField(null)
     setTitle(task.title)
-    setAssignee(task.assignee === 'Unassigned' ? '' : task.assignee)
     setPriority(task.priority)
     setDueDate(task.dueDate ? String(task.dueDate).slice(0, 10) : '')
     setStatusId(task.statusId)
@@ -138,20 +135,19 @@ export function EditableTaskRow({
           )}
         </div>
 
-        <div onClick={handleFieldClick('assignee')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-          {activeField === 'assignee' ? (
-            <AssigneePicker
-              projectId={projectId}
-              taskId={task.id}
-              value={assignee}
-              placeholder="Unassigned"
-              onChange={setAssignee}
-              onSaved={() => setActiveField(null)}
-              canManage={assignDecision.allowed}
-            />
-          ) : (
-            <AssigneeAvatar name={task.assignee} avatarUrl={task.assigneeAvatarUrl} size={28} />
-          )}
+        <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', color: 'var(--text-secondary)' }}>
+          <TaskPeopleField
+            projectId={projectId}
+            taskId={task.id}
+            owner={task.owner}
+            ownerAvatarUrl={task.ownerAvatarUrl}
+            participants={task.participants}
+            assignee={task.assignee}
+            assigneeAvatarUrl={task.assigneeAvatarUrl}
+            collaborators={task.collaborators}
+            canManage={assignDecision.allowed}
+            compact
+          />
         </div>
 
         <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
