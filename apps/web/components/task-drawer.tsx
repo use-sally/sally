@@ -72,6 +72,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
   const [todoBusy, setTodoBusy] = useState(false)
   const [todoItems, setTodoItems] = useState<TodoItem[]>([])
   const [descriptionDraft, setDescriptionDraft] = useState('')
+  const [collaboratorsInput, setCollaboratorsInput] = useState('')
   const [descriptionBusy, setDescriptionBusy] = useState(false)
   const lastCommittedDescriptionRef = useRef('')
   const [timeMinutes, setTimeMinutes] = useState('')
@@ -100,6 +101,10 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
   }, [task?.description])
 
   useEffect(() => {
+    setCollaboratorsInput(task?.collaborators.map((entry) => entry.name).join(', ') ?? '')
+  }, [task?.collaborators])
+
+  useEffect(() => {
     if (editingTimesheetId && editingTimesheetMinutesRef.current) editingTimesheetMinutesRef.current.focus()
   }, [editingTimesheetId])
 
@@ -120,7 +125,7 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
     ])
   }
 
-  async function save(payload: { title?: string; description?: string; assignee?: string; priority?: 'P1'|'P2'|'P3'; dueDate?: string | null; statusId?: string }) {
+  async function save(payload: { title?: string; description?: string; assignee?: string; collaborators?: string[]; priority?: 'P1'|'P2'|'P3'; dueDate?: string | null; statusId?: string }) {
     await updateTask(taskId, payload)
     await invalidateAll()
   }
@@ -133,6 +138,11 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
     } finally {
       setDescriptionBusy(false)
     }
+  }
+
+  async function saveCollaborators() {
+    const collaborators = Array.from(new Set(collaboratorsInput.split(',').map((value) => value.trim()).filter(Boolean).filter((value) => value !== (task?.assignee === 'Unassigned' ? '' : (task?.assignee ?? '')))))
+    await save({ collaborators })
   }
 
   async function handleDescriptionImageUpload(file: File) {
@@ -384,6 +394,12 @@ export function TaskDrawer({ taskId, closeHref, projectId, drawerStyle }: { task
 
             <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
               <Row label="Assignee"><AssigneePicker projectId={task.project.id} taskId={task.id} value={task.assignee === 'Unassigned' ? '' : task.assignee} placeholder="Unassigned" canManage={assignDecision.allowed} /></Row>
+              <Row label="Collaborators">
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <input value={collaboratorsInput} onChange={(e) => setCollaboratorsInput(e.target.value)} onBlur={() => void saveCollaborators()} placeholder="alex@example.com, sam@example.com" style={inputStyle} />
+                  <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Comma-separated names or emails. Saved on blur. Primary assignee is excluded automatically.</div>
+                </div>
+              </Row>
               <Row label="Priority">
                 <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                   {[1, 2, 3].map((rating) => {

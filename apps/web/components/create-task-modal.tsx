@@ -14,6 +14,7 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
   const [projectId, setProjectId] = useState(defaultProjectId || projects[0]?.id || '')
   const [title, setTitle] = useState('')
   const [assignee, setAssignee] = useState('')
+  const [collaboratorsInput, setCollaboratorsInput] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<'P1'|'P2'|'P3'>('P2')
   const [dueDate, setDueDate] = useState('')
@@ -23,10 +24,15 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
   const [error, setError] = useState<string | null>(null)
   const [projectRole, setProjectRole] = useState<string | null>(null)
 
+  const parsedCollaborators = useMemo(
+    () => Array.from(new Set(collaboratorsInput.split(',').map((value) => value.trim()).filter(Boolean).filter((value) => value !== assignee.trim()))),
+    [collaboratorsInput, assignee],
+  )
   const parsedLabels = useMemo(() => Array.from(new Set(labelsInput.split(',').map((label) => label.trim()).filter(Boolean))), [labelsInput])
   const parsedTodos = useMemo(() => todosInput.split(/\r?\n/).map((line) => line.trim()).filter(Boolean), [todosInput])
   const session = loadSession()
   const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
+
   const createDecision = canCreateTask({ platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole }, false)
   const assignDecision = canAssignTask({ platformRole: session?.account?.platformRole ?? null, workspaceRole, projectRole }, false)
 
@@ -54,6 +60,7 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
         projectId,
         title,
         assignee,
+        collaborators: parsedCollaborators,
         description,
         priority,
         dueDate: dueDate || null,
@@ -80,6 +87,11 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
           <label style={field}><span>Project</span><select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={input}>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
           <label style={field}><span>Title</span><input value={title} onChange={(e) => setTitle(e.target.value)} style={input} placeholder="Add task title" /></label>
           <label style={field}><span style={labelText}>Assignee</span><AssigneePicker projectId={projectId} value={assignee} onChange={setAssignee} onSaved={setAssignee} placeholder="Unassigned" canManage={assignDecision.allowed} /></label>
+          <label style={field}>
+            <span>Collaborators</span>
+            <input value={collaboratorsInput} onChange={(e) => setCollaboratorsInput(e.target.value)} style={input} placeholder="alex@example.com, sam@example.com" />
+            <div style={hintText}>{parsedCollaborators.length ? `Will add ${parsedCollaborators.length} collaborator${parsedCollaborators.length === 1 ? '' : 's'}.` : 'Comma-separated names or emails. Primary assignee is excluded automatically.'}</div>
+          </label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label style={field}>
               <span>Priority</span>
