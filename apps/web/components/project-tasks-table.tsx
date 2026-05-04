@@ -6,7 +6,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ProjectMember, ProjectTaskListItem } from '@sally/types/src'
+import type { ProjectAutomationOverview, ProjectMember, ProjectTaskListItem } from '@sally/types/src'
 import { archiveTask, createTask, getProjectMembers, reorderProjectTasks } from '../lib/api'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { qk, useProjectQuery, useProjectTasksQuery } from '../lib/query'
@@ -15,6 +15,7 @@ import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
 import { statusChipStyle } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
 import { InlineTaskPanel } from './inline-task-panel'
+import { automationBadgeStyle, getTaskAutomationBadge } from '../lib/task-automation'
 import { labelText, projectInputField, sortableHeaderButton } from '../lib/theme'
 
 const inputStyle: React.CSSProperties = { ...projectInputField }
@@ -22,7 +23,7 @@ const inputStyle: React.CSSProperties = { ...projectInputField }
 type SortKey = 'position' | 'title' | 'assignee' | 'priority' | 'dueDate' | 'status'
 type SortDir = 'asc' | 'desc'
 
-export function ProjectTasksTable({ projectId, showFilters = true, limit, archived = false }: { projectId: string; showFilters?: boolean; limit?: number; archived?: boolean }) {
+export function ProjectTasksTable({ projectId, showFilters = true, limit, archived = false, automationOverview }: { projectId: string; showFilters?: boolean; limit?: number; archived?: boolean; automationOverview?: ProjectAutomationOverview | null }) {
   const qc = useQueryClient()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -278,7 +279,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
               <div style={{ display: 'grid', gap: 12 }}>
                 {sortedTasks.map((task) => {
                   const expanded = expandedTaskId === task.id
-                  return <SortableTaskListItem key={task.id} task={task} expanded={expanded} projectId={projectId} statuses={project?.statuses || []} taskPermissionViewer={taskPermissionViewer} setExpandedTaskParam={setExpandedTaskParam} rowRefs={rowRefs} />
+                  return <SortableTaskListItem key={task.id} task={task} expanded={expanded} projectId={projectId} statuses={project?.statuses || []} taskPermissionViewer={taskPermissionViewer} setExpandedTaskParam={setExpandedTaskParam} rowRefs={rowRefs} automationOverview={automationOverview} />
                 })}
               </div>
             </SortableContext>
@@ -308,8 +309,10 @@ function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskList
   )
 }
 
-function SortableTaskListItem({ task, expanded, projectId, statuses, taskPermissionViewer, setExpandedTaskParam, rowRefs }: { task: ProjectTaskListItem; expanded: boolean; projectId: string; statuses: any[]; taskPermissionViewer: any; setExpandedTaskParam: (taskId: string | null) => void; rowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>> }) {
+function SortableTaskListItem({ task, expanded, projectId, statuses, taskPermissionViewer, setExpandedTaskParam, rowRefs, automationOverview }: { task: ProjectTaskListItem; expanded: boolean; projectId: string; statuses: any[]; taskPermissionViewer: any; setExpandedTaskParam: (taskId: string | null) => void; rowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>; automationOverview?: ProjectAutomationOverview | null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const automationBadge = getTaskAutomationBadge(automationOverview, task.id)
+  const automationTone = automationBadge ? automationBadgeStyle(automationBadge.tone) : null
   return (
     <div
       ref={(node) => { setNodeRef(node); rowRefs.current[task.id] = node }}
@@ -328,6 +331,7 @@ function SortableTaskListItem({ task, expanded, projectId, statuses, taskPermiss
         <div {...attributes} {...listeners} style={{ display: 'grid', placeItems: 'center', padding: '10px 8px', borderRight: '1px solid var(--panel-border)', background: expanded ? 'color-mix(in srgb, var(--panel-bg) 92%, white)' : 'var(--form-bg)', cursor: 'grab', color: 'var(--text-muted)', userSelect: 'none' }} aria-label="Drag to reorder" title="Drag to reorder">⋮⋮</div>
         <EditableTaskRow task={task} projectId={projectId} statuses={statuses} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} taskPermissionViewer={taskPermissionViewer} />
       </div>
+      {automationBadge && automationTone ? <div style={{ display: 'flex', padding: '0 14px 12px 40px', marginTop: -4 }}><span title={automationBadge.detail || undefined} style={pill(automationTone.background, automationTone.color)}>{automationBadge.label}</span></div> : null}
       {expanded ? <InlineTaskPanel taskId={task.id} projectId={projectId} /> : null}
     </div>
   )

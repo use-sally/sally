@@ -454,7 +454,7 @@ export function InlineTaskPanel({ taskId, projectId }: { taskId: string; project
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Type <strong>@</strong> to mention a teammate. Press <strong>⌘/Ctrl+Enter</strong> to submit.</div>
-              <button onClick={() => void addComment()} style={btnStyle} disabled={!taskEditDecision.allowed}>Comment</button>
+              <button type="button" onClick={() => void addComment()} style={btnStyle} disabled={busy || !commentBody.trim() || !taskEditDecision.allowed}>Comment</button>
             </div>
           </div>
           {mentionOptions.length && mentionMenuPos ? (

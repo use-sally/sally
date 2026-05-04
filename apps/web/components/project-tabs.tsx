@@ -5,8 +5,8 @@ import Link from 'next/link'
 export function ProjectTabs({ projectId, current }: { projectId: string; current: 'overview' | 'board' | 'tasks' }) {
   const items = [
     { key: 'overview', href: `/projects/${projectId}`, label: 'Overview' },
-    { key: 'board', href: `/projects/${projectId}/board`, label: 'Board' },
-    { key: 'tasks', href: `/projects/${projectId}/tasks`, label: 'Tasks' },
+    { key: 'board', href: `/projects/${projectId}?view=board`, label: 'Board' },
+    { key: 'tasks', href: `/projects/${projectId}?view=tasks`, label: 'Tasks' },
   ] as const
 
   return (
@@ -17,6 +17,7 @@ export function ProjectTabs({ projectId, current }: { projectId: string; current
           <Link
             key={item.key}
             href={item.href}
+            scroll={false}
             style={{
               textDecoration: 'none',
               padding: '10px 14px',

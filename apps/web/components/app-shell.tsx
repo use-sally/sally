@@ -193,7 +193,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           50%, 100% { opacity: 0; }
         }
       `}</style>
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', minHeight: '100vh' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '280px minmax(0, 1fr)', minHeight: '100vh' }}>
         <aside
           style={{
             background: 'var(--panel-bg)',
@@ -497,7 +497,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           </div>
         </aside>
 
-        <section style={{ padding: '28px 32px 40px' }}>
+        <section style={{ padding: '28px 32px 40px', minWidth: 0, maxWidth: '100%', overflowX: 'hidden' }}>
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, gap: 16 }}>
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#fcd34d', marginBottom: 8 }}>runtime / workspace</div>

@@ -1,4 +1,5 @@
 import { PrismaClient, PlatformRole, WorkspaceRole } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
@@ -22,7 +23,10 @@ function loadSimpleEnv(filePath: string) {
 loadSimpleEnv(path.resolve(process.cwd(), '.env'))
 loadSimpleEnv(path.resolve(process.cwd(), '../../packages/db/.env'))
 
-const prisma = new PrismaClient()
+const databaseUrl = process.env.DATABASE_URL
+if (!databaseUrl) throw new Error('Missing required env var: DATABASE_URL')
+
+const prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl) })
 const scryptAsync = promisify(crypto.scrypt)
 
 async function hashPassword(password: string) {

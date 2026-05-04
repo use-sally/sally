@@ -349,6 +349,139 @@ export type ProjectActivityEvent = {
   createdAt: string
 }
 
+export type AgentIdentitySummary = {
+  id: string
+  name: string
+  role: string
+  hermesProfile: string | null
+  capabilities: unknown
+  enabled: boolean
+  lastSeenAt: string | null
+}
+
+export type AgentConnectionSummary = {
+  id: string
+  workspaceId: string
+  agentId: string | null
+  name: string
+  runtimeType: string
+  runtimeVersion: string | null
+  profileRef: string | null
+  capabilities: unknown
+  status: string
+  lastSeenAt: string | null
+  revokedAt: string | null
+  metadata: unknown
+  createdAt: string
+  updatedAt: string
+}
+
+export type AgentJobSummary = {
+  id: string
+  projectId: string | null
+  taskId: string | null
+  agentId: string | null
+  role: string
+  mode: string
+  status: string
+  triggerType: string
+  workflowRunId: string | null
+  workflowStep: number | null
+  maxSteps: number | null
+  lockedAt: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  error: string | null
+  createdAt: string
+  updatedAt: string
+  agent?: AgentIdentitySummary | null
+}
+
+export type ProjectAutomationConfig = {
+  id: string
+  workspaceId: string
+  projectId: string
+  workflowEnabled: boolean
+  defaultPmAgentId: string | null
+  roleAgents: unknown
+  baselineTaskIds: unknown
+  requiredCapabilities: unknown
+  liveActionsRequireApproval: boolean
+  stagingFirst: boolean
+  currentStage: string
+  nextRole: string | null
+  automationState: string
+  metadata: unknown
+  createdAt: string
+  updatedAt: string
+}
+
+export type AgentRunSummary = {
+  id: string
+  projectId: string | null
+  taskId: string | null
+  jobId: string | null
+  agentId: string | null
+  role: string
+  status: string
+  triggerType: string
+  provider: string | null
+  model: string | null
+  workflowRunId: string | null
+  workflowStep: number | null
+  startedAt: string | null
+  finishedAt: string | null
+  latestHeartbeatAt: string | null
+  summary: string | null
+  error: string | null
+  logUrl: string | null
+  evidenceUrl: string | null
+  createdAt: string
+  updatedAt: string
+  agent?: AgentIdentitySummary | null
+}
+
+export type ApprovalRequestSummary = {
+  id: string
+  projectId: string | null
+  taskId: string | null
+  requestedByAgentId: string | null
+  decidedByAccountId: string | null
+  type: string
+  status: string
+  question: string
+  options: unknown
+  recommendation: string | null
+  decisionNote: string | null
+  decidedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type BlockerSummary = {
+  id: string
+  projectId: string | null
+  taskId: string | null
+  ownerAgentId: string | null
+  type: string
+  status: string
+  summary: string
+  requiredInput: string | null
+  resolvedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ProjectAutomationOverview = {
+  config: ProjectAutomationConfig | null
+  agents: AgentIdentitySummary[]
+  jobs: AgentJobSummary[]
+  runs: AgentRunSummary[]
+  connections: AgentConnectionSummary[]
+  blockers: BlockerSummary[]
+  approvalRequests: ApprovalRequestSummary[]
+}
+
 export type ProjectMember = {
   id: string
   accountId: string

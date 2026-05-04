@@ -26,6 +26,52 @@ export type HostedMcpTaskUpdateArgs = {
   dueDate?: string | null
 }
 
+export type HostedMcpAgentJobCreateArgs = {
+  projectId?: string | null
+  taskId?: string | null
+  agentId?: string | null
+  role?: string
+  mode?: string
+  triggerType?: string
+  workflowRunId?: string | null
+  workflowStep?: number | null
+  maxSteps?: number | null
+  payload?: unknown
+}
+
+export type HostedMcpAgentJobUpdateArgs = {
+  status?: string
+  error?: string | null
+  payload?: unknown
+}
+
+export type HostedMcpAgentRunCreateArgs = {
+  projectId?: string | null
+  taskId?: string | null
+  jobId?: string | null
+  agentId?: string | null
+  role?: string
+  status?: string
+  triggerType?: string
+  provider?: string | null
+  model?: string | null
+  workflowRunId?: string | null
+  workflowStep?: number | null
+  summary?: string | null
+  logUrl?: string | null
+  evidenceUrl?: string | null
+  metadata?: unknown
+}
+
+export type HostedMcpAgentRunUpdateArgs = {
+  status?: string
+  summary?: string | null
+  error?: string | null
+  logUrl?: string | null
+  evidenceUrl?: string | null
+  metadata?: unknown
+}
+
 export function buildHostedMcpTaskCreatePayload(args: HostedMcpTaskCreateArgs) {
   return {
     projectId: args.projectId,
@@ -55,5 +101,59 @@ export function buildHostedMcpTaskUpdatePayload(args: HostedMcpTaskUpdateArgs) {
     ...(args.priority !== undefined ? { priority: args.priority } : {}),
     ...(args.statusId !== undefined ? { statusId: args.statusId } : {}),
     ...(args.dueDate !== undefined ? { dueDate: args.dueDate } : {}),
+  }
+}
+
+export function buildHostedMcpAgentJobCreatePayload(args: HostedMcpAgentJobCreateArgs) {
+  return {
+    ...(args.projectId !== undefined ? { projectId: args.projectId } : {}),
+    ...(args.taskId !== undefined ? { taskId: args.taskId } : {}),
+    ...(args.agentId !== undefined ? { agentId: args.agentId } : {}),
+    ...(args.role !== undefined ? { role: args.role } : {}),
+    ...(args.mode !== undefined ? { mode: args.mode } : {}),
+    ...(args.triggerType !== undefined ? { triggerType: args.triggerType } : {}),
+    ...(args.workflowRunId !== undefined ? { workflowRunId: args.workflowRunId } : {}),
+    ...(args.workflowStep !== undefined ? { workflowStep: args.workflowStep } : {}),
+    ...(args.maxSteps !== undefined ? { maxSteps: args.maxSteps } : {}),
+    ...(args.payload !== undefined ? { payload: args.payload } : {}),
+  }
+}
+
+export function buildHostedMcpAgentJobUpdatePayload(args: HostedMcpAgentJobUpdateArgs) {
+  return {
+    ...(args.status !== undefined ? { status: args.status } : {}),
+    ...(args.error !== undefined ? { error: args.error } : {}),
+    ...(args.payload !== undefined ? { payload: args.payload } : {}),
+  }
+}
+
+export function buildHostedMcpAgentRunCreatePayload(args: HostedMcpAgentRunCreateArgs) {
+  return {
+    ...(args.projectId !== undefined ? { projectId: args.projectId } : {}),
+    ...(args.taskId !== undefined ? { taskId: args.taskId } : {}),
+    ...(args.jobId !== undefined ? { jobId: args.jobId } : {}),
+    ...(args.agentId !== undefined ? { agentId: args.agentId } : {}),
+    ...(args.role !== undefined ? { role: args.role } : {}),
+    ...(args.status !== undefined ? { status: args.status } : {}),
+    ...(args.triggerType !== undefined ? { triggerType: args.triggerType } : {}),
+    ...(args.provider !== undefined ? { provider: args.provider } : {}),
+    ...(args.model !== undefined ? { model: args.model } : {}),
+    ...(args.workflowRunId !== undefined ? { workflowRunId: args.workflowRunId } : {}),
+    ...(args.workflowStep !== undefined ? { workflowStep: args.workflowStep } : {}),
+    ...(args.summary !== undefined ? { summary: args.summary } : {}),
+    ...(args.logUrl !== undefined ? { logUrl: args.logUrl } : {}),
+    ...(args.evidenceUrl !== undefined ? { evidenceUrl: args.evidenceUrl } : {}),
+    ...(args.metadata !== undefined ? { metadata: args.metadata } : {}),
+  }
+}
+
+export function buildHostedMcpAgentRunUpdatePayload(args: HostedMcpAgentRunUpdateArgs) {
+  return {
+    ...(args.status !== undefined ? { status: args.status } : {}),
+    ...(args.summary !== undefined ? { summary: args.summary } : {}),
+    ...(args.error !== undefined ? { error: args.error } : {}),
+    ...(args.logUrl !== undefined ? { logUrl: args.logUrl } : {}),
+    ...(args.evidenceUrl !== undefined ? { evidenceUrl: args.evidenceUrl } : {}),
+    ...(args.metadata !== undefined ? { metadata: args.metadata } : {}),
   }
 }
