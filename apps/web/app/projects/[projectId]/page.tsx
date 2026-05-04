@@ -9,10 +9,15 @@ import { ProjectTabs } from '../../../components/project-tabs'
 import { StatusSettings } from '../../../components/status-settings'
 import { TimesheetsTable } from '../../../components/timesheets-table'
 import { ProjectCurrentTasks } from '../../../components/project-current-tasks'
+import { ProjectAutomationPanel } from '../../../components/project-automation-panel'
+import { ProjectTasksTable } from '../../../components/project-tasks-table'
+import { TaskBoard } from '../../../components/task-board'
+import { BottomTaskDrawer } from '../../../components/bottom-task-drawer'
 import { SectionHeaderWithInfo } from '../../../components/info-flag'
 import { addProjectMember, archiveProject, deleteProject, getProjectActivity, getProjectMembers, getWorkspaceMembers, inviteWorkspaceMember, removeProjectMember, updateProject, updateProjectMember } from '../../../lib/api'
 import { getWorkspaceId, loadSession } from '../../../lib/auth'
-import { qk, useClientsQuery, useProjectQuery } from '../../../lib/query'
+import { qk, useBoardQuery, useClientsQuery, useProjectAutomationQuery, useProjectQuery } from '../../../lib/query'
+import { projectWorkflowSummary } from '../../../lib/task-automation'
 import { labelText, projectInputField } from '../../../lib/theme'
 import { projectRoleOptions } from '../../../lib/roles'
 import { canAddProjectMember, canChangeProjectClient, canChangeProjectMemberRole, canEditProject, canInviteProjectMember, canManageProjectWorkflow, canRemoveProjectMember } from '../../../lib/permissions'
@@ -120,7 +125,7 @@ function ArchivedProjectTimesheets({ entries }: { entries: { id: string; userNam
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       {entries.map((entry) => (
-        <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 120px 110px 1.5fr', gap: 10, alignItems: 'center', padding: '12px 14px', border: '1px solid var(--panel-border)', borderRadius: 14, background: 'var(--form-bg)' }}>
+        <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 10, alignItems: 'center', padding: '12px 14px', border: '1px solid var(--panel-border)', borderRadius: 14, background: 'var(--form-bg)', minWidth: 0 }}>
           <div>{String(entry.date).slice(0, 10)}</div>
           <div>
             <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{entry.taskTitle || 'Project only'}</div>
@@ -140,6 +145,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const router = useRouter()
   const qc = useQueryClient()
   const archivedParam = searchParams.get('archived') === 'true'
+  const rawView = searchParams.get('view')
+  const currentView: 'overview' | 'board' | 'tasks' = rawView === 'board' || rawView === 'tasks' ? rawView : 'overview'
+  const taskId = searchParams.get('task') || ''
   const [projectId, setProjectId] = useState<string>('')
   const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null; details: string[]; createdAt: string }[]>([])
   const [members, setMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; createdAt: string; locked?: boolean; workspaceRole?: string | null; platformRole?: string | null }[]>([])
@@ -201,6 +209,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 
   const { data: project, error } = useProjectQuery(projectId, { archived: archivedParam })
   const { data: clients = [] } = useClientsQuery()
+  const { data: automationOverview } = useProjectAutomationQuery(projectId)
+  const { data: boardColumns = [], error: boardError, isLoading: boardLoading } = useBoardQuery(projectId)
+  const workflowSummary = projectWorkflowSummary(automationOverview)
 
   useEffect(() => {
     if (!project) return
@@ -445,7 +456,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
             )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-            <ProjectTabs projectId={projectId} current="overview" />
+            <ProjectTabs projectId={projectId} current={currentView} />
             {projectEditDecision.visible ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <button onClick={() => void handleArchiveProject()} disabled={projectDangerSaving !== null} style={archiveHeaderButton}>{projectDangerSaving === 'archive' ? 'Archiving…' : 'Archive'}</button>
@@ -456,7 +467,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
         </div>
       ) : projectId ? (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-          <ProjectTabs projectId={projectId} current="overview" />
+          <ProjectTabs projectId={projectId} current={currentView} />
         </div>
       ) : null}
       {error ? <div style={{ color: 'var(--danger-text)', marginBottom: 16 }}>{error instanceof Error ? error.message : 'Failed to load project'}</div> : null}
@@ -464,7 +475,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 
       {project ? (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1.4fr) minmax(180px, 0.7fr) minmax(240px, 1fr)', gap: 16, marginBottom: 20, alignItems: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 16, marginBottom: 20, alignItems: 'stretch', minWidth: 0 }}>
             <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 10 }}>
               <div style={labelText}>Client</div>
               {!clientChangeDecision.visible ? (
@@ -601,12 +612,33 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
           </div>
 
           {workflowDecision.visible ? <div style={{ marginBottom: 24 }}><StatusSettings projectId={projectId} statuses={project.statuses} canManage={workflowDecision.allowed} /></div> : null}
+          {workflowDecision.visible ? <div style={{ marginBottom: 24 }}><ProjectAutomationPanel projectId={projectId} canManage={workflowDecision.allowed} /></div> : null}
 
           <div style={{ display: 'grid', gap: 20 }}>
 
             <div style={panel}>
-              <div style={{ fontWeight: 750, marginBottom: 14 }}>Recent tasks</div>
-              <ProjectCurrentTasks project={project} archived={archivedParam} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontWeight: 750 }}>Project workflow</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3 }}>Project-level automation stays here. Task-level automation is shown on the cards below.</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={pill(workflowSummary.enabled ? '#dcfce7' : '#fee2e2', workflowSummary.enabled ? '#166534' : '#991b1b')}>{workflowSummary.enabled ? 'automation enabled' : 'automation disabled'}</span>
+                  <span style={pill(workflowSummary.connectionCount ? '#dcfce7' : 'var(--form-bg)', workflowSummary.connectionCount ? '#166534' : 'var(--text-secondary)')}>{workflowSummary.connectionCount ? 'agent connected' : 'no agent'}</span>
+                  <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>{workflowSummary.phase}</span>
+                  {workflowSummary.activeLabel ? <span style={pill('#dbeafe', '#1d4ed8')}>{workflowSummary.activeLabel}</span> : null}
+                  {workflowSummary.pendingApprovals ? <span style={pill('#ffedd5', '#9a3412')}>{workflowSummary.pendingApprovals} approval</span> : null}
+                  {workflowSummary.openBlockers ? <span style={pill('#fee2e2', '#991b1b')}>{workflowSummary.openBlockers} blocker</span> : null}
+                </div>
+              </div>
+              {currentView === 'board' ? (
+                boardError ? <div style={{ color: 'var(--danger-text)' }}>{boardError instanceof Error ? boardError.message : 'Failed to load board'}</div> :
+                boardColumns.length ? <TaskBoard columns={boardColumns} taskBaseHref={`/projects/${projectId}`} projectId={projectId} canReorderStatuses={true} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>
+              ) : currentView === 'tasks' ? (
+                <ProjectTasksTable projectId={projectId} automationOverview={automationOverview} />
+              ) : (
+                <ProjectCurrentTasks project={project} archived={archivedParam} />
+              )}
             </div>
 
             <div style={panel}>
@@ -618,7 +650,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
               {activity.length ? (
                 <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }}>
                   {[...activity].reverse().map((event, index, items) => (
-                    <div key={event.id} style={{ display: 'grid', gridTemplateColumns: '170px minmax(220px, 320px) 1fr', gap: 12, alignItems: 'start', padding: '10px 12px', borderBottom: index === items.length - 1 ? 'none' : '1px solid var(--panel-border)', fontSize: 13, lineHeight: 1.45 }}>
+                    <div key={event.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, alignItems: 'start', padding: '10px 12px', borderBottom: index === items.length - 1 ? 'none' : '1px solid var(--panel-border)', fontSize: 13, lineHeight: 1.45, minWidth: 0 }}>
                       <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatActivityTimestamp(event.createdAt)}</div>
                       <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{formatActivityActor(event)}</div>
                       <div style={{ display: 'grid', gap: 4 }}>
@@ -642,6 +674,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
           </div>
         </>
       ) : <div style={{ color: 'var(--text-muted)' }}>Loading project…</div>}
+      {currentView === 'board' && taskId && projectId ? <BottomTaskDrawer taskId={taskId} closeHref={`/projects/${projectId}?view=board`} projectId={projectId} /> : null}
 
     </AppShell>
   )

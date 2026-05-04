@@ -7,6 +7,7 @@ import { getWorkspaceId, loadSession } from '../lib/auth'
 import { getProjectMembers } from '../lib/api'
 import { useProjectQuery, useTaskQuery } from '../lib/query'
 import { useEffect, useState } from 'react'
+import { BOTTOM_TASK_DRAWER_MAX_HEIGHT } from './bottom-task-drawer-helpers'
 
 export function BottomTaskDrawer({ taskId, closeHref, projectId }: { taskId: string; closeHref: string; projectId: string }) {
   const router = useRouter()
@@ -57,7 +58,7 @@ export function BottomTaskDrawer({ taskId, closeHref, projectId }: { taskId: str
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.18)', display: 'flex', alignItems: 'flex-end', zIndex: 50 }} onClick={() => router.push(closeHref)}>
-      <div style={{ width: '100%', maxHeight: '78vh', background: 'var(--form-bg)', borderTopLeftRadius: 20, borderTopRightRadius: 20, boxShadow: '0 -20px 50px rgba(15,23,42,0.16)', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ width: '100%', maxHeight: BOTTOM_TASK_DRAWER_MAX_HEIGHT, background: 'var(--form-bg)', borderTopLeftRadius: 20, borderTopRightRadius: 20, boxShadow: '0 -20px 50px rgba(15,23,42,0.16)', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--panel-border)' }}>
           <div style={{ fontWeight: 750 }}>Task</div>
           <button type="button" onClick={() => router.push(closeHref)} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer' }}>✕</button>

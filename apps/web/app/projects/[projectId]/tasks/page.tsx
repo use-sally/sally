@@ -1,32 +1,23 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AppShell, panel } from '../../../../components/app-shell'
-import { ProjectTabs } from '../../../../components/project-tabs'
-import { ProjectTasksTable } from '../../../../components/project-tasks-table'
-import { useProjectQuery } from '../../../../lib/query'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function ProjectTasksPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [projectId, setProjectId] = useState('')
 
   useEffect(() => {
     void params.then((p) => setProjectId(p.projectId))
   }, [params])
 
-  const { data: project, error } = useProjectQuery(projectId)
+  useEffect(() => {
+    if (!projectId) return
+    const next = new URLSearchParams(searchParams.toString())
+    next.set('view', 'tasks')
+    router.replace(`/projects/${projectId}?${next.toString()}`)
+  }, [projectId, router, searchParams])
 
-  return (
-    <AppShell
-      title={project?.name ?? 'Project tasks'}
-      subtitle={project ? `All tasks in ${project.name}.` : 'Task list for this project.'}
-    >
-      {projectId ? <ProjectTabs projectId={projectId} current="tasks" /> : null}
-      {error ? <div style={{ color: 'var(--danger-text)', marginBottom: 16 }}>{error instanceof Error ? error.message : 'Failed to load project'}</div> : null}
-
-      <div style={panel}>
-        {projectId ? <ProjectTasksTable projectId={projectId} /> : <div style={{ color: 'var(--text-muted)' }}>Loading tasks…</div>}
-      </div>
-
-    </AppShell>
-  )
+  return <div style={{ color: 'var(--text-muted)', padding: 24 }}>Opening project tasks…</div>
 }

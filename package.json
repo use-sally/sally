@@ -8,6 +8,14 @@
     "dev:api": "pnpm --filter api dev",
     "clean:web": "rm -rf apps/web/.next",
     "build": "pnpm -r build",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "connect:hermes": "pnpm --filter api exec tsx src/connect-hermes-agent.ts",
+    "agent-connect:hermes": "pnpm --filter sally-agent-connect exec tsx src/cli.ts hermes"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "8.5.14",
+      "@hono/node-server": "1.19.13"
+    }
   }
 }

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { getBoard, getClient, getClients, getHealth, getProject, getProjects, getProjectsSummary, getProjectTasks, getProjectTimesheets, getTask, getTaskTimesheets, getTimesheetReport, getTimesheetUsers } from './api'
+import { getBoard, getClient, getClients, getHealth, getProject, getProjectAutomation, getProjects, getProjectsSummary, getProjectTasks, getProjectTimesheets, getTask, getTaskTimesheets, getTimesheetReport, getTimesheetUsers } from './api'
 
 export const qk = {
   health: ['health'] as const,
   projectsSummary: ['projectsSummary'] as const,
   projects: (archived?: boolean) => ['projects', archived ? '1' : '0'] as const,
   project: (projectId: string, archived?: boolean) => ['project', projectId, archived ? '1' : '0'] as const,
+  projectAutomation: (projectId: string) => ['projectAutomation', projectId] as const,
   projectTasks: (projectId: string, filters?: { status?: string; assignee?: string; search?: string; label?: string; archived?: boolean }) => ['projectTasks', projectId, filters?.status || '', filters?.assignee || '', filters?.search || '', filters?.label || '', filters?.archived ? '1' : '0'] as const,
   projectTimesheets: (projectId: string) => ['projectTimesheets', projectId] as const,
   board: (projectId: string) => ['board', projectId] as const,
@@ -26,6 +27,17 @@ export function useClientsQuery() { return useQuery({ queryKey: qk.clients, quer
 export function useClientQuery(clientId: string) { return useQuery({ queryKey: qk.client(clientId), queryFn: () => getClient(clientId), enabled: !!clientId }) }
 export function useProjectQuery(projectId: string, options?: { archived?: boolean }) {
   return useQuery({ queryKey: qk.project(projectId, options?.archived), queryFn: () => getProject(projectId, options), enabled: !!projectId })
+}
+export const PROJECT_AUTOMATION_REFETCH_INTERVAL_MS = 2000
+
+export function useProjectAutomationQuery(projectId: string) {
+  return useQuery({
+    queryKey: qk.projectAutomation(projectId),
+    queryFn: () => getProjectAutomation(projectId),
+    enabled: !!projectId,
+    refetchInterval: PROJECT_AUTOMATION_REFETCH_INTERVAL_MS,
+    refetchIntervalInBackground: true,
+  })
 }
 export function useProjectTasksQuery(projectId: string, filters?: { status?: string; assignee?: string; search?: string; label?: string; archived?: boolean }) {
   return useQuery({ queryKey: qk.projectTasks(projectId, filters), queryFn: () => getProjectTasks(projectId, filters), enabled: !!projectId })

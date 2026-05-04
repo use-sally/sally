@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
-import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole } from '@prisma/client'
+import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
@@ -11,11 +12,14 @@ import crypto from 'node:crypto'
 import { promisify } from 'node:util'
 import { hasExactTodoOrder, normalizeTaskLabels, normalizeTaskTodoTexts } from './task-helpers.js'
 import { canAccessTaskParticipants } from './task-collaborators.js'
-import { buildHostedMcpTaskCreatePayload, buildHostedMcpTaskUpdatePayload } from './hosted-mcp.js'
+import { buildHostedMcpAgentJobCreatePayload, buildHostedMcpAgentJobUpdatePayload, buildHostedMcpAgentRunCreatePayload, buildHostedMcpAgentRunUpdatePayload, buildHostedMcpTaskCreatePayload, buildHostedMcpTaskUpdatePayload } from './hosted-mcp.js'
 import { buildTaskParticipantWrites, resolveVisibleTaskPeople } from './task-people.js'
 import { chooseCreateTimesheetUserId } from './timesheet-helpers.js'
 import { serveProfileImage, saveProfileImage } from './profile-images.js'
 import { cleanupRemovedDescriptionImages, saveTaskImage, serveTaskImage } from './task-description-images.js'
+import { assertNoSecretLikeJson, buildProjectAutomationPatch, buildStartProjectWorkflowJobPayload, normalizeAgentRole, normalizeCapabilityNames, normalizeHermesProfile } from './agent-control-plane.js'
+import { buildAgentConnectionPatch, buildAgentEventPayload, chooseAgentEventCursor, createAgentWorkerToken, hashAgentWorkerToken, normalizeRuntimeType, redactAgentConnection, verifyAgentWorkerToken } from './agent-connector.js'
+import { buildApprovalDecisionPatch, buildApprovalRequestPayload, buildBlockerPayload, buildBlockerResolutionPatch } from './blockers-approvals.js'
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
 import { appBuildTime, appGitSha, appVersion } from './version.js'
 
@@ -36,7 +40,13 @@ function loadSimpleEnv(filePath: string) {
 loadSimpleEnv(path.resolve(process.cwd(), '.env'))
 loadSimpleEnv(path.resolve(process.cwd(), '../../packages/db/.env'))
 
-const prisma = new PrismaClient()
+function createPrismaClient() {
+  const databaseUrl = process.env.DATABASE_URL
+  if (!databaseUrl) throw new Error('Missing required env var: DATABASE_URL')
+  return new PrismaClient({ adapter: new PrismaPg(databaseUrl) })
+}
+
+const prisma = createPrismaClient()
 const app = Fastify({ logger: true, bodyLimit: 25 * 1024 * 1024 })
 
 const API_TOKEN = process.env.API_TOKEN || process.env.API_KEY
@@ -70,6 +80,124 @@ function generateApiKeyToken() {
 
 function generateMcpKeyToken() {
   return `sallymcp_${crypto.randomBytes(24).toString('base64url')}`
+}
+
+function generatePairingCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let value = ''
+  for (let i = 0; i < 8; i += 1) value += alphabet[crypto.randomInt(alphabet.length)]
+  return `${value.slice(0, 4)}-${value.slice(4)}`
+}
+
+async function ensureWorkerAuth(request: any, reply: any) {
+  const token = extractAuthToken(request)
+  if (!token) return false
+  const hash = hashAgentWorkerToken(token)
+  const connection = await prisma.agentConnection.findFirst({ where: { tokenHash: hash, revokedAt: null }, include: { workspace: true } })
+  if (!connection || !verifyAgentWorkerToken(token, connection.tokenHash)) return false
+  await prisma.agentConnection.update({ where: { id: connection.id }, data: { status: AgentConnectionStatus.ONLINE, lastSeenAt: new Date() } })
+  ;(request as any).agentConnection = connection
+  ;(request as any).workspace = connection.workspace
+  return true
+}
+
+async function emitAgentEvent(input: { workspaceId: string; agentId?: string | null; type: string; payload: unknown }) {
+  const event = buildAgentEventPayload(input.type, input.payload)
+  return prisma.agentEvent.create({ data: { workspaceId: input.workspaceId, agentId: input.agentId ?? null, type: event.type, payload: event.payload as any } })
+}
+
+async function moveTaskForWorkflow(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; targetType: TaskStatusType; reason: string; actor?: ReturnType<typeof actorFromRequest> }) {
+  const projectId = input.projectId?.trim()
+  const taskId = input.taskId?.trim()
+  if (!projectId || !taskId) return { ok: true, action: 'skipped', reason: 'missing_task' }
+  const [task, targetStatus] = await Promise.all([
+    prisma.task.findFirst({ where: { id: taskId, projectId, archivedAt: null, project: { workspaceId: input.workspaceId, archivedAt: null } }, include: { status: true } }),
+    prisma.taskStatus.findFirst({ where: { projectId, type: input.targetType }, orderBy: [{ position: 'asc' }, { id: 'asc' }] }),
+  ])
+  if (!task || !targetStatus) return { ok: true, action: 'skipped', reason: !task ? 'task_not_found' : 'target_status_not_found' }
+  if (task.statusId === targetStatus.id) return { ok: true, action: 'unchanged', statusId: targetStatus.id }
+  await prisma.task.update({ where: { id: task.id }, data: { statusId: targetStatus.id } })
+  await logActivity({ workspaceId: input.workspaceId, projectId, taskId, ...(input.actor ?? {}), type: 'task.workflow_status_synced', summary: `Moved task ${task.title} to ${targetStatus.name} from agent workflow state.`, payload: { taskId, fromStatusId: task.statusId, toStatusId: targetStatus.id, targetType: input.targetType, reason: input.reason } })
+  return { ok: true, action: 'moved', statusId: targetStatus.id }
+}
+
+function targetStatusTypeForWorkflowJob(role: string | null | undefined, status: string | null | undefined): TaskStatusType | null {
+  const normalizedStatus = status?.trim().toUpperCase()
+  if (normalizedStatus === 'BLOCKED') return TaskStatusType.BLOCKED
+  if (normalizedStatus === 'CLAIMED' || normalizedStatus === 'RUNNING') {
+    const normalizedRole = role?.trim().toLowerCase()
+    if (normalizedRole === 'reviewer' || normalizedRole === 'tester') return TaskStatusType.REVIEW
+    return TaskStatusType.IN_PROGRESS
+  }
+  return null
+}
+
+async function reconcileWorkflowResolution(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; eventId?: string | null; type: string; status?: string | null; jobId?: string | null; role?: string | null; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null; actor?: ReturnType<typeof actorFromRequest> }) {
+  const projectId = input.projectId?.trim()
+  if (!projectId) return { ok: true, action: 'skipped', reason: 'missing_project' }
+  const config = await prisma.projectAutomationConfig.findFirst({ where: { workspaceId: input.workspaceId, projectId } })
+  if (!config?.workflowEnabled) return { ok: true, action: 'skipped', reason: 'automation_disabled' }
+
+  const normalizedStatus = input.status?.trim().toUpperCase() || ''
+  const deniedApproval = input.type === 'approval.resolved' && (normalizedStatus === ApprovalStatus.REJECTED || normalizedStatus === ApprovalStatus.CANCELLED)
+  const cancelledBlocker = input.type === 'blocker.resolved' && normalizedStatus === BlockerStatus.CANCELLED
+  const terminalFailure = input.type === 'job.finished' && ['FAILED', 'TIMED_OUT', 'CANCELLED'].includes(normalizedStatus)
+  const terminalBlocker = input.type === 'job.finished' && normalizedStatus === 'BLOCKED'
+  if (deniedApproval || cancelledBlocker || terminalFailure || terminalBlocker) {
+    const reason = deniedApproval ? 'approval_denied' : cancelledBlocker ? 'blocker_cancelled' : terminalBlocker ? 'job_blocked' : 'job_failed'
+    if (terminalBlocker) await moveTaskForWorkflow({ workspaceId: input.workspaceId, projectId, taskId: input.taskId, targetType: TaskStatusType.BLOCKED, reason, actor: input.actor })
+    await prisma.projectAutomationConfig.update({
+      where: { projectId },
+      data: { automationState: terminalFailure ? 'failed' : terminalBlocker ? 'blocked' : 'stopped', currentStage: terminalBlocker ? 'BLOCKED' : deniedApproval ? 'APPROVAL_NEEDED' : cancelledBlocker ? 'BLOCKED' : 'REWORK', nextRole: terminalBlocker || terminalFailure ? 'pm' : null, metadata: { source: 'sally_reconciliation', stopReason: reason, eventId: input.eventId ?? null, jobId: input.jobId ?? null, taskId: input.taskId ?? null, status: normalizedStatus } },
+    })
+    await logActivity({ workspaceId: input.workspaceId, projectId, taskId: input.taskId ?? null, ...(input.actor ?? {}), type: terminalFailure || terminalBlocker ? 'workflow.job_attention_needed' : 'workflow.stopped', summary: deniedApproval ? 'Stopped workflow after denied approval.' : cancelledBlocker ? 'Stopped workflow after cancelled blocker.' : terminalBlocker ? 'Workflow is blocked by an agent job.' : 'Workflow stopped after an agent job failed.', payload: { reason, eventId: input.eventId ?? null, jobId: input.jobId ?? null, status: normalizedStatus } })
+    return { ok: true, action: terminalFailure || terminalBlocker ? 'attention_needed' : 'stopped', reason }
+  }
+
+  const [pendingApprovals, openBlockers, existingActiveWorkflowJob, lastWorkflowJob] = await Promise.all([
+    prisma.approvalRequest.count({ where: { workspaceId: input.workspaceId, projectId, status: ApprovalStatus.PENDING } }),
+    prisma.blocker.count({ where: { workspaceId: input.workspaceId, projectId, status: BlockerStatus.OPEN } }),
+    prisma.agentJob.findFirst({ where: { workspaceId: input.workspaceId, projectId, mode: 'workflow', status: { in: [AgentJobStatus.QUEUED, AgentJobStatus.CLAIMED, AgentJobStatus.RUNNING] }, ...(input.jobId ? { id: { not: input.jobId } } : {}) }, orderBy: { createdAt: 'desc' } }),
+    prisma.agentJob.findFirst({ where: { workspaceId: input.workspaceId, projectId, mode: 'workflow', workflowRunId: { not: null } }, orderBy: [{ workflowStep: 'desc' }, { createdAt: 'desc' }] }),
+  ])
+  if (pendingApprovals || openBlockers) {
+    await prisma.projectAutomationConfig.update({ where: { projectId }, data: { automationState: pendingApprovals ? 'approval_needed' : 'blocked', currentStage: pendingApprovals ? 'APPROVAL_NEEDED' : 'BLOCKED', nextRole: 'pm' } })
+    return { ok: true, action: 'waiting', pendingApprovals, openBlockers }
+  }
+  if (existingActiveWorkflowJob) {
+    await prisma.projectAutomationConfig.update({ where: { projectId }, data: { automationState: existingActiveWorkflowJob.status === AgentJobStatus.QUEUED ? 'queued' : 'running', currentStage: existingActiveWorkflowJob.role === 'architect' ? 'ARCHITECTURE' : existingActiveWorkflowJob.role === 'reviewer' ? 'REVIEW' : existingActiveWorkflowJob.role === 'tester' ? 'TESTING' : existingActiveWorkflowJob.role === 'coder' ? 'EXECUTION' : 'INTAKE', nextRole: existingActiveWorkflowJob.role } })
+    return { ok: true, action: 'already_active', jobId: existingActiveWorkflowJob.id, role: existingActiveWorkflowJob.role, status: existingActiveWorkflowJob.status }
+  }
+
+  const workflowRunId = input.workflowRunId?.trim() || lastWorkflowJob?.workflowRunId || randomUUID()
+  const workflowStep = Math.max((lastWorkflowJob?.workflowStep ?? 0) + 1, (input.workflowStep ?? 0) + 1)
+  const maxSteps = input.maxSteps ?? lastWorkflowJob?.maxSteps ?? 30
+  if (workflowStep > maxSteps) {
+    await prisma.projectAutomationConfig.update({ where: { projectId }, data: { automationState: 'stopped', currentStage: 'DONE', nextRole: null, metadata: { source: 'sally_reconciliation', stopReason: 'max_steps_reached', eventId: input.eventId ?? null, workflowRunId, workflowStep, maxSteps } } })
+    await logActivity({ workspaceId: input.workspaceId, projectId, taskId: input.taskId ?? null, ...(input.actor ?? {}), type: 'workflow.stopped', summary: `Stopped workflow after reaching max steps (${maxSteps}).`, payload: { eventId: input.eventId ?? null, workflowRunId, workflowStep, maxSteps } })
+    return { ok: true, action: 'stopped', reason: 'max_steps_reached' }
+  }
+  const resumeAction = input.type === 'approval.resolved' ? 'resume_after_approval_resolution' : input.type === 'blocker.resolved' ? 'resume_after_blocker_resolution' : 'resume_after_job_finished'
+  const job = await prisma.agentJob.create({
+    data: {
+      workspaceId: input.workspaceId,
+      projectId,
+      taskId: input.taskId ?? null,
+      agentId: config.defaultPmAgentId,
+      role: 'pm',
+      mode: 'workflow',
+      triggerType: 'sally_reconciliation',
+      workflowRunId,
+      workflowStep,
+      maxSteps,
+      payload: { source: 'sally_reconciliation', action: resumeAction, eventId: input.eventId ?? null, completedJobId: input.jobId ?? null, completedRole: input.role ?? null, taskId: input.taskId ?? null, resolutionStatus: normalizedStatus } as any,
+    },
+    include: { agent: true },
+  })
+  await prisma.projectAutomationConfig.update({ where: { projectId }, data: { automationState: 'queued', currentStage: 'INTAKE', nextRole: 'pm' } })
+  await emitAgentEvent({ workspaceId: input.workspaceId, agentId: job.agentId, type: 'job.created', payload: { jobId: job.id, projectId, taskId: job.taskId, role: job.role, mode: job.mode, workflowRunId: job.workflowRunId, workflowStep: job.workflowStep, maxSteps: job.maxSteps } })
+  await logActivity({ workspaceId: input.workspaceId, projectId, taskId: input.taskId ?? null, ...(input.actor ?? {}), type: 'workflow.reconciliation_queued', summary: input.type === 'job.finished' ? 'Queued next PM workflow step after agent job finished.' : 'Queued PM reconciliation after approval/blocker resolution.', payload: { jobId: job.id, completedJobId: input.jobId ?? null, eventId: input.eventId ?? null, type: input.type, status: normalizedStatus, workflowStep, maxSteps } })
+  return { ok: true, action: 'queued', jobId: job.id }
 }
 
 async function ensureAuth(request: any, reply: any) {
@@ -1006,6 +1134,14 @@ const hostedMcpTools: McpTool[] = [
   { name: 'timesheet.add', description: 'Add a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, taskId: { type: ['string','null'] }, userId: { type: 'string' }, userName: { type: 'string' }, date: { type: 'string' }, minutes: { type: 'number' }, description: { type: 'string' }, billable: { type: 'boolean' }, validated: { type: 'boolean' } }, required: ['projectId', 'minutes'], additionalProperties: false } },
   { name: 'timesheet.update', description: 'Update a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' }, minutes: { type: 'number' }, description: { type: ['string', 'null'] }, date: { type: 'string' }, billable: { type: 'boolean' }, validated: { type: 'boolean' }, taskId: { type: ['string', 'null'] }, userId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
   { name: 'timesheet.delete', description: 'Delete a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
+  { name: 'agent.list', description: 'List Sally agent identities in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, role: { type: 'string' }, enabled: { type: 'boolean' } }, additionalProperties: false } },
+  { name: 'agent_job.create', description: 'Queue a Sally-native agent job for Hermes or remote Hermes to claim.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, mode: { type: 'string' }, triggerType: { type: 'string' }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, maxSteps: { type: ['number','null'] }, payload: { type: 'object' } }, required: ['role'], additionalProperties: false } },
+  { name: 'agent_job.list', description: 'List Sally-native agent jobs in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, status: { type: 'string' }, projectId: { type: 'string' }, taskId: { type: 'string' }, role: { type: 'string' } }, additionalProperties: false } },
+  { name: 'agent_job.claim', description: 'Atomically claim a queued Sally-native agent job.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, jobId: { type: 'string' }, agentId: { type: ['string','null'] } }, required: ['jobId'], additionalProperties: false } },
+  { name: 'agent_job.update', description: 'Update Sally-native agent job status, error, or safe payload metadata.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, jobId: { type: 'string' }, status: { type: 'string' }, error: { type: ['string','null'] }, payload: { type: 'object' } }, required: ['jobId'], additionalProperties: false } },
+  { name: 'agent_run.create', description: 'Create a visible Sally agent run record for Hermes execution.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, jobId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, status: { type: 'string' }, triggerType: { type: 'string' }, provider: { type: ['string','null'] }, model: { type: ['string','null'] }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, summary: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['role'], additionalProperties: false } },
+  { name: 'agent_run.update', description: 'Update a Sally agent run status and safe execution metadata.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, runId: { type: 'string' }, status: { type: 'string' }, summary: { type: ['string','null'] }, error: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['runId'], additionalProperties: false } },
+  { name: 'agent_run.heartbeat', description: 'Update the latest heartbeat timestamp for a Sally agent run.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, runId: { type: 'string' } }, required: ['runId'], additionalProperties: false } },
 ]
 
 function extractMcpBearerToken(request: any) {
@@ -1164,6 +1300,31 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       return await injectJson(request, { method: 'PATCH', url: `/timesheets/${args.timesheetId}`, args, payload: { minutes: args.minutes, description: args.description, date: args.date, billable: args.billable, validated: args.validated, taskId: args.taskId, userId: args.userId } })
     case 'timesheet.delete':
       return await injectJson(request, { method: 'DELETE', url: `/timesheets/${args.timesheetId}`, args })
+    case 'agent.list': {
+      const params = new URLSearchParams()
+      if (args.role) params.set('role', String(args.role))
+      if (args.enabled !== undefined) params.set('enabled', String(args.enabled))
+      const q = params.toString()
+      return { items: await injectJson(request, { method: 'GET', url: `/agents${q ? `?${q}` : ''}`, args }) }
+    }
+    case 'agent_job.list': {
+      const params = new URLSearchParams()
+      for (const key of ['status', 'projectId', 'taskId', 'role']) if (args[key]) params.set(key, String(args[key]))
+      const q = params.toString()
+      return { items: await injectJson(request, { method: 'GET', url: `/agent-jobs${q ? `?${q}` : ''}`, args }) }
+    }
+    case 'agent_job.create':
+      return await injectJson(request, { method: 'POST', url: '/agent-jobs', args, payload: buildHostedMcpAgentJobCreatePayload({ projectId: args.projectId, taskId: args.taskId, agentId: args.agentId, role: args.role, mode: args.mode, triggerType: args.triggerType, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, maxSteps: args.maxSteps, payload: args.payload }) })
+    case 'agent_job.claim':
+      return await injectJson(request, { method: 'POST', url: `/agent-jobs/${args.jobId}/claim`, args, payload: { agentId: args.agentId } })
+    case 'agent_job.update':
+      return await injectJson(request, { method: 'PATCH', url: `/agent-jobs/${args.jobId}`, args, payload: buildHostedMcpAgentJobUpdatePayload({ status: args.status, error: args.error, payload: args.payload }) })
+    case 'agent_run.create':
+      return await injectJson(request, { method: 'POST', url: '/agent-runs', args, payload: buildHostedMcpAgentRunCreatePayload({ projectId: args.projectId, taskId: args.taskId, jobId: args.jobId, agentId: args.agentId, role: args.role, status: args.status, triggerType: args.triggerType, provider: args.provider, model: args.model, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, summary: args.summary, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
+    case 'agent_run.update':
+      return await injectJson(request, { method: 'PATCH', url: `/agent-runs/${args.runId}`, args, payload: buildHostedMcpAgentRunUpdatePayload({ status: args.status, summary: args.summary, error: args.error, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
+    case 'agent_run.heartbeat':
+      return await injectJson(request, { method: 'POST', url: `/agent-runs/${args.runId}/heartbeat`, args, payload: {} })
     default:
       throw new Error(`Unknown tool: ${name}`)
   }
@@ -1228,6 +1389,13 @@ const start = async () => {
     app.addHook('preHandler', async (request, reply) => {
       const url = request.raw.url || ''
       if (url.startsWith('/health') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/profile-images/')) return
+      if (url.startsWith('/agent-connections/complete-pairing')) return
+      if (url.startsWith('/agent-worker/')) {
+        if (!(await ensureWorkerAuth(request, reply))) return reply.code(401).send({ ok: false, error: 'Unauthorized worker' })
+        return
+      }
+      if ((url.startsWith('/agent-jobs') || url.startsWith('/agent-runs') || url.startsWith('/blockers') || url.startsWith('/approval-requests')) && (await ensureWorkerAuth(request, reply))) return
+      if ((url.startsWith('/projects') || url.startsWith('/tasks')) && (await ensureWorkerAuth(request, reply))) return
       if (url.startsWith('/auth/login') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
       if (url.startsWith('/accounts') || url.startsWith('/workspaces') || url.startsWith('/auth')) return
@@ -1719,6 +1887,528 @@ const start = async () => {
       }
     })
 
+
+    app.get('/agents', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const query = request.query as { role?: string; enabled?: string }
+      const where: any = { workspaceId: workspace.id }
+      if (query.role?.trim()) where.role = normalizeAgentRole(query.role)
+      if (query.enabled === 'true') where.enabled = true
+      if (query.enabled === 'false') where.enabled = false
+      return prisma.agentIdentity.findMany({ where, orderBy: [{ role: 'asc' }, { name: 'asc' }] })
+    })
+
+    app.post('/agents', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      const body = request.body as {
+        name?: string
+        role?: string
+        principalType?: string
+        accountId?: string | null
+        hermesProfile?: string | null
+        allowedProjects?: unknown
+        allowedTaskKinds?: unknown
+        capabilities?: Array<string | null | undefined> | null
+        enabled?: boolean
+      }
+      const name = body.name?.trim()
+      if (!name) return reply.code(400).send({ ok: false, error: 'name is required' })
+      let role: string
+      try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      if (body.allowedProjects !== undefined) assertNoSecretLikeJson(body.allowedProjects, 'allowedProjects')
+      if (body.allowedTaskKinds !== undefined) assertNoSecretLikeJson(body.allowedTaskKinds, 'allowedTaskKinds')
+      const agent = await prisma.agentIdentity.create({
+        data: {
+          workspaceId: workspace.id,
+          accountId: body.accountId?.trim() || null,
+          name,
+          role,
+          principalType: body.principalType === 'HUMAN' ? PrincipalType.HUMAN : PrincipalType.AGENT,
+          hermesProfile: normalizeHermesProfile(body.hermesProfile),
+          allowedProjects: body.allowedProjects === undefined ? undefined : body.allowedProjects as any,
+          allowedTaskKinds: body.allowedTaskKinds === undefined ? undefined : body.allowedTaskKinds as any,
+          capabilities: normalizeCapabilityNames(body.capabilities) as any,
+          enabled: body.enabled ?? true,
+        },
+      })
+      await logActivity({ workspaceId: workspace.id, ...actorFromRequest(request), type: 'agent.created', summary: `Created agent ${agent.name}`, payload: { agentId: agent.id, role: agent.role } })
+      return { ok: true, agent }
+    })
+
+    app.get('/agents/:agentId', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { agentId } = request.params as { agentId: string }
+      const agent = await prisma.agentIdentity.findFirst({ where: { id: agentId, workspaceId: workspace.id } })
+      if (!agent) return reply.code(404).send({ ok: false, error: 'Agent not found' })
+      return agent
+    })
+
+    app.patch('/agents/:agentId', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      const { agentId } = request.params as { agentId: string }
+      const body = request.body as { name?: string; role?: string; accountId?: string | null; hermesProfile?: string | null; allowedProjects?: unknown; allowedTaskKinds?: unknown; capabilities?: Array<string | null | undefined> | null; enabled?: boolean }
+      const existing = await prisma.agentIdentity.findFirst({ where: { id: agentId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Agent not found' })
+      const data: any = {}
+      if (body.name !== undefined) data.name = body.name.trim()
+      if (body.role !== undefined) data.role = normalizeAgentRole(body.role)
+      if (body.accountId !== undefined) data.accountId = body.accountId?.trim() || null
+      if (body.hermesProfile !== undefined) data.hermesProfile = normalizeHermesProfile(body.hermesProfile)
+      if (body.allowedProjects !== undefined) { assertNoSecretLikeJson(body.allowedProjects, 'allowedProjects'); data.allowedProjects = body.allowedProjects as any }
+      if (body.allowedTaskKinds !== undefined) { assertNoSecretLikeJson(body.allowedTaskKinds, 'allowedTaskKinds'); data.allowedTaskKinds = body.allowedTaskKinds as any }
+      if (body.capabilities !== undefined) data.capabilities = normalizeCapabilityNames(body.capabilities) as any
+      if (body.enabled !== undefined) data.enabled = !!body.enabled
+      const agent = await prisma.agentIdentity.update({ where: { id: agentId }, data })
+      await logActivity({ workspaceId: workspace.id, ...actorFromRequest(request), type: 'agent.updated', summary: `Updated agent ${agent.name}`, payload: { agentId: agent.id, role: agent.role } })
+      return { ok: true, agent }
+    })
+
+    app.post('/agents/:agentId/enable', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      const { agentId } = request.params as { agentId: string }
+      const agent = await prisma.agentIdentity.updateMany({ where: { id: agentId, workspaceId: workspace.id }, data: { enabled: true } })
+      if (!agent.count) return reply.code(404).send({ ok: false, error: 'Agent not found' })
+      return { ok: true }
+    })
+
+    app.post('/agents/:agentId/disable', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      const { agentId } = request.params as { agentId: string }
+      const agent = await prisma.agentIdentity.updateMany({ where: { id: agentId, workspaceId: workspace.id }, data: { enabled: false } })
+      if (!agent.count) return reply.code(404).send({ ok: false, error: 'Agent not found' })
+      return { ok: true }
+    })
+
+    app.get('/agent-connections', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const connections = await prisma.agentConnection.findMany({ where: { workspaceId: workspace.id, revokedAt: null }, orderBy: { updatedAt: 'desc' }, take: 100 })
+      return connections.map((connection) => redactAgentConnection(connection as any))
+    })
+
+    app.post('/agent-connections/pairing-code', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      const body = request.body as { agentId?: string | null; name?: string | null; runtimeType?: string | null; ttlMinutes?: number | null }
+      const agentId = body.agentId?.trim() || null
+      if (agentId) {
+        const agent = await prisma.agentIdentity.findFirst({ where: { id: agentId, workspaceId: workspace.id, enabled: true } })
+        if (!agent) return reply.code(404).send({ ok: false, error: 'Agent not found or disabled' })
+      }
+      const code = generatePairingCode()
+      const ttlMinutes = Math.min(Math.max(Number(body.ttlMinutes || 10), 1), 30)
+      const pairing = await prisma.agentPairingCode.create({ data: {
+        workspaceId: workspace.id,
+        agentId,
+        codeHash: hashAgentWorkerToken(code),
+        name: body.name?.trim() || 'Connected agent',
+        runtimeType: normalizeRuntimeType(body.runtimeType),
+        expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
+      } })
+      await logActivity({ workspaceId: workspace.id, ...actorFromRequest(request), type: 'agent_connection.pairing_code.created', summary: 'Created agent pairing code', payload: { pairingId: pairing.id, agentId, runtimeType: pairing.runtimeType, expiresAt: pairing.expiresAt.toISOString() } })
+      return { ok: true, pairingCode: code, expiresAt: pairing.expiresAt.toISOString(), pairingId: pairing.id }
+    })
+
+    app.post('/agent-connections/complete-pairing', async (request, reply) => {
+      const body = request.body as { code?: string; runtimeVersion?: string | null; profileRef?: string | null; capabilities?: Array<string | null | undefined> | null; metadata?: unknown }
+      const code = body.code?.trim().toUpperCase()
+      if (!code) return reply.code(400).send({ ok: false, error: 'pairing code is required' })
+      let patch: Record<string, unknown>
+      try { patch = buildAgentConnectionPatch({ runtimeVersion: body.runtimeVersion, profileRef: body.profileRef, capabilities: body.capabilities, metadata: body.metadata }) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      const pairing = await prisma.agentPairingCode.findFirst({ where: { codeHash: hashAgentWorkerToken(code), usedAt: null, expiresAt: { gt: new Date() } } })
+      if (!pairing) return reply.code(404).send({ ok: false, error: 'Pairing code not found or expired' })
+      const token = createAgentWorkerToken()
+      const connection = await prisma.$transaction(async (tx) => {
+        await tx.agentPairingCode.update({ where: { id: pairing.id }, data: { usedAt: new Date() } })
+        const latestVisibleEvent = await tx.agentEvent.findFirst({
+          where: {
+            workspaceId: pairing.workspaceId,
+            ...(pairing.agentId ? { OR: [{ agentId: null }, { agentId: pairing.agentId }] } : {}),
+          },
+          orderBy: { id: 'desc' },
+          select: { id: true },
+        })
+        const created = await tx.agentConnection.create({ data: {
+          workspaceId: pairing.workspaceId,
+          agentId: pairing.agentId,
+          name: pairing.name,
+          runtimeType: pairing.runtimeType,
+          runtimeVersion: patch.runtimeVersion as string | null | undefined,
+          profileRef: patch.profileRef as string | null | undefined,
+          capabilities: patch.capabilities as any,
+          metadata: patch.metadata as any,
+          tokenPrefix: token.slice(0, 14),
+          tokenHash: hashAgentWorkerToken(token),
+          status: AgentConnectionStatus.ONLINE,
+          lastSeenAt: new Date(),
+        } })
+        await tx.agentEventAck.create({ data: { workspaceId: pairing.workspaceId, connectionId: created.id, lastEventId: latestVisibleEvent?.id ?? null } })
+        return created
+      })
+      await emitAgentEvent({ workspaceId: connection.workspaceId, agentId: connection.agentId, type: 'connection.paired', payload: { connectionId: connection.id, runtimeType: connection.runtimeType } })
+      return { ok: true, token, connection: redactAgentConnection(connection as any) }
+    })
+
+    app.post('/agent-connections/:connectionId/revoke', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      const { connectionId } = request.params as { connectionId: string }
+      const connection = await prisma.agentConnection.findFirst({ where: { id: connectionId, workspaceId: workspace.id, revokedAt: null }, select: { id: true } })
+      if (!connection) return reply.code(404).send({ ok: false, error: 'Connection not found' })
+      await prisma.agentConnection.delete({ where: { id: connection.id } })
+      await emitAgentEvent({ workspaceId: workspace.id, type: 'connection.revoked', payload: { connectionId } })
+      return { ok: true }
+    })
+
+    app.get('/agent-worker/me', async (request) => {
+      const connection = (request as any).agentConnection
+      return { ok: true, connection: redactAgentConnection(connection as any) }
+    })
+
+    app.post('/agent-worker/heartbeat', async (request) => {
+      const connection = (request as any).agentConnection
+      const body = request.body as { runtimeVersion?: string | null; capabilities?: Array<string | null | undefined> | null; metadata?: unknown }
+      const patch = buildAgentConnectionPatch({ runtimeVersion: body?.runtimeVersion, capabilities: body?.capabilities, metadata: body?.metadata })
+      const updated = await prisma.agentConnection.update({ where: { id: connection.id }, data: { ...patch, status: AgentConnectionStatus.ONLINE, lastSeenAt: new Date() } })
+      return { ok: true, connection: redactAgentConnection(updated as any) }
+    })
+
+    app.post('/agent-worker/reconcile-event', async (request, reply) => {
+      const connection = (request as any).agentConnection
+      const body = request.body as { eventId?: string | null; type?: string | null; payload?: { projectId?: string | null; taskId?: string | null; status?: string | null; jobId?: string | null; role?: string | null; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null } | null }
+      const type = body.type?.trim().toLowerCase()
+      if (!type || !['approval.resolved', 'blocker.resolved', 'job.finished'].includes(type)) return reply.code(400).send({ ok: false, error: 'Unsupported reconciliation event type' })
+      const payload = body.payload ?? {}
+      return reconcileWorkflowResolution({ workspaceId: connection.workspaceId, projectId: payload.projectId ?? null, taskId: payload.taskId ?? null, eventId: body.eventId ?? null, type, status: payload.status ?? null, jobId: payload.jobId ?? null, role: payload.role ?? null, workflowRunId: payload.workflowRunId ?? null, workflowStep: payload.workflowStep ?? null, maxSteps: payload.maxSteps ?? null })
+    })
+
+    app.get('/agent-worker/events', async (request) => {
+      const connection = (request as any).agentConnection
+      const query = request.query as { cursor?: string; limit?: string }
+      const ack = await prisma.agentEventAck.findUnique({ where: { connectionId: connection.id }, select: { lastEventId: true } })
+      const cursor = chooseAgentEventCursor({ queryCursor: query.cursor, ackLastEventId: ack?.lastEventId })
+      const where: any = { workspaceId: connection.workspaceId }
+      if (connection.agentId) where.OR = [{ agentId: null }, { agentId: connection.agentId }]
+      if (cursor) where.id = { gt: cursor }
+      const events = await prisma.agentEvent.findMany({ where, orderBy: { id: 'asc' }, take: Math.min(Number(query.limit || 50), 100) })
+      return { ok: true, events }
+    })
+
+    app.get('/agent-worker/events/stream', async (request, reply) => {
+      const connection = (request as any).agentConnection
+      const query = request.query as { cursor?: string }
+      const ack = await prisma.agentEventAck.findUnique({ where: { connectionId: connection.id }, select: { lastEventId: true } })
+      let cursor = chooseAgentEventCursor({ queryCursor: query.cursor, ackLastEventId: ack?.lastEventId })
+      let closed = false
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      })
+      const send = (event: string, data: unknown, id?: string) => {
+        if (closed) return
+        if (id) reply.raw.write(`id: ${id}\n`)
+        reply.raw.write(`event: ${event}\n`)
+        reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+      }
+      const pump = async () => {
+        const where: any = { workspaceId: connection.workspaceId }
+        if (connection.agentId) where.OR = [{ agentId: null }, { agentId: connection.agentId }]
+        if (cursor) where.id = { gt: cursor }
+        const events = await prisma.agentEvent.findMany({ where, orderBy: { id: 'asc' }, take: 50 })
+        for (const event of events) {
+          cursor = event.id
+          send(event.type, event, event.id)
+        }
+      }
+      await pump()
+      send('ping', { ok: true, connectionId: connection.id })
+      const interval = setInterval(() => { void pump().catch((err) => send('error', { error: err instanceof Error ? err.message : 'stream error' })) }, 2000)
+      const timeout = setTimeout(() => {
+        closed = true
+        clearInterval(interval)
+        reply.raw.end()
+      }, 30000)
+      request.raw.on('close', () => {
+        closed = true
+        clearInterval(interval)
+        clearTimeout(timeout)
+      })
+      return reply
+    })
+
+    app.post('/agent-worker/events/ack', async (request) => {
+      const connection = (request as any).agentConnection
+      const body = request.body as { eventId?: string | null }
+      const ack = await prisma.agentEventAck.upsert({ where: { connectionId: connection.id }, update: { lastEventId: body.eventId?.trim() || null }, create: { workspaceId: connection.workspaceId, connectionId: connection.id, lastEventId: body.eventId?.trim() || null } })
+      return { ok: true, ack }
+    })
+
+    app.get('/agent-jobs', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const query = request.query as { status?: string; projectId?: string; taskId?: string; role?: string }
+      const where: any = { workspaceId: workspace.id }
+      if (query.status?.trim()) where.status = query.status.trim().toUpperCase()
+      if (query.projectId?.trim()) where.projectId = query.projectId.trim()
+      if (query.taskId?.trim()) where.taskId = query.taskId.trim()
+      if (query.role?.trim()) where.role = normalizeAgentRole(query.role)
+      return prisma.agentJob.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100, include: { agent: true } })
+    })
+
+    app.post('/agent-jobs', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const account = (request as any).account as { id: string } | undefined
+      const body = request.body as { projectId?: string | null; taskId?: string | null; agentId?: string | null; role?: string; mode?: string; triggerType?: string; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null; payload?: unknown }
+      let role: string
+      try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      if (body.payload !== undefined) assertNoSecretLikeJson(body.payload, 'payload')
+      const projectId = body.projectId?.trim() || null
+      const taskId = body.taskId?.trim() || null
+      if (projectId) {
+        const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id } })
+        if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      }
+      if (taskId) {
+        const task = await prisma.task.findFirst({ where: { id: taskId, project: { workspaceId: workspace.id } } })
+        if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
+      }
+      if (body.agentId) {
+        const agent = await prisma.agentIdentity.findFirst({ where: { id: body.agentId, workspaceId: workspace.id, enabled: true } })
+        if (!agent) return reply.code(404).send({ ok: false, error: 'Agent not found or disabled' })
+      }
+      const job = await prisma.agentJob.create({
+        data: {
+          workspaceId: workspace.id,
+          projectId,
+          taskId,
+          agentId: body.agentId?.trim() || null,
+          createdById: account?.id ?? null,
+          role,
+          mode: body.mode?.trim() || 'task',
+          triggerType: body.triggerType?.trim() || 'manual',
+          workflowRunId: body.workflowRunId?.trim() || null,
+          workflowStep: body.workflowStep ?? null,
+          maxSteps: body.maxSteps ?? null,
+          payload: body.payload === undefined ? undefined : body.payload as any,
+        },
+      })
+      await logActivity({ workspaceId: workspace.id, projectId, taskId, ...actorFromRequest(request), type: 'agent_job.created', summary: `Queued ${role} agent job`, payload: { jobId: job.id, role } })
+      if (projectId && job.mode === 'workflow') {
+        await prisma.projectAutomationConfig.updateMany({
+          where: { workspaceId: workspace.id, projectId, workflowEnabled: true },
+          data: { automationState: 'queued', currentStage: role === 'architect' ? 'ARCHITECTURE' : role === 'reviewer' ? 'REVIEW' : role === 'tester' ? 'TESTING' : role === 'coder' ? 'EXECUTION' : role === 'pm' ? 'INTAKE' : 'EXECUTION', nextRole: role },
+        })
+      }
+      await emitAgentEvent({ workspaceId: workspace.id, agentId: job.agentId, type: 'job.created', payload: { jobId: job.id, projectId, taskId, role, mode: job.mode, workflowRunId: job.workflowRunId, workflowStep: job.workflowStep, maxSteps: job.maxSteps } })
+      return { ok: true, job }
+    })
+
+    app.post('/agent-jobs/:jobId/claim', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { jobId } = request.params as { jobId: string }
+      const body = request.body as { agentId?: string | null }
+      const agentId = body.agentId?.trim() || null
+      if (agentId) {
+        const agent = await prisma.agentIdentity.findFirst({ where: { id: agentId, workspaceId: workspace.id, enabled: true } })
+        if (!agent) return reply.code(404).send({ ok: false, error: 'Agent not found or disabled' })
+      }
+      const claimed = await prisma.$transaction(async (tx) => {
+        const updated = await tx.agentJob.updateMany({ where: { id: jobId, workspaceId: workspace.id, status: AgentJobStatus.QUEUED }, data: { status: AgentJobStatus.CLAIMED, agentId, lockedAt: new Date(), startedAt: new Date() } })
+        if (!updated.count) return null
+        return tx.agentJob.findUnique({ where: { id: jobId }, include: { agent: true } })
+      })
+      if (!claimed) return reply.code(409).send({ ok: false, error: 'Job is not queued or is unavailable' })
+      if (claimed.projectId && claimed.mode === 'workflow') {
+        const targetType = targetStatusTypeForWorkflowJob(claimed.role, claimed.status)
+        if (targetType) await moveTaskForWorkflow({ workspaceId: workspace.id, projectId: claimed.projectId, taskId: claimed.taskId, targetType, reason: 'job_claimed', actor: actorFromRequest(request) })
+        await prisma.projectAutomationConfig.updateMany({
+          where: { workspaceId: workspace.id, projectId: claimed.projectId, workflowEnabled: true },
+          data: { automationState: 'running', currentStage: claimed.role === 'architect' ? 'ARCHITECTURE' : claimed.role === 'reviewer' ? 'REVIEW' : claimed.role === 'tester' ? 'TESTING' : claimed.role === 'coder' ? 'EXECUTION' : claimed.role === 'pm' ? 'INTAKE' : 'EXECUTION', nextRole: claimed.role },
+        })
+      }
+      return { ok: true, job: claimed }
+    })
+
+    app.patch('/agent-jobs/:jobId', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { jobId } = request.params as { jobId: string }
+      const body = request.body as { status?: string; error?: string | null; payload?: unknown }
+      const existing = await prisma.agentJob.findFirst({ where: { id: jobId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Job not found' })
+      const data: any = {}
+      if (body.status) {
+        const status = body.status.trim().toUpperCase() as AgentJobStatus
+        if (!Object.values(AgentJobStatus).includes(status)) return reply.code(400).send({ ok: false, error: 'invalid job status' })
+        data.status = status
+        if (['SUCCEEDED', 'FAILED', 'BLOCKED', 'CANCELLED', 'TIMED_OUT'].includes(status)) data.finishedAt = new Date()
+      }
+      if (body.error !== undefined) data.error = body.error?.trim() || null
+      if (body.payload !== undefined) { assertNoSecretLikeJson(body.payload, 'payload'); data.payload = body.payload as any }
+      const job = await prisma.agentJob.update({ where: { id: jobId }, data })
+      const workflowMoveTarget = job.projectId && job.mode === 'workflow' ? targetStatusTypeForWorkflowJob(job.role, data.status) : null
+      if (workflowMoveTarget) await moveTaskForWorkflow({ workspaceId: workspace.id, projectId: job.projectId, taskId: job.taskId, targetType: workflowMoveTarget, reason: `job_${String(data.status).toLowerCase()}`, actor: actorFromRequest(request) })
+      const finishedStatus = data.status && ['SUCCEEDED', 'FAILED', 'BLOCKED', 'CANCELLED', 'TIMED_OUT'].includes(data.status) ? String(data.status) : null
+      if (finishedStatus && job.projectId && job.mode === 'workflow') {
+        await emitAgentEvent({ workspaceId: workspace.id, agentId: job.agentId, type: 'job.finished', payload: { jobId: job.id, projectId: job.projectId, taskId: job.taskId, role: job.role, mode: job.mode, status: finishedStatus, workflowRunId: job.workflowRunId, workflowStep: job.workflowStep, maxSteps: job.maxSteps } })
+        if (finishedStatus !== 'SUCCEEDED' || job.role !== 'pm') {
+          await reconcileWorkflowResolution({ workspaceId: workspace.id, projectId: job.projectId, taskId: job.taskId, type: 'job.finished', status: finishedStatus, jobId: job.id, role: job.role, workflowRunId: job.workflowRunId, workflowStep: job.workflowStep, maxSteps: job.maxSteps, actor: actorFromRequest(request) })
+        }
+      }
+      return { ok: true, job }
+    })
+
+    app.post('/agent-runs', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const body = request.body as { projectId?: string | null; taskId?: string | null; jobId?: string | null; agentId?: string | null; role?: string; status?: string; triggerType?: string; provider?: string | null; model?: string | null; workflowRunId?: string | null; workflowStep?: number | null; summary?: string | null; logUrl?: string | null; evidenceUrl?: string | null; metadata?: unknown }
+      let role: string
+      try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      if (body.metadata !== undefined) assertNoSecretLikeJson(body.metadata, 'metadata')
+      const status = body.status ? body.status.trim().toUpperCase() as AgentRunStatus : AgentRunStatus.QUEUED
+      if (!Object.values(AgentRunStatus).includes(status)) return reply.code(400).send({ ok: false, error: 'invalid run status' })
+      const run = await prisma.agentRun.create({
+        data: {
+          workspaceId: workspace.id,
+          projectId: body.projectId?.trim() || null,
+          taskId: body.taskId?.trim() || null,
+          jobId: body.jobId?.trim() || null,
+          agentId: body.agentId?.trim() || null,
+          role,
+          status,
+          triggerType: body.triggerType?.trim() || 'manual',
+          provider: body.provider?.trim() || null,
+          model: body.model?.trim() || null,
+          workflowRunId: body.workflowRunId?.trim() || null,
+          workflowStep: body.workflowStep ?? null,
+          startedAt: status === AgentRunStatus.RUNNING ? new Date() : null,
+          summary: body.summary?.trim() || null,
+          logUrl: body.logUrl?.trim() || null,
+          evidenceUrl: body.evidenceUrl?.trim() || null,
+          metadata: body.metadata === undefined ? undefined : body.metadata as any,
+        },
+      })
+      return { ok: true, run }
+    })
+
+    app.patch('/agent-runs/:runId', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { runId } = request.params as { runId: string }
+      const body = request.body as { status?: string; summary?: string | null; error?: string | null; logUrl?: string | null; evidenceUrl?: string | null; metadata?: unknown }
+      const existing = await prisma.agentRun.findFirst({ where: { id: runId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Run not found' })
+      const data: any = {}
+      if (body.status) {
+        const status = body.status.trim().toUpperCase() as AgentRunStatus
+        if (!Object.values(AgentRunStatus).includes(status)) return reply.code(400).send({ ok: false, error: 'invalid run status' })
+        data.status = status
+        if (status === AgentRunStatus.RUNNING && !existing.startedAt) data.startedAt = new Date()
+        if (['SUCCEEDED', 'FAILED', 'BLOCKED', 'CANCELLED', 'TIMED_OUT'].includes(status)) data.finishedAt = new Date()
+      }
+      if (body.summary !== undefined) data.summary = body.summary?.trim() || null
+      if (body.error !== undefined) data.error = body.error?.trim() || null
+      if (body.logUrl !== undefined) data.logUrl = body.logUrl?.trim() || null
+      if (body.evidenceUrl !== undefined) data.evidenceUrl = body.evidenceUrl?.trim() || null
+      if (body.metadata !== undefined) { assertNoSecretLikeJson(body.metadata, 'metadata'); data.metadata = body.metadata as any }
+      const run = await prisma.agentRun.update({ where: { id: runId }, data })
+      return { ok: true, run }
+    })
+
+    app.post('/agent-runs/:runId/heartbeat', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { runId } = request.params as { runId: string }
+      const run = await prisma.agentRun.updateMany({ where: { id: runId, workspaceId: workspace.id }, data: { latestHeartbeatAt: new Date() } })
+      if (!run.count) return reply.code(404).send({ ok: false, error: 'Run not found' })
+      return { ok: true }
+    })
+
+    app.get('/blockers', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const query = request.query as { projectId?: string; taskId?: string; status?: string }
+      const blockers = await prisma.blocker.findMany({
+        where: { workspaceId: workspace.id, projectId: query.projectId || undefined, taskId: query.taskId || undefined, status: query.status ? query.status.trim().toUpperCase() as any : undefined },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      })
+      return blockers
+    })
+
+    app.post('/blockers', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      let payload: ReturnType<typeof buildBlockerPayload>
+      try { payload = buildBlockerPayload(request.body as Record<string, unknown>) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      const blocker = await prisma.blocker.create({ data: { workspaceId: workspace.id, projectId: payload.projectId, taskId: payload.taskId, ownerAgentId: payload.ownerAgentId, type: payload.type, summary: payload.summary, requiredInput: payload.requiredInput } })
+      await moveTaskForWorkflow({ workspaceId: workspace.id, projectId: blocker.projectId, taskId: blocker.taskId, targetType: TaskStatusType.BLOCKED, reason: 'blocker_created', actor: actorFromRequest(request) })
+      await emitAgentEvent({ workspaceId: workspace.id, agentId: payload.ownerAgentId, type: 'blocker.created', payload: { blockerId: blocker.id, projectId: blocker.projectId, taskId: blocker.taskId, type: blocker.type } })
+      await logActivity({ workspaceId: workspace.id, projectId: blocker.projectId, taskId: blocker.taskId, ...actorFromRequest(request), type: 'blocker.created', summary: blocker.summary, payload: { blockerId: blocker.id, type: blocker.type } })
+      return { ok: true, blocker }
+    })
+
+    app.patch('/blockers/:blockerId', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { blockerId } = request.params as { blockerId: string }
+      let patch: ReturnType<typeof buildBlockerResolutionPatch>
+      try { patch = buildBlockerResolutionPatch(request.body as Record<string, unknown>) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      const existing = await prisma.blocker.findFirst({ where: { id: blockerId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Blocker not found' })
+      const blocker = await prisma.blocker.update({ where: { id: blockerId }, data: { status: patch.status, resolvedAt: new Date() } })
+      await emitAgentEvent({ workspaceId: workspace.id, agentId: blocker.ownerAgentId, type: 'blocker.resolved', payload: { blockerId: blocker.id, projectId: blocker.projectId, taskId: blocker.taskId, status: blocker.status } })
+      await logActivity({ workspaceId: workspace.id, projectId: blocker.projectId, taskId: blocker.taskId, ...actorFromRequest(request), type: 'blocker.resolved', summary: `${blocker.status === BlockerStatus.CANCELLED ? 'Cancelled' : 'Resolved'} blocker: ${blocker.summary}`, payload: { blockerId: blocker.id, status: blocker.status } })
+      return { ok: true, blocker }
+    })
+
+    app.get('/approval-requests', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const query = request.query as { projectId?: string; taskId?: string; status?: string }
+      const approvals = await prisma.approvalRequest.findMany({
+        where: { workspaceId: workspace.id, projectId: query.projectId || undefined, taskId: query.taskId || undefined, status: query.status ? query.status.trim().toUpperCase() as any : undefined },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      })
+      return approvals
+    })
+
+    app.post('/approval-requests', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      let payload: ReturnType<typeof buildApprovalRequestPayload>
+      try { payload = buildApprovalRequestPayload(request.body as Record<string, unknown>) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      const approval = await prisma.approvalRequest.create({ data: { workspaceId: workspace.id, projectId: payload.projectId, taskId: payload.taskId, requestedByAgentId: payload.requestedByAgentId, type: payload.type, question: payload.question, options: payload.options as any, recommendation: payload.recommendation } })
+      await emitAgentEvent({ workspaceId: workspace.id, agentId: payload.requestedByAgentId, type: 'approval_request.created', payload: { approvalRequestId: approval.id, projectId: approval.projectId, taskId: approval.taskId, type: approval.type } })
+      await logActivity({ workspaceId: workspace.id, projectId: approval.projectId, taskId: approval.taskId, ...actorFromRequest(request), type: 'approval_request.created', summary: approval.question, payload: { approvalRequestId: approval.id, type: approval.type } })
+      return { ok: true, approvalRequest: approval }
+    })
+
+    app.patch('/approval-requests/:approvalRequestId', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const account = (request as any).account as { id: string } | undefined
+      const { approvalRequestId } = request.params as { approvalRequestId: string }
+      let patch: ReturnType<typeof buildApprovalDecisionPatch>
+      try { patch = buildApprovalDecisionPatch(request.body as Record<string, unknown>) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      const existing = await prisma.approvalRequest.findFirst({ where: { id: approvalRequestId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Approval request not found' })
+      const approval = await prisma.approvalRequest.update({ where: { id: approvalRequestId }, data: { status: patch.status, decisionNote: patch.decisionNote, decidedAt: new Date(), decidedByAccountId: account?.id ?? null } })
+      await emitAgentEvent({ workspaceId: workspace.id, agentId: approval.requestedByAgentId, type: 'approval.resolved', payload: { approvalRequestId: approval.id, projectId: approval.projectId, taskId: approval.taskId, status: approval.status } })
+      await logActivity({ workspaceId: workspace.id, projectId: approval.projectId, taskId: approval.taskId, ...actorFromRequest(request), type: 'approval.resolved', summary: `${approval.status === ApprovalStatus.APPROVED ? 'Approved' : approval.status === ApprovalStatus.REJECTED ? 'Denied' : 'Cancelled'} approval: ${approval.question}`, payload: { approvalRequestId: approval.id, status: approval.status } })
+      return { ok: true, approvalRequest: approval }
+    })
+
     app.get('/workspaces', async (request) => {
       const account = (request as any).account as { id: string } | undefined
       const workspaces = isSuperadmin(request)
@@ -2182,6 +2872,83 @@ const start = async () => {
       if (client._count.projects > 0) return reply.code(400).send({ ok: false, error: 'Client cannot be deleted while projects are still linked to it' })
       await prisma.client.delete({ where: { id: clientId } })
       return { ok: true }
+    })
+
+    app.get('/projects/:projectId/automation', async (request, reply) => {
+      const workspace = (request as any).workspace
+      const { projectId } = request.params as { projectId: string }
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id }, select: { id: true } })
+      if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      const [config, agents, jobs, runs, connections, blockers, approvalRequests] = await Promise.all([
+        prisma.projectAutomationConfig.findUnique({ where: { projectId } }),
+        prisma.agentIdentity.findMany({ where: { workspaceId: workspace.id, enabled: true }, orderBy: [{ role: 'asc' }, { name: 'asc' }] }),
+        prisma.agentJob.findMany({ where: { workspaceId: workspace.id, projectId }, include: { agent: true }, orderBy: { createdAt: 'desc' }, take: 20 }),
+        prisma.agentRun.findMany({ where: { workspaceId: workspace.id, projectId }, include: { agent: true }, orderBy: { createdAt: 'desc' }, take: 20 }),
+        prisma.agentConnection.findMany({ where: { workspaceId: workspace.id, revokedAt: null }, orderBy: { updatedAt: 'desc' }, take: 20 }),
+        prisma.blocker.findMany({ where: { workspaceId: workspace.id, projectId, status: 'OPEN' }, orderBy: { createdAt: 'desc' }, take: 20 }),
+        prisma.approvalRequest.findMany({ where: { workspaceId: workspace.id, projectId, status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 20 }),
+      ])
+      return { config, agents, jobs, runs, connections: connections.map((connection) => redactAgentConnection(connection as any)), blockers, approvalRequests }
+    })
+
+    app.patch('/projects/:projectId/automation', async (request, reply) => {
+      const workspace = (request as any).workspace
+      const { projectId } = request.params as { projectId: string }
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
+      const body = request.body as Parameters<typeof buildProjectAutomationPatch>[0]
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id }, select: { id: true } })
+      if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      let data: Record<string, unknown>
+      try { data = buildProjectAutomationPatch(body) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
+      const agentIds = new Set<string>()
+      if (data.defaultPmAgentId) agentIds.add(String(data.defaultPmAgentId))
+      for (const value of Object.values((data.roleAgents as Record<string, string> | undefined) ?? {})) agentIds.add(value)
+      if (agentIds.size) {
+        const count = await prisma.agentIdentity.count({ where: { id: { in: [...agentIds] }, workspaceId: workspace.id, enabled: true } })
+        if (count !== agentIds.size) return reply.code(404).send({ ok: false, error: 'One or more agents were not found or disabled' })
+      }
+      const config = await prisma.projectAutomationConfig.upsert({
+        where: { projectId },
+        create: { workspaceId: workspace.id, projectId, ...data } as any,
+        update: data as any,
+      })
+      await logActivity({ workspaceId: workspace.id, projectId, ...actorFromRequest(request), type: 'project_automation.updated', summary: 'Updated project automation config', payload: { projectId, workflowEnabled: config.workflowEnabled } })
+      return { ok: true, config }
+    })
+
+    app.post('/projects/:projectId/automation/start-workflow', async (request, reply) => {
+      const workspace = (request as any).workspace
+      const { projectId } = request.params as { projectId: string }
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id }, select: { id: true } })
+      if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      const config = await prisma.projectAutomationConfig.findUnique({ where: { projectId } })
+      if (!config?.workflowEnabled) return reply.code(400).send({ ok: false, error: 'Project automation is not enabled' })
+      const workflowRunId = randomUUID()
+      const payload = buildStartProjectWorkflowJobPayload({ projectId, pmAgentId: config.defaultPmAgentId, workflowRunId })
+      const body = request.body as { maxSteps?: number | null } | undefined
+      if (body?.maxSteps) payload.maxSteps = body.maxSteps
+      const job = await prisma.agentJob.create({
+        data: {
+          workspaceId: workspace.id,
+          projectId,
+          agentId: payload.agentId,
+          createdById: ((request as any).account as { id: string } | undefined)?.id ?? null,
+          role: payload.role,
+          mode: payload.mode,
+          triggerType: payload.triggerType,
+          workflowRunId: payload.workflowRunId,
+          workflowStep: payload.workflowStep,
+          maxSteps: payload.maxSteps,
+          payload: payload.payload as any,
+        },
+        include: { agent: true },
+      })
+      await prisma.projectAutomationConfig.update({ where: { projectId }, data: { automationState: 'queued', currentStage: 'INTAKE', nextRole: 'pm' } })
+      await logActivity({ workspaceId: workspace.id, projectId, ...actorFromRequest(request), type: 'agent_job.created', summary: 'Started PM workflow', payload: { jobId: job.id, workflowRunId } })
+      await emitAgentEvent({ workspaceId: workspace.id, agentId: job.agentId, type: 'job.created', payload: { jobId: job.id, projectId, taskId: null, role: job.role, mode: job.mode, workflowRunId: job.workflowRunId, workflowStep: job.workflowStep, maxSteps: job.maxSteps } })
+      return { ok: true, job, workflowRunId }
     })
 
     app.get('/projects/:projectId', async (request, reply) => {

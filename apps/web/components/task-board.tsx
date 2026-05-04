@@ -6,9 +6,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { DndContext, DragEndEvent, DragOverEvent, PointerSensor, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { BoardCard, BoardColumn } from '@sally/types/src'
+import type { BoardCard, BoardColumn, ProjectAutomationOverview } from '@sally/types/src'
 import { createTask, reorderProjectStatuses, reorderTask } from '../lib/api'
 import { qk } from '../lib/query'
+import { automationBadgeStyle, getTaskAutomationBadge } from '../lib/task-automation'
 import { pill, priorityStars, tagStyle } from './app-shell'
 import { TaskPeopleField } from './task-people-field'
 import { projectInputField, taskTitleText } from '../lib/theme'
@@ -26,7 +27,7 @@ function dueBadge(dueDate: string | null) {
   return { label: due.toLocaleDateString(), bg: '#eef2ff', color: '#3730a3' }
 }
 
-export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses = false }: { columns: BoardColumn[]; taskBaseHref?: string; projectId: string; canReorderStatuses?: boolean }) {
+export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses = false, automationOverview }: { columns: BoardColumn[]; taskBaseHref?: string; projectId: string; canReorderStatuses?: boolean; automationOverview?: ProjectAutomationOverview | null }) {
   const qc = useQueryClient()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -154,9 +155,9 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
     <DndContext sensors={sensors} onDragOver={onDragOver} onDragEnd={(e) => { void onDragEnd(e) }}>
       <SortableContext items={movableColumns.map((column) => column.id)} strategy={verticalListSortingStrategy}>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(board.length, 1)}, minmax(0, 1fr))`, gap: 14 }}>
-          {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} pinned /> : null}
+          {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} pinned /> : null}
           {movableColumns.map((column) => (
-            <BoardColumnView key={column.id} column={column} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} reorderable={canReorderStatuses} />
+            <BoardColumnView key={column.id} column={column} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} reorderable={canReorderStatuses} />
           ))}
         </div>
       </SortableContext>
@@ -164,7 +165,7 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
   )
 }
 
-function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTask, savingFor, reorderable = false, pinned = false }: any) {
+function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTask, savingFor, automationOverview, reorderable = false, pinned = false }: any) {
   const { setNodeRef } = useDroppable({ id: column.id })
   const sortable = useSortable({ id: column.id, disabled: !reorderable })
 
@@ -181,7 +182,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
 
       <SortableContext items={column.cards.map((c: BoardCard) => c.id)} strategy={verticalListSortingStrategy}>
         <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} taskBaseHref={taskBaseHref} projectId={column.projectId} />)}
+          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} taskBaseHref={taskBaseHref} projectId={column.projectId} automationOverview={automationOverview} />)}
         </div>
       </SortableContext>
 
@@ -199,9 +200,11 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
   )
 }
 
-function SortableTaskCard({ card, taskBaseHref, projectId }: { card: BoardCard; taskBaseHref: string; projectId: string }) {
+function SortableTaskCard({ card, taskBaseHref, projectId, automationOverview }: { card: BoardCard; taskBaseHref: string; projectId: string; automationOverview?: ProjectAutomationOverview | null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
   const badge = dueBadge(card.dueDate)
+  const automationBadge = getTaskAutomationBadge(automationOverview, card.id)
+  const automationTone = automationBadge ? automationBadgeStyle(automationBadge.tone) : null
 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, minWidth: 0 }}>
@@ -220,6 +223,7 @@ function SortableTaskCard({ card, taskBaseHref, projectId }: { card: BoardCard; 
         </div>
         {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {automationBadge && automationTone ? <span title={automationBadge.detail || undefined} style={pill(automationTone.background, automationTone.color)}>{automationBadge.label}</span> : null}
           {card.todoProgress ? <span style={pill('#ecfeff', '#155e75')}>Todos {card.todoProgress}</span> : null}
           {badge ? <span style={pill(badge.bg, badge.color)}>{badge.label}</span> : null}
         </div>

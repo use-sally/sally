@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum TaskPriority {
@@ -44,44 +43,139 @@ enum TaskParticipantRole {
   PARTICIPANT
 }
 
+enum PrincipalType {
+  HUMAN
+  AGENT
+}
+
+enum WorkflowStage {
+  INTAKE
+  ARCHITECTURE
+  EXECUTION
+  REVIEW
+  TESTING
+  REWORK
+  APPROVAL_NEEDED
+  BLOCKED
+  DEPLOYMENT
+  DONE
+}
+
+enum AgentJobStatus {
+  QUEUED
+  CLAIMED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  BLOCKED
+  CANCELLED
+  TIMED_OUT
+}
+
+enum AgentRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  BLOCKED
+  CANCELLED
+  TIMED_OUT
+}
+
+enum AgentConnectionStatus {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  REVOKED
+}
+
+enum ApprovalType {
+  LIVE_DEPLOY
+  CREDENTIAL
+  PAYMENT_DATA
+  CUSTOMER_DATA
+  CLIENT_DECISION
+  DESTRUCTIVE_ACTION
+  PUBLISHING
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum BlockerType {
+  CREDENTIAL
+  ACCESS
+  STAGING_FAILURE
+  ARCHITECTURE_CONFLICT
+  TEST_FAILURE
+  CLIENT_DECISION
+  LIVE_APPROVAL
+  DEPENDENCY
+  AMBIGUITY
+  TOOLING_FAILURE
+}
+
+enum BlockerStatus {
+  OPEN
+  RESOLVED
+  CANCELLED
+}
+
 model Workspace {
-  id        String    @id @default(cuid())
-  name      String
-  slug      String    @unique
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  projects     Project[]
-  clients      Client[]
-  users        User[]
-  memberships  WorkspaceMembership[]
-  invites      AccountInvite[]
-  activityLogs ActivityLog[]
-  notifications Notification[]
-  mcpKeys      AccountMcpKey[]
+  id                       String                    @id @default(cuid())
+  name                     String
+  slug                     String                    @unique
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  projects                 Project[]
+  clients                  Client[]
+  users                    User[]
+  memberships              WorkspaceMembership[]
+  invites                  AccountInvite[]
+  activityLogs             ActivityLog[]
+  notifications            Notification[]
+  mcpKeys                  AccountMcpKey[]
+  agentIdentities          AgentIdentity[]
+  agentConnections         AgentConnection[]
+  agentPairingCodes        AgentPairingCode[]
+  agentEvents              AgentEvent[]
+  agentEventAcks           AgentEventAck[]
+  agentJobs                AgentJob[]
+  agentRuns                AgentRun[]
+  approvalRequests         ApprovalRequest[]
+  blockers                 Blocker[]
+  projectAutomationConfigs ProjectAutomationConfig[]
 }
 
 model Account {
-  id          String                 @id @default(cuid())
-  email       String                 @unique
-  name        String?
-  avatarUrl   String?
-  passwordHash String?
-  platformRole PlatformRole          @default(NONE)
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  memberships WorkspaceMembership[]
-  projectMemberships ProjectMembership[]
-  sessions    AccountSession[]
-  apiKeys     AccountApiKey[]
-  mcpKeys     AccountMcpKey[]
-  emailChanges EmailChangeToken[]
-  invites     AccountInvite[]
-  passwordResets PasswordReset[]
-  authoredComments Comment[]
-  sentNotifications Notification[] @relation("NotificationActor")
-  receivedNotifications Notification[] @relation("NotificationRecipient")
+  id                      String                   @id @default(cuid())
+  email                   String                   @unique
+  name                    String?
+  avatarUrl               String?
+  passwordHash            String?
+  platformRole            PlatformRole             @default(NONE)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  memberships             WorkspaceMembership[]
+  projectMemberships      ProjectMembership[]
+  sessions                AccountSession[]
+  apiKeys                 AccountApiKey[]
+  mcpKeys                 AccountMcpKey[]
+  emailChanges            EmailChangeToken[]
+  invites                 AccountInvite[]
+  passwordResets          PasswordReset[]
+  authoredComments        Comment[]
+  sentNotifications       Notification[]           @relation("NotificationActor")
+  receivedNotifications   Notification[]           @relation("NotificationRecipient")
   notificationPreferences NotificationPreference[]
-  commentMentions CommentMention[]
+  commentMentions         CommentMention[]
+  agentIdentity           AgentIdentity?
+  createdAgentJobs        AgentJob[]               @relation("AgentJobCreator")
+  decidedApprovals        ApprovalRequest[]        @relation("ApprovalDecider")
 }
 
 model AccountInvite {
@@ -102,26 +196,26 @@ model AccountInvite {
 }
 
 model PasswordReset {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   accountId String
-  token     String   @unique
-  createdAt DateTime @default(now())
+  token     String    @unique
+  createdAt DateTime  @default(now())
   expiresAt DateTime
   usedAt    DateTime?
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
 }
 
 model EmailChangeToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   accountId String
   newEmail  String
-  token     String   @unique
-  createdAt DateTime @default(now())
+  token     String    @unique
+  createdAt DateTime  @default(now())
   expiresAt DateTime
   usedAt    DateTime?
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
   @@index([newEmail])
@@ -129,7 +223,7 @@ model EmailChangeToken {
 }
 
 model ActivityLog {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   workspaceId String
   projectId   String?
   taskId      String?
@@ -138,10 +232,10 @@ model ActivityLog {
   type        String
   summary     String
   payload     Json?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task        Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
   @@index([projectId, createdAt])
@@ -149,7 +243,7 @@ model ActivityLog {
 }
 
 model Notification {
-  id                 String   @id @default(cuid())
+  id                 String                 @id @default(cuid())
   workspaceId        String
   projectId          String?
   taskId             String?
@@ -160,12 +254,12 @@ model Notification {
   body               String
   data               Json?
   readAt             DateTime?
-  createdAt          DateTime @default(now())
-  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project            Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task               Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  actor              Account? @relation("NotificationActor", fields: [actorAccountId], references: [id], onDelete: SetNull)
-  recipient          Account @relation("NotificationRecipient", fields: [recipientAccountId], references: [id], onDelete: Cascade)
+  createdAt          DateTime               @default(now())
+  workspace          Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project            Project?               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task               Task?                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor              Account?               @relation("NotificationActor", fields: [actorAccountId], references: [id], onDelete: SetNull)
+  recipient          Account                @relation("NotificationRecipient", fields: [recipientAccountId], references: [id], onDelete: Cascade)
   deliveries         NotificationDelivery[]
 
   @@index([recipientAccountId, readAt, createdAt])
@@ -186,15 +280,15 @@ model NotificationPreference {
 }
 
 model NotificationDelivery {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   notificationId String
   channel        String
-  status         String   @default("pending")
-  attempts       Int      @default(0)
+  status         String       @default("pending")
+  attempts       Int          @default(0)
   lastError      String?
   sentAt         DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
   @@index([channel, status, createdAt])
@@ -213,14 +307,14 @@ model CommentMention {
 }
 
 model WorkspaceMembership {
-  id          String         @id @default(cuid())
+  id          String        @id @default(cuid())
   workspaceId String
   accountId   String
-  role        WorkspaceRole  @default(MEMBER)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account     Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account     Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, accountId])
   @@index([accountId])
@@ -241,44 +335,44 @@ model ProjectMembership {
 }
 
 model AccountSession {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   accountId String
-  token     String   @unique
-  createdAt DateTime @default(now())
+  token     String    @unique
+  createdAt DateTime  @default(now())
   expiresAt DateTime
   revokedAt DateTime?
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
   @@index([expiresAt])
 }
 
 model AccountApiKey {
-  id        String   @id @default(cuid())
-  accountId String
-  label     String
-  prefix    String
-  tokenHash String   @unique
-  createdAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  accountId  String
+  label      String
+  prefix     String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
-  revokedAt DateTime?
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  revokedAt  DateTime?
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
   @@index([revokedAt])
 }
 
 model AccountMcpKey {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
   accountId   String
   workspaceId String?
   label       String
   prefix      String
-  tokenHash   String    @unique
-  createdAt   DateTime  @default(now())
+  tokenHash   String     @unique
+  createdAt   DateTime   @default(now())
   lastUsedAt  DateTime?
   revokedAt   DateTime?
-  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account     Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([accountId])
@@ -313,37 +407,42 @@ model User {
 }
 
 model Project {
-  id          String           @id @default(cuid())
-  workspaceId String
-  clientId    String?
-  name        String
-  slug        String
-  description String?
-  taskCounter Int              @default(0)
-  archivedAt  DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client      Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  statuses    TaskStatus[]
-  tasks       Task[]
-  labels      Label[]
-  timesheets  TimesheetEntry[]
-  memberships ProjectMembership[]
-  activityLogs ActivityLog[]
-  notifications Notification[]
-  dependencies   ProjectDependency[] @relation("projectDependencies")
-  dependedOnBy   ProjectDependency[] @relation("projectDependedOnBy")
+  id               String                   @id @default(cuid())
+  workspaceId      String
+  clientId         String?
+  name             String
+  slug             String
+  description      String?
+  taskCounter      Int                      @default(0)
+  archivedAt       DateTime?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  workspace        Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client           Client?                  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  statuses         TaskStatus[]
+  tasks            Task[]
+  labels           Label[]
+  timesheets       TimesheetEntry[]
+  memberships      ProjectMembership[]
+  activityLogs     ActivityLog[]
+  notifications    Notification[]
+  dependencies     ProjectDependency[]      @relation("projectDependencies")
+  dependedOnBy     ProjectDependency[]      @relation("projectDependedOnBy")
+  automationConfig ProjectAutomationConfig?
+  agentJobs        AgentJob[]
+  agentRuns        AgentRun[]
+  approvalRequests ApprovalRequest[]
+  blockers         Blocker[]
 
   @@unique([workspaceId, slug])
 }
 
 model ProjectDependency {
-  projectId    String
-  dependsOnId  String
-  createdAt    DateTime @default(now())
-  project      Project  @relation("projectDependencies", fields: [projectId], references: [id], onDelete: Cascade)
-  dependsOn    Project  @relation("projectDependedOnBy", fields: [dependsOnId], references: [id], onDelete: Cascade)
+  projectId   String
+  dependsOnId String
+  createdAt   DateTime @default(now())
+  project     Project  @relation("projectDependencies", fields: [projectId], references: [id], onDelete: Cascade)
+  dependsOn   Project  @relation("projectDependedOnBy", fields: [dependsOnId], references: [id], onDelete: Cascade)
 
   @@id([projectId, dependsOnId])
 }
@@ -362,53 +461,57 @@ model TaskStatus {
 }
 
 model Task {
-  id            String             @id @default(cuid())
-  projectId      String
-  statusId       String
-  number         Int
-  title          String
-  description    String?
-  priority       TaskPriority      @default(P2)
-  owner          String?
-  assignee       String?
-  dueDate        DateTime?
-  position       Int               @default(0)
-  archivedAt     DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  project        Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  status         TaskStatus        @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  comments       Comment[]
-  labels         TaskLabel[]
-  participants   TaskParticipant[]
-  collaborators  TaskCollaborator[]
-  todos          TaskTodo[]
-  timesheets     TimesheetEntry[]
-  activityLogs   ActivityLog[]
-  notifications  Notification[]
-  dependencies   TaskDependency[]  @relation("taskDependencies")
-  dependedOnBy   TaskDependency[]  @relation("taskDependedOnBy")
+  id               String             @id @default(cuid())
+  projectId        String
+  statusId         String
+  number           Int
+  title            String
+  description      String?
+  priority         TaskPriority       @default(P2)
+  owner            String?
+  assignee         String?
+  dueDate          DateTime?
+  position         Int                @default(0)
+  archivedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status           TaskStatus         @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  comments         Comment[]
+  labels           TaskLabel[]
+  participants     TaskParticipant[]
+  collaborators    TaskCollaborator[]
+  todos            TaskTodo[]
+  timesheets       TimesheetEntry[]
+  activityLogs     ActivityLog[]
+  notifications    Notification[]
+  dependencies     TaskDependency[]   @relation("taskDependencies")
+  dependedOnBy     TaskDependency[]   @relation("taskDependedOnBy")
+  agentJobs        AgentJob[]
+  agentRuns        AgentRun[]
+  approvalRequests ApprovalRequest[]
+  blockers         Blocker[]
 
   @@unique([projectId, number])
 }
 
 model TaskParticipant {
-  taskId       String
-  participant  String
-  role         TaskParticipantRole
-  position     Int
-  createdAt    DateTime @default(now())
-  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId      String
+  participant String
+  role        TaskParticipantRole
+  position    Int
+  createdAt   DateTime            @default(now())
+  task        Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@id([taskId, participant])
   @@unique([taskId, position])
 }
 
 model TaskCollaborator {
-  taskId        String
-  collaborator  String
-  createdAt     DateTime @default(now())
-  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId       String
+  collaborator String
+  createdAt    DateTime @default(now())
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@id([taskId, collaborator])
 }
@@ -424,23 +527,23 @@ model TaskDependency {
 }
 
 model Comment {
-  id              String   @id @default(cuid())
+  id              String           @id @default(cuid())
   taskId          String
   body            String
   author          String
   authorAccountId String?
-  createdAt       DateTime @default(now())
-  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  authorAccount   Account? @relation(fields: [authorAccountId], references: [id], onDelete: SetNull)
+  createdAt       DateTime         @default(now())
+  task            Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorAccount   Account?         @relation(fields: [authorAccountId], references: [id], onDelete: SetNull)
   mentions        CommentMention[]
 }
 
 model Label {
-  id        String     @id @default(cuid())
+  id        String      @id @default(cuid())
   projectId String
   name      String
-  createdAt DateTime   @default(now())
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   taskLinks TaskLabel[]
 
   @@unique([projectId, name])
@@ -449,8 +552,8 @@ model Label {
 model TaskLabel {
   taskId  String
   labelId String
-  task    Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  label   Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([taskId, labelId])
 }
@@ -465,21 +568,266 @@ model TaskTodo {
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 }
 
-model TimesheetEntry {
+model AgentIdentity {
+  id               String             @id @default(cuid())
+  workspaceId      String
+  accountId        String?            @unique
+  name             String
+  role             String
+  principalType    PrincipalType      @default(AGENT)
+  hermesProfile    String?
+  allowedProjects  Json?
+  allowedTaskKinds Json?
+  capabilities     Json?
+  enabled          Boolean            @default(true)
+  lastSeenAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account          Account?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  jobs             AgentJob[]
+  runs             AgentRun[]
+  connections      AgentConnection[]
+  pairingCodes     AgentPairingCode[]
+  approvalRequests ApprovalRequest[]  @relation("ApprovalRequester")
+  blockers         Blocker[]
+
+  @@unique([workspaceId, role, name])
+  @@index([workspaceId, role])
+  @@index([workspaceId, enabled])
+}
+
+model AgentConnection {
+  id             String                @id @default(cuid())
+  workspaceId    String
+  agentId        String?
+  name           String
+  runtimeType    String
+  runtimeVersion String?
+  profileRef     String?
+  status         AgentConnectionStatus @default(OFFLINE)
+  capabilities   Json?
+  tokenPrefix    String
+  tokenHash      String                @unique
+  lastSeenAt     DateTime?
+  revokedAt      DateTime?
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent          AgentIdentity?        @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  eventAcks      AgentEventAck[]
+
+  @@index([workspaceId, status, updatedAt])
+  @@index([workspaceId, agentId])
+  @@index([revokedAt])
+}
+
+model AgentPairingCode {
+  id          String         @id @default(cuid())
+  workspaceId String
+  agentId     String?
+  codeHash    String         @unique
+  name        String
+  runtimeType String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime       @default(now())
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent       AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, expiresAt])
+  @@index([agentId])
+}
+
+model AgentEvent {
   id          String    @id @default(cuid())
+  workspaceId String
+  agentId     String?
+  type        String
+  payload     Json?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, id])
+  @@index([workspaceId, type, createdAt])
+  @@index([agentId, createdAt])
+}
+
+model AgentEventAck {
+  id           String          @id @default(cuid())
+  workspaceId  String
+  connectionId String
+  lastEventId  String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection   AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId])
+  @@index([workspaceId, updatedAt])
+}
+
+model ProjectAutomationConfig {
+  id                         String        @id @default(cuid())
+  workspaceId                String
+  projectId                  String        @unique
+  workflowEnabled            Boolean       @default(false)
+  defaultPmAgentId           String?
+  roleAgents                 Json?
+  baselineTaskIds            Json?
+  requiredCapabilities       Json?
+  liveActionsRequireApproval Boolean       @default(true)
+  stagingFirst               Boolean       @default(true)
+  currentStage               WorkflowStage @default(INTAKE)
+  nextRole                   String?
+  automationState            String        @default("idle")
+  metadata                   Json?
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+  workspace                  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project                    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, workflowEnabled])
+  @@index([currentStage])
+}
+
+model AgentJob {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  projectId     String?
+  taskId        String?
+  agentId       String?
+  createdById   String?
+  role          String
+  mode          String         @default("task")
+  status        AgentJobStatus @default(QUEUED)
+  triggerType   String
+  workflowRunId String?
+  workflowStep  Int?
+  maxSteps      Int?
+  payload       Json?
+  lockedAt      DateTime?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  error         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task          Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent         AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdBy     Account?       @relation("AgentJobCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  runs          AgentRun[]
+
+  @@index([workspaceId, status, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([taskId, createdAt])
+  @@index([workflowRunId, workflowStep])
+}
+
+model AgentRun {
+  id                String         @id @default(cuid())
+  workspaceId       String
+  projectId         String?
+  taskId            String?
+  jobId             String?
+  agentId           String?
+  role              String
+  status            AgentRunStatus @default(QUEUED)
+  triggerType       String
+  provider          String?
+  model             String?
+  workflowRunId     String?
+  workflowStep      Int?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  latestHeartbeatAt DateTime?
+  summary           String?
+  logUrl            String?
+  evidenceUrl       String?
+  error             String?
+  metadata          Json?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task              Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  job               AgentJob?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  agent             AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([taskId, createdAt])
+  @@index([jobId])
+  @@index([workflowRunId, workflowStep])
+}
+
+model ApprovalRequest {
+  id                 String         @id @default(cuid())
+  workspaceId        String
+  projectId          String?
+  taskId             String?
+  requestedByAgentId String?
+  decidedByAccountId String?
+  type               ApprovalType
+  status             ApprovalStatus @default(PENDING)
+  question           String
+  options            Json?
+  recommendation     String?
+  decisionNote       String?
+  decidedAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  workspace          Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project            Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task               Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestedByAgent   AgentIdentity? @relation("ApprovalRequester", fields: [requestedByAgentId], references: [id], onDelete: SetNull)
+  decidedByAccount   Account?       @relation("ApprovalDecider", fields: [decidedByAccountId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([taskId, status, createdAt])
+}
+
+model Blocker {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  projectId     String?
+  taskId        String?
+  ownerAgentId  String?
+  type          BlockerType
+  status        BlockerStatus  @default(OPEN)
+  summary       String
+  requiredInput String?
+  resolvedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task          Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  ownerAgent    AgentIdentity? @relation(fields: [ownerAgentId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([projectId, status, createdAt])
+  @@index([taskId, status, createdAt])
+}
+
+model TimesheetEntry {
+  id          String   @id @default(cuid())
   userId      String
   projectId   String
   taskId      String?
   date        DateTime
   minutes     Int
   description String?
-  billable    Boolean   @default(true)
-  validated   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  billable    Boolean  @default(true)
+  validated   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([projectId, date])
   @@index([taskId, date])

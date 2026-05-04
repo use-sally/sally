@@ -1,10 +1,24 @@
-import type { BoardColumn, Client, ClientDetail, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
+import type { BoardColumn, Client, ClientDetail, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
 const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN
 const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID
 const WORKSPACE_SLUG = process.env.NEXT_PUBLIC_WORKSPACE_SLUG
+
+export function formatApiError(path: string, status: number, detail: string) {
+  const trimmed = detail.trim()
+  if (trimmed) {
+    try {
+      const parsed = JSON.parse(trimmed) as { error?: string; message?: string }
+      const message = parsed.error || parsed.message
+      if (message?.trim()) return message.trim()
+    } catch {}
+    if (/^<!doctype html/i.test(trimmed) || /<html[\s>]/i.test(trimmed)) return `API route ${path} returned an HTML ${status} page. Check NEXT_PUBLIC_API_BASE_URL / proxy routing.`
+    return trimmed.length > 500 ? `${trimmed.slice(0, 500)}…` : trimmed
+  }
+  return `Failed to fetch ${path} (${status})`
+}
 
 async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {}
@@ -24,15 +38,7 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    if (detail) {
-      let message = detail
-      try {
-        const parsed = JSON.parse(detail) as { error?: string; message?: string }
-        message = parsed.error || parsed.message || detail
-      } catch {}
-      throw new Error(message)
-    }
-    throw new Error(`Failed to fetch ${path} (${res.status})`)
+    throw new Error(formatApiError(path, res.status, detail))
   }
   return res.json()
 }
@@ -68,6 +74,13 @@ export function archiveProject(projectId: string, archived = true): Promise<{ ok
 export function deleteProject(projectId: string): Promise<{ ok: boolean }> { return getJson(`/projects/${projectId}`, { method: 'DELETE' }) }
 export function getProjectMembers(projectId: string): Promise<ProjectMember[]> { return getJson(`/projects/${projectId}/members`) }
 export function getProjectActivity(projectId: string): Promise<ProjectActivityEvent[]> { return getJson(`/projects/${projectId}/activity`) }
+export function getProjectAutomation(projectId: string): Promise<ProjectAutomationOverview> { return getJson(`/projects/${projectId}/automation`) }
+export function updateProjectAutomation(projectId: string, payload: { workflowEnabled?: boolean; defaultPmAgentId?: string | null; roleAgents?: Record<string, string | null>; baselineTaskIds?: string[]; requiredCapabilities?: string[]; liveActionsRequireApproval?: boolean; stagingFirst?: boolean; currentStage?: string; nextRole?: string | null; automationState?: string; metadata?: unknown }): Promise<{ ok: boolean; config: ProjectAutomationOverview['config'] }> { return getJson(`/projects/${projectId}/automation`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function startProjectWorkflow(projectId: string, payload?: { maxSteps?: number }): Promise<{ ok: boolean; job: ProjectAutomationOverview['jobs'][number]; workflowRunId: string }> { return getJson(`/projects/${projectId}/automation/start-workflow`, { method: 'POST', body: JSON.stringify(payload || {}) }) }
+export function resolveApprovalRequest(approvalRequestId: string, payload: { status: 'APPROVED' | 'REJECTED' | 'CANCELLED'; decisionNote?: string | null }): Promise<{ ok: boolean; approvalRequest: ProjectAutomationOverview['approvalRequests'][number] }> { return getJson(`/approval-requests/${approvalRequestId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function resolveBlocker(blockerId: string, payload: { status: 'RESOLVED' | 'CANCELLED' }): Promise<{ ok: boolean; blocker: ProjectAutomationOverview['blockers'][number] }> { return getJson(`/blockers/${blockerId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function createAgentPairingCode(payload?: { agentId?: string | null; name?: string | null; runtimeType?: string | null; ttlMinutes?: number | null }): Promise<{ ok: boolean; pairingCode: string; expiresAt: string; pairingId: string }> { return getJson('/agent-connections/pairing-code', { method: 'POST', body: JSON.stringify(payload || {}) }) }
+export function revokeAgentConnection(connectionId: string): Promise<{ ok: boolean }> { return getJson(`/agent-connections/${connectionId}/revoke`, { method: 'POST', body: JSON.stringify({}) }) }
 export function addProjectMember(projectId: string, payload: { accountId?: string; email?: string; name?: string; role?: string }): Promise<{ ok: boolean; membershipId: string; existing?: boolean }> {
   return getJson(`/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(payload) })
 }

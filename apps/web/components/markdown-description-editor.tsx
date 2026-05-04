@@ -120,7 +120,7 @@ export function MarkdownDescriptionEditor({
   useEffect(() => {
     if (!editor) return
     const current = htmlToMarkdown(editor.getHTML())
-    if (value !== current) editor.commands.setContent(markdownToEditorHtml(value || ''), false)
+    if (value !== current) editor.commands.setContent(markdownToEditorHtml(value || ''), { emitUpdate: false })
   }, [editor, value])
 
   if (!mounted) return <div style={editorShellStyle} />
