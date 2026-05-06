@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { apiUrl } from '../lib/api'
@@ -58,13 +58,18 @@ export function MarkdownDescriptionEditor({
   onCommit,
   onImageUpload,
   busy,
+  autoFocus = false,
+  commitOnOutsideClick = false,
 }: {
   value: string
   onCommit: (value: string) => void
   onImageUpload: (file: File) => Promise<{ url: string; alt?: string } | null>
   busy?: boolean
+  autoFocus?: boolean
+  commitOnOutsideClick?: boolean
 }) {
   const [mounted, setMounted] = useState(false)
+  const rootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -76,7 +81,7 @@ export function MarkdownDescriptionEditor({
       Placeholder.configure({ placeholder: 'Use markdown here: # heading 1, ## heading 2, - list item, drag & drop images, paste screenshots, and write structured notes.' }),
     ],
     content: markdownToEditorHtml(value || ''),
-    autofocus: false,
+    autofocus: autoFocus,
     editorProps: {
       attributes: { style: editorContentStyle },
       handleDrop: (_view, event) => {
@@ -118,6 +123,16 @@ export function MarkdownDescriptionEditor({
   }, [editor, busy])
 
   useEffect(() => {
+    if (!editor || !commitOnOutsideClick) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (rootRef.current?.contains(event.target as Node)) return
+      editor.commands.blur()
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [editor, commitOnOutsideClick])
+
+  useEffect(() => {
     if (!editor) return
     const current = htmlToMarkdown(editor.getHTML())
     if (value !== current) editor.commands.setContent(markdownToEditorHtml(value || ''), { emitUpdate: false })
@@ -126,7 +141,7 @@ export function MarkdownDescriptionEditor({
   if (!mounted) return <div style={editorShellStyle} />
 
   return (
-    <div className="markdown-description-editor">
+    <div ref={rootRef} className="markdown-description-editor">
       <style>{`
         .markdown-description-editor .ProseMirror img {
           display: block;

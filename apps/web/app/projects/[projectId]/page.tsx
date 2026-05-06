@@ -14,13 +14,15 @@ import { ProjectTasksTable } from '../../../components/project-tasks-table'
 import { TaskBoard } from '../../../components/task-board'
 import { BottomTaskDrawer } from '../../../components/bottom-task-drawer'
 import { SectionHeaderWithInfo } from '../../../components/info-flag'
-import { addProjectMember, archiveProject, deleteProject, getProjectActivity, getProjectMembers, getWorkspaceMembers, inviteWorkspaceMember, removeProjectMember, updateProject, updateProjectMember } from '../../../lib/api'
+import { MarkdownDescriptionEditor } from '../../../components/markdown-description-editor'
+import { TaskDescriptionRender } from '../../../components/task-description-render'
+import { addProjectMember, archiveProject, deleteProject, getProjectActivity, getProjectMembers, inviteWorkspaceMember, removeProjectMember, updateProject, updateProjectMember, uploadProjectDescriptionImage } from '../../../lib/api'
 import { getWorkspaceId, loadSession } from '../../../lib/auth'
 import { qk, useBoardQuery, useClientsQuery, useProjectAutomationQuery, useProjectQuery } from '../../../lib/query'
 import { projectWorkflowSummary } from '../../../lib/task-automation'
 import { labelText, projectInputField } from '../../../lib/theme'
 import { projectRoleOptions } from '../../../lib/roles'
-import { canAddProjectMember, canChangeProjectClient, canChangeProjectMemberRole, canEditProject, canInviteProjectMember, canManageProjectWorkflow, canRemoveProjectMember } from '../../../lib/permissions'
+import { canChangeProjectClient, canChangeProjectMemberRole, canEditProject, canInviteProjectMember, canManageProjectWorkflow, canRemoveProjectMember } from '../../../lib/permissions'
 
 function formatActivityActor(event: { actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null }) {
   const actor = event.actorName || event.actorEmail || 'System'
@@ -82,6 +84,43 @@ function projectRoleRank(role?: string | null) {
   return role === 'OWNER' ? 2 : 1
 }
 
+async function compressImageForProject(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
+  const imageUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = imageUrl
+    })
+
+    const maxLongSide = 1600
+    const longSide = Math.max(image.width, image.height)
+    const scale = longSide > maxLongSide ? maxLongSide / longSide : 1
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas unavailable')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(image, 0, 0, width, height)
+
+    const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+    const quality = mimeType === 'image/png' ? undefined : 0.82
+    const dataUrl = canvas.toDataURL(mimeType, quality)
+    const base64 = dataUrl.split(',')[1] || ''
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'reference'
+    const ext = mimeType === 'image/png' ? 'png' : 'jpg'
+    return { mimeType, base64, fileName: `${baseName}.${ext}` }
+  } finally {
+    URL.revokeObjectURL(imageUrl)
+  }
+}
+
 function ProjectMemberAvatar({ member, canEditRole, canRemove, onChangeRole, onRemove, roleSaving }: { member: { id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; workspaceRole?: string | null; platformRole?: string | null; locked?: boolean }; canEditRole: boolean; canRemove: boolean; onChangeRole: (membershipId: string, role: string) => void; onRemove: (membershipId: string, memberLabel: string) => void; roleSaving: boolean }) {
   const [open, setOpen] = useState(false)
   const [roleMenuOpen, setRoleMenuOpen] = useState(false)
@@ -101,9 +140,16 @@ function ProjectMemberAvatar({ member, canEditRole, canRemove, onChangeRole, onR
   }, [open])
 
   return (
-    <div ref={rootRef} style={{ position: 'relative' }}>
-      <button type="button" onClick={() => setOpen((value) => !value)} style={memberAvatarButton}>
-        <AssigneeAvatar name={member.name || member.email} avatarUrl={member.avatarUrl} size={32} />
+    <div ref={rootRef} data-project-member-person="true" style={{ position: 'relative' }}>
+      <button
+        type="button"
+        data-project-member-avatar-trigger="true"
+        aria-label={`Open project member details for ${member.name || member.email}`}
+        title={member.name || member.email}
+        onClick={() => setOpen((value) => !value)}
+        style={memberAvatarButton}
+      >
+        <AssigneeAvatar name={member.name || member.email} avatarUrl={member.avatarUrl} size={28} />
       </button>
       {open ? (
         <div style={memberPopover}>
@@ -186,15 +232,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const [projectId, setProjectId] = useState<string>('')
   const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null; details: string[]; createdAt: string }[]>([])
   const [members, setMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; createdAt: string; locked?: boolean; workspaceRole?: string | null; platformRole?: string | null }[]>([])
-  const [workspaceMembers, setWorkspaceMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; role: string }[]>([])
-  const [selectedWorkspaceMemberId, setSelectedWorkspaceMemberId] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
-  const [memberPickerOpen, setMemberPickerOpen] = useState(false)
   const [memberInviteMode, setMemberInviteMode] = useState(false)
   const [memberActionSaving, setMemberActionSaving] = useState(false)
   const [memberActionInfo, setMemberActionInfo] = useState<string | null>(null)
   const [memberActionError, setMemberActionError] = useState<string | null>(null)
   const [clientSaving, setClientSaving] = useState(false)
+  const [clientPickerOpen, setClientPickerOpen] = useState(false)
   const [editingProjectName, setEditingProjectName] = useState(false)
   const [editingProjectDescription, setEditingProjectDescription] = useState(false)
   const [projectNameDraft, setProjectNameDraft] = useState('')
@@ -203,10 +247,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const [projectDangerSaving, setProjectDangerSaving] = useState<'archive' | 'delete' | null>(null)
   const [workflowRefreshNotice, setWorkflowRefreshNotice] = useState<string | null>(null)
   const workflowFingerprintRef = useRef<string | null>(null)
+  const clientPickerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     void params.then((p) => setProjectId(p.projectId))
   }, [params])
+
+  useEffect(() => {
+    if (!clientPickerOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (clientPickerRef.current && !clientPickerRef.current.contains(event.target as Node)) setClientPickerOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [clientPickerOpen])
 
   useEffect(() => {
     if (!projectId) return
@@ -214,23 +268,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 
     const load = async () => {
       try {
-        const workspaceId = getWorkspaceId()
         const requests = [getProjectActivity(projectId), getProjectMembers(projectId)] as const
         const [events, projectMembers] = await Promise.all(requests)
-        const workspace = workspaceId ? await getWorkspaceMembers(workspaceId).catch(() => []) : []
         if (!cancelled) {
           setActivity(events)
           setMembers(projectMembers)
-          setWorkspaceMembers(workspace)
-          const projectMemberIds = new Set(projectMembers.map((member) => member.accountId))
-          const available = workspace.filter((member) => !projectMemberIds.has(member.accountId))
-          setSelectedWorkspaceMemberId((current) => current || available[0]?.accountId || '')
         }
       } catch {
         if (!cancelled) {
           setActivity([])
           setMembers([])
-          setWorkspaceMembers([])
         }
       }
     }
@@ -278,7 +325,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   }, [project?.id, project?.name, project?.description])
   const session = loadSession()
   const taskOptions = project?.recentTasks.map((task) => ({ id: task.id, title: task.title })) ?? []
-  const availableWorkspaceMembers = workspaceMembers.filter((member) => !members.some((projectMember) => projectMember.accountId === member.accountId))
   const currentAccountId = session?.account?.id ?? null
   const currentMember = members.find((member) => member.accountId === currentAccountId)
   const currentWorkspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
@@ -295,7 +341,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const projectEditDecision = canEditProject(permissionViewer, permissionContext)
   const clientChangeDecision = canChangeProjectClient(permissionViewer, permissionContext)
   const workflowDecision = canManageProjectWorkflow(permissionViewer, permissionContext)
-  const addMemberDecision = canAddProjectMember(permissionViewer, permissionContext)
   const inviteMemberDecision = canInviteProjectMember(permissionViewer, permissionContext)
 
   const refreshProjectPage = async () => {
@@ -311,6 +356,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
     if (!project || clientSaving) return
     try {
       setClientSaving(true)
+      setClientPickerOpen(false)
       await updateProject(projectId, {
         name: project.name,
         description: project.description || '',
@@ -337,35 +383,28 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
     }
   }
 
-  const refreshMembers = async () => {
-    const workspaceId = getWorkspaceId()
-    const [projectMembers, workspace] = await Promise.all([
-      getProjectMembers(projectId),
-      workspaceId ? getWorkspaceMembers(workspaceId).catch(() => []) : Promise.resolve([]),
-    ])
-    setMembers(projectMembers)
-    setWorkspaceMembers(workspace)
-    const projectMemberIds = new Set(projectMembers.map((member) => member.accountId))
-    const available = workspace.filter((member) => !projectMemberIds.has(member.accountId))
-    setSelectedWorkspaceMemberId((current) => current && available.some((member) => member.accountId === current) ? current : (available[0]?.accountId || ''))
+  const saveProjectDescription = async (nextDescription: string) => {
+    if (!project || nextDescription === (project.description || '')) return
+    setProjectDescriptionDraft(nextDescription)
+    await saveProjectHeader({ description: nextDescription })
   }
 
-  const handleAddExistingMember = async (accountId = selectedWorkspaceMemberId) => {
-    if (!accountId || memberActionSaving) return
+  const handleProjectDescriptionImageUpload = async (file: File) => {
+    if (!project || !projectEditDecision.allowed) return null
+    setProjectHeaderSaving(true)
     try {
-      setMemberActionSaving(true)
-      setMemberActionError(null)
-      setMemberActionInfo(null)
-      await addProjectMember(projectId, { accountId, role: 'MEMBER' })
-      await refreshMembers()
-      setMemberPickerOpen(false)
-      setSelectedWorkspaceMemberId('')
-      setMemberActionInfo('Project member added.')
-    } catch (err) {
-      setMemberActionError(err instanceof Error ? err.message : 'Failed to add project member')
+      const compressed = await compressImageForProject(file)
+      const uploaded = await uploadProjectDescriptionImage(project.id, compressed)
+      const alt = file.name.replace(/\.[^.]+$/, '') || 'reference'
+      return { url: uploaded.url, alt }
     } finally {
-      setMemberActionSaving(false)
+      setProjectHeaderSaving(false)
     }
+  }
+
+  const refreshMembers = async () => {
+    const projectMembers = await getProjectMembers(projectId)
+    setMembers(projectMembers)
   }
 
   const handleInviteProjectMember = async () => {
@@ -380,7 +419,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
       await refreshMembers()
       setInviteEmail('')
       setMemberInviteMode(false)
-      setMemberPickerOpen(false)
       setMemberActionInfo('Invite sent. User will join the workspace and this project.')
     } catch (err) {
       setMemberActionError(err instanceof Error ? err.message : 'Failed to invite project member')
@@ -485,63 +523,103 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 
               {projectEditDecision.visible ? (
                 editingProjectDescription ? (
-                  <textarea
-                    autoFocus
-                    value={projectDescriptionDraft}
-                    onChange={(event) => setProjectDescriptionDraft(event.target.value)}
-                    onBlur={() => {
-                      setEditingProjectDescription(false)
-                      if (projectDescriptionDraft !== (project.description || '')) void saveProjectHeader({ description: projectDescriptionDraft })
-                    }}
-                    onKeyDown={(event) => {
-                      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                        event.preventDefault()
-                        event.currentTarget.blur()
-                      }
-                      if (event.key === 'Escape') {
-                        setProjectDescriptionDraft(project.description || '')
+                  <div data-project-description-editor="true" style={{ marginTop: 8 }}>
+                    <MarkdownDescriptionEditor
+                      autoFocus={true}
+                      commitOnOutsideClick={true}
+                      value={projectDescriptionDraft}
+                      onCommit={(nextValue) => {
+                        if (!projectEditDecision.allowed) return
                         setEditingProjectDescription(false)
-                      }
-                    }}
-                    disabled={projectHeaderSaving}
-                    style={projectHeaderDescriptionInput}
-                  />
+                        void saveProjectDescription(nextValue)
+                      }}
+                      onImageUpload={(file) => projectEditDecision.allowed ? handleProjectDescriptionImageUpload(file) : Promise.resolve(null)}
+                      busy={projectHeaderSaving}
+                    />
+                    {projectHeaderSaving ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>Saving…</div> : null}
+                  </div>
                 ) : (
-                  <button type="button" onClick={() => setEditingProjectDescription(true)} style={projectHeaderDescriptionButton}>{project.description || 'Project overview and recent work.'}</button>
+                  <button
+                    type="button"
+                    data-project-description-preview="true"
+                    onClick={() => {
+                      setProjectDescriptionDraft(project.description || '')
+                      setEditingProjectDescription(true)
+                    }}
+                    style={projectHeaderDescriptionButton}
+                    title="Click to edit description"
+                  >
+                    {project.description ? <TaskDescriptionRender description={project.description || ''} /> : 'Project overview and recent work.'}
+                  </button>
                 )
               ) : (
-                <div style={projectHeaderDescriptionText}>{project.description || 'Project overview and recent work.'}</div>
+                <div style={projectHeaderDescriptionText}>{project.description ? <TaskDescriptionRender description={project.description || ''} /> : 'Project overview and recent work.'}</div>
               )}
             </div>
 
-            <div style={projectHeaderMetaGrid}>
-              <div style={{ ...panel, ...headerMetaCard, display: 'grid', alignContent: 'start', gap: 8 }}>
+            <div data-project-meta-stack="true" style={{ display: 'grid', gap: 14, alignContent: 'start', justifyItems: 'end', minWidth: 0 }}>
+              <section data-project-client-section="true" style={{ display: 'grid', gap: 6, justifyItems: 'end', textAlign: 'right', minWidth: 0 }}>
                 <div style={labelText}>Client</div>
-                {!clientChangeDecision.visible ? (
-                  <div style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
-                ) : archivedParam ? (
-                  <div style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
+                {!clientChangeDecision.visible || archivedParam ? (
+                  <div data-project-client-person="true" style={{ position: 'relative', width: 'fit-content' }}>
+                    <button
+                      type="button"
+                      data-project-client-avatar-trigger="true"
+                      aria-label={`Project client: ${project.client ? project.client.name : 'No client / internal'}`}
+                      title={project.client ? project.client.name : 'No client / internal'}
+                      style={clientAvatarButton}
+                      disabled
+                    >
+                      <span style={clientInitialAvatar}>{project.client ? project.client.name.slice(0, 1).toUpperCase() : '–'}</span>
+                    </button>
+                  </div>
                 ) : (
-                  <select
-                    value={project.client?.id || ''}
-                    onChange={(event) => void handleClientChange(event.target.value)}
-                    disabled={clientSaving || !clientChangeDecision.allowed}
-                    style={projectInputField}
-                  >
-                    <option value="">No client / internal</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>{client.name}</option>
-                    ))}
-                  </select>
+                  <div ref={clientPickerRef} data-project-client-picker="true" style={{ position: 'relative', width: 'fit-content', maxWidth: '100%' }}>
+                    <button
+                      type="button"
+                      data-project-client-person="true"
+                      data-project-client-avatar-trigger="true"
+                      aria-label={`Choose project client. Current client: ${project.client ? project.client.name : 'No client / internal'}`}
+                      title={project.client ? project.client.name : 'No client / internal'}
+                      onClick={() => setClientPickerOpen((value) => !value)}
+                      disabled={clientSaving || !clientChangeDecision.allowed}
+                      style={clientAvatarButton}
+                    >
+                      <span style={clientInitialAvatar}>{project.client ? project.client.name.slice(0, 1).toUpperCase() : '–'}</span>
+                    </button>
+                    {clientPickerOpen && clientChangeDecision.allowed ? (
+                      <div style={clientPickerMenu}>
+                        <div style={{ padding: '5px 8px 7px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Client</div>
+                        <button
+                          type="button"
+                          onClick={() => void handleClientChange('')}
+                          disabled={clientSaving || !project.client}
+                          style={{ ...clientPickerOption, fontWeight: project.client ? 650 : 800 }}
+                        >
+                          <span style={clientOptionInitial}>–</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>No client / internal</span>
+                        </button>
+                        {clients.map((client) => (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => void handleClientChange(client.id)}
+                            disabled={clientSaving || project.client?.id === client.id}
+                            style={{ ...clientPickerOption, fontWeight: project.client?.id === client.id ? 800 : 650 }}
+                          >
+                            <span style={clientOptionInitial}>{client.name.slice(0, 1).toUpperCase()}</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{client.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 )}
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <span style={project.client ? linkedText : unlinkedText}>{project.client ? 'Linked' : 'Unlinked'}</span>
-                </div>
-              </div>
+              </section>
 
-              <div style={{ ...panel, ...headerMetaCard, display: 'grid', alignContent: 'start', gap: 8 }}>
+              <section data-project-members-section="true" style={{ display: 'grid', gap: 8, justifyItems: 'end', textAlign: 'right', minWidth: 0 }}>
                 <div style={labelText}>Project members</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div data-project-members-list="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
                   {members.length ? members.map((member) => {
                     const roleDecision = canChangeProjectMemberRole(permissionViewer, member, permissionContext)
                     const removeDecision = canRemoveProjectMember(permissionViewer, member, permissionContext)
@@ -556,10 +634,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                         roleSaving={memberActionSaving}
                       />
                     )
-                  }) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                  {addMemberDecision.visible || inviteMemberDecision.visible ? (
+                  }) : <span style={{ color: 'var(--text-muted)' }}>No members</span>}
+                  {inviteMemberDecision.visible ? (
                     <div style={{ position: 'relative' }}>
-                      {memberInviteMode && inviteMemberDecision.visible ? (
+                      {memberInviteMode ? (
                         <input
                           autoFocus
                           value={inviteEmail}
@@ -573,61 +651,54 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                             if (event.key === 'Escape') {
                               setInviteEmail('')
                               setMemberInviteMode(false)
-                              setMemberPickerOpen(false)
                             }
                           }}
-                          placeholder="Invite by email"
+                          placeholder="add email address to invite"
                           style={memberAddInput}
                         />
                       ) : (
-                        <button type="button" onClick={() => setMemberPickerOpen((value) => !value)} style={memberAddButton}>Add member</button>
+                        <button
+                          type="button"
+                          data-project-member-add-trigger="true"
+                          aria-label="Add project member by email"
+                          title="Add project member by email"
+                          onClick={() => setMemberInviteMode(true)}
+                          disabled={memberActionSaving || !inviteMemberDecision.allowed}
+                          style={memberAddButton}
+                        >+</button>
                       )}
-                      {memberPickerOpen && !memberInviteMode && (addMemberDecision.visible || inviteMemberDecision.visible) ? (
-                        <div style={memberAddMenu}>
-                          {addMemberDecision.visible ? availableWorkspaceMembers.map((member) => (
-                            <button
-                              key={member.accountId}
-                              type="button"
-                              onClick={() => {
-                                setSelectedWorkspaceMemberId(member.accountId)
-                                void handleAddExistingMember(member.accountId)
-                              }}
-                              disabled={memberActionSaving}
-                              style={memberAddOption}
-                            >
-                              {member.name || member.email}
-                            </button>
-                          )) : null}
-                          {inviteMemberDecision.visible ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMemberInviteMode(true)
-                                setMemberPickerOpen(false)
-                              }}
-                              style={memberAddOption}
-                            >
-                              Invite by email
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
                 </div>
                 {memberActionInfo ? <div style={{ color: '#34d399', fontSize: 12 }}>{memberActionInfo}</div> : null}
                 {memberActionError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{memberActionError}</div> : null}
-              </div>
+              </section>
+
+              {projectEditDecision.visible ? (
+                <div data-project-danger-actions="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap', width: '100%' }}>
+                  <button onClick={() => void handleArchiveProject()} disabled={projectDangerSaving !== null} style={archiveHeaderButton}>{projectDangerSaving === 'archive' ? 'Archiving…' : 'Archive'}</button>
+                  <button onClick={() => void handleDeleteProject()} disabled={projectDangerSaving !== null} style={deleteHeaderButton}>{projectDangerSaving === 'delete' ? 'Deleting…' : 'Delete'}</button>
+                </div>
+              ) : null}
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div data-project-island-toolbar="true" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
             <ProjectTabs projectId={projectId} current={currentView} />
-            {projectEditDecision.visible ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <button onClick={() => void handleArchiveProject()} disabled={projectDangerSaving !== null} style={archiveHeaderButton}>{projectDangerSaving === 'archive' ? 'Archiving…' : 'Archive'}</button>
-                <button onClick={() => void handleDeleteProject()} disabled={projectDangerSaving !== null} style={deleteHeaderButton}>{projectDangerSaving === 'delete' ? 'Deleting…' : 'Delete'}</button>
-              </div>
-            ) : null}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {workflowDecision.visible ? (
+                <div data-project-workflow-toolbar="true" style={{ display: 'grid', gap: 6, justifyItems: 'end', minWidth: 0 }}>
+                  <ProjectAutomationControls projectId={projectId} canManage={workflowDecision.allowed} compact />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>Listening for agent changes</span>
+                    <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>{workflowSummary.phase}</span>
+                    {workflowSummary.activeLabel ? <span style={pill('#dbeafe', '#1d4ed8')}>{workflowSummary.activeLabel}</span> : null}
+                    {workflowSummary.pendingApprovals ? <span style={pill('#ffedd5', '#9a3412')}>{workflowSummary.pendingApprovals} approval</span> : null}
+                    {workflowSummary.openBlockers ? <span style={pill('#fee2e2', '#991b1b')}>{workflowSummary.openBlockers} blocker</span> : null}
+                    {workflowRefreshNotice ? <span role="status" aria-live="polite" style={pill('#dcfce7', '#166534')}>{workflowRefreshNotice}</span> : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : projectId ? (
@@ -690,23 +761,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
             ) : (
               <>
                 <div style={panel}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-                    <div>
-                      <div style={{ fontWeight: 750 }}>Project workflow</div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3 }}>Project-level automation status. Task-level automation is shown on the cards below.</div>
-                    </div>
-                    <div style={{ display: 'grid', gap: 8, justifyItems: 'end', minWidth: 0 }}>
-                      <ProjectAutomationControls projectId={projectId} canManage={workflowDecision.allowed} compact />
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>Listening for agent changes</span>
-                        <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>{workflowSummary.phase}</span>
-                        {workflowSummary.activeLabel ? <span style={pill('#dbeafe', '#1d4ed8')}>{workflowSummary.activeLabel}</span> : null}
-                        {workflowSummary.pendingApprovals ? <span style={pill('#ffedd5', '#9a3412')}>{workflowSummary.pendingApprovals} approval</span> : null}
-                        {workflowSummary.openBlockers ? <span style={pill('#fee2e2', '#991b1b')}>{workflowSummary.openBlockers} blocker</span> : null}
-                        {workflowRefreshNotice ? <span role="status" aria-live="polite" style={pill('#dcfce7', '#166534')}>{workflowRefreshNotice}</span> : null}
-                      </div>
-                    </div>
-                  </div>
                   {currentView === 'board' ? (
                     boardError ? <div style={{ color: 'var(--danger-text)' }}>{boardError instanceof Error ? boardError.message : 'Failed to load board'}</div> :
                     boardColumns.length ? <TaskBoard columns={boardColumns} taskBaseHref={`/projects/${projectId}`} projectId={projectId} canReorderStatuses={workflowDecision.allowed} canManageStatuses={workflowDecision.allowed} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>
@@ -741,35 +795,33 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
           </div>
         </>
       ) : <div style={{ color: 'var(--text-muted)' }}>Loading project…</div>}
-      {currentView === 'board' && taskId && projectId ? <BottomTaskDrawer taskId={taskId} closeHref={`/projects/${projectId}?view=board`} projectId={projectId} /> : null}
+      {taskId && projectId ? <BottomTaskDrawer taskId={taskId} projectId={projectId} /> : null}
 
     </AppShell>
   )
 }
 
 const summaryCardPanel: React.CSSProperties = { minHeight: 120, height: '100%' }
-const projectHeaderGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 16, alignItems: 'start', minWidth: 0 }
-const projectHeaderMetaGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 12, minWidth: 0 }
-const headerMetaCard: React.CSSProperties = { minHeight: 96, padding: 14 }
-const linkedText: React.CSSProperties = { color: '#34d399', fontSize: 14, fontWeight: 400 }
-const unlinkedText: React.CSSProperties = { color: 'var(--danger-text)', fontSize: 14, fontWeight: 400 }
+const projectHeaderGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(220px, 280px)', gap: 16, alignItems: 'start', minWidth: 0 }
 const smallActionBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 12px', fontWeight: 700, whiteSpace: 'nowrap' }
-const memberAvatarButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 999 }
-const memberPopover: React.CSSProperties = { position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 20, minWidth: 220, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', boxShadow: 'var(--panel-shadow)' }
+const memberAvatarButton: React.CSSProperties = { padding: 2, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', cursor: 'pointer', borderRadius: 999, display: 'inline-grid', placeItems: 'center', width: 34, height: 34 }
+const clientAvatarButton: React.CSSProperties = { ...memberAvatarButton }
+const clientInitialAvatar: React.CSSProperties = { width: 28, height: 28, borderRadius: 999, display: 'grid', placeItems: 'center', background: 'var(--panel-bg)', border: '1px solid var(--panel-border)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 800 }
+const clientPickerMenu: React.CSSProperties = { position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 240, maxWidth: 'min(320px, calc(100vw - 32px))', display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', textAlign: 'left' }
+const clientPickerOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '7px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }
+const clientOptionInitial: React.CSSProperties = { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center', flex: '0 0 auto', background: 'var(--form-bg)', border: '1px solid var(--panel-border)', color: 'var(--text-secondary)', fontSize: 10, fontWeight: 800 }
+const memberPopover: React.CSSProperties = { position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 20, minWidth: 220, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', boxShadow: 'var(--panel-shadow)', textAlign: 'left' }
 const memberRoleTrigger: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', lineHeight: 1.2 }
 const memberRoleStatic: React.CSSProperties = { marginTop: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2 }
 const memberRoleMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 140, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
 const memberRoleOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12 }
-const memberAddButton: React.CSSProperties = { ...projectInputField, width: 'auto', padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`, background: 'var(--form-bg)', cursor: 'pointer' }
-const memberAddInput: React.CSSProperties = { ...projectInputField, width: 180, padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
-const memberAddMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 200, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
-const memberAddOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '7px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberAddButton: React.CSSProperties = { width: 34, height: 34, padding: 0, border: '1px solid var(--panel-border)', borderRadius: 999, background: 'var(--form-bg)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-grid', placeItems: 'center', fontSize: 20, lineHeight: 1, fontWeight: 700 }
+const memberAddInput: React.CSSProperties = { ...projectInputField, width: 220, padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
 const memberRemoveText: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 12, cursor: 'pointer', textAlign: 'left', lineHeight: 1.2 }
 const projectHeaderNameText: React.CSSProperties = { fontSize: 30, fontWeight: 750, color: 'var(--text-primary)', lineHeight: 1.1 }
 const projectHeaderNameButton: React.CSSProperties = { ...projectHeaderNameText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
 const projectHeaderNameInput: React.CSSProperties = { ...projectInputField, fontSize: 30, fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
 const projectHeaderDescriptionText: React.CSSProperties = { marginTop: 8, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.45 }
-const projectHeaderDescriptionButton: React.CSSProperties = { ...projectHeaderDescriptionText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
-const projectHeaderDescriptionInput: React.CSSProperties = { ...projectInputField, marginTop: 8, minHeight: 96, resize: 'vertical', color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.45 }
+const projectHeaderDescriptionButton: React.CSSProperties = { ...projectHeaderDescriptionText, display: 'block', width: '100%', maxHeight: 88, overflow: 'hidden', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
 const archiveHeaderButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }
 const deleteHeaderButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 13, cursor: 'pointer' }

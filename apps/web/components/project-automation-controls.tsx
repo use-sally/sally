@@ -1,12 +1,53 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createAgentPairingCode, revokeAgentConnection, startProjectWorkflow, updateProjectAutomation } from '../lib/api'
 import { buildHermesNpxConnectCommand, copyHermesConnectCommandToClipboard } from '../lib/project-automation-display'
 import { qk, useProjectAutomationQuery } from '../lib/query'
 import { pill } from './app-shell'
+
+type AutomationToast = { kind: 'message'; text: string }
+type AgentConnectorModalState = { pairingCode: string; pairingCommand: string; copied: boolean; expiresAt: string }
+
+type WorkflowControlState = { label: string; active: boolean }
+
+function hasRunningWorkflowWork({ jobs, runs }: { jobs: any[]; runs: any[] }) {
+  return jobs.some((job) => job.status === 'QUEUED' || job.status === 'CLAIMED' || job.status === 'RUNNING') || runs.some((run) => run.status === 'QUEUED' || run.status === 'RUNNING')
+}
+
+function workflowModeLabel(role: string | null | undefined) {
+  const normalized = role?.toLowerCase()
+  if (normalized === 'pm') return 'Planning'
+  if (normalized === 'architect') return 'Designing'
+  if (normalized === 'coder') return 'Building'
+  if (normalized === 'reviewer') return 'Reviewing'
+  if (normalized === 'tester') return 'Testing'
+  if (normalized === 'infra') return 'Deploying'
+  return normalized || 'Workflow'
+}
+
+function getWorkflowControlState({ jobs, runs, blockers, approvalRequests, activeConnection, workflowEnabled, starting }: { jobs: any[]; runs: any[]; blockers: any[]; approvalRequests: any[]; activeConnection: any; workflowEnabled: boolean; starting: boolean }): WorkflowControlState {
+  if (starting) return { label: 'Starting workflow…', active: true }
+  if (!activeConnection) return { label: 'Connect agent first', active: false }
+  if (approvalRequests.some((approval) => approval.status === 'PENDING')) return { label: 'Waiting for approval', active: true }
+  if (blockers.some((blocker) => blocker.status === 'OPEN')) return { label: 'Waiting on blocker', active: true }
+
+  const activeJob = jobs.find((job) => job.status === 'RUNNING' || job.status === 'CLAIMED')
+  if (activeJob) return { label: `Running: ${workflowModeLabel(activeJob.role)}`, active: true }
+
+  const activeRun = runs.find((run) => run.status === 'RUNNING' || run.status === 'CLAIMED')
+  if (activeRun) return { label: `Running: ${workflowModeLabel(activeRun.role)}`, active: true }
+
+  const queuedJob = jobs.find((job) => job.status === 'QUEUED')
+  if (queuedJob) return { label: `Queued: ${workflowModeLabel(queuedJob.role)}`, active: true }
+
+  const latestFailed = jobs.find((job) => job.status === 'FAILED' || job.status === 'TIMED_OUT')
+  if (latestFailed) return { label: 'Last workflow failed', active: false }
+
+  return { label: workflowEnabled ? 'Ready: workflow enabled' : 'Ready to plan', active: workflowEnabled }
+}
 
 function formatTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString() : '—'
@@ -17,10 +58,11 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   const { data } = useProjectAutomationQuery(projectId)
   const [saving, setSaving] = useState(false)
   const [starting, setStarting] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [toast, setToast] = useState<AutomationToast | null>(null)
+  const [connectorModal, setConnectorModal] = useState<AgentConnectorModalState | null>(null)
+  const [disconnectModalOpen, setDisconnectModalOpen] = useState(false)
+  const [agentPrerequisiteHighlight, setAgentPrerequisiteHighlight] = useState(false)
   const [pairingCode, setPairingCode] = useState<{ code: string; expiresAt: string } | null>(null)
-  const [connectionInstructionsOpen, setConnectionInstructionsOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const config = data?.config ?? null
@@ -28,49 +70,50 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   const activeConnection = connections[0] ?? null
   const connectionToggleOn = Boolean(activeConnection) || Boolean(pairingCode)
   const workflowEnabled = config?.workflowEnabled ?? false
-  const pairingCommand = pairingCode ? buildHermesNpxConnectCommand({
-    pairingCode: pairingCode.code,
-    apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || undefined,
-    workspaceId: process.env.NEXT_PUBLIC_WORKSPACE_ID || undefined,
-    workspaceSlug: process.env.NEXT_PUBLIC_WORKSPACE_SLUG || undefined,
-  }) : null
+  const jobs = data?.jobs ?? []
+  const runs = data?.runs ?? []
+  const blockers = data?.blockers ?? []
+  const approvalRequests = data?.approvalRequests ?? []
+  const workflowControl = getWorkflowControlState({ jobs, runs, blockers, approvalRequests, activeConnection, workflowEnabled, starting })
+  const hasActiveWorkflowWork = hasRunningWorkflowWork({ jobs, runs })
+
+  useEffect(() => {
+    if (activeConnection && connectorModal) {
+      setConnectorModal(null)
+      setPairingCode(null)
+    }
+  }, [activeConnection, connectorModal])
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: qk.projectAutomation(projectId) })
   }
 
-  const showToast = (text: string) => {
-    setToastMessage(text)
-    if (typeof window !== 'undefined') {
-      window.setTimeout(() => setToastMessage(null), 3500)
-    }
-  }
-
-  const handleAutomationToggle = async () => {
-    if (!canManage || saving) return
-    setSaving(true)
-    setMessage(null)
-    setErrorMessage(null)
-    try {
-      await updateProjectAutomation(projectId, { workflowEnabled: !workflowEnabled })
-      await refresh()
-      setMessage(!workflowEnabled ? 'Automation enabled.' : 'Automation disabled.')
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update automation')
-    } finally {
-      setSaving(false)
+  const showToast = (nextToast: AutomationToast) => {
+    setToast(nextToast)
+    if (nextToast.kind === 'message' && typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        setToast(null)
+        setAgentPrerequisiteHighlight(false)
+      }, 3500)
     }
   }
 
   const handleStartWorkflow = async () => {
-    if (!canManage || starting || !workflowEnabled) return
+    if (!canManage || saving || starting) return
+    if (!activeConnection) {
+      showToast({ kind: 'message', text: 'Connect agent first.' })
+      setAgentPrerequisiteHighlight(true)
+      return
+    }
     setStarting(true)
-    setMessage(null)
     setErrorMessage(null)
     try {
+      if (!workflowEnabled) {
+        await updateProjectAutomation(projectId, { workflowEnabled: true })
+      }
       const result = await startProjectWorkflow(projectId)
       await refresh()
-      setMessage(`Queued audit/planning job ${result.job.id.slice(0, 8)}. Sally will create or update visible tasks before execution.`)
+      showToast({ kind: 'message', text: `Queued audit/planning job ${result.job.id.slice(0, 8)}. Sally will create or update visible tasks before execution.` })
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to start workflow')
     } finally {
@@ -81,9 +124,7 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   const handleCreatePairingCode = async () => {
     if (!canManage || saving) return
     setSaving(true)
-    setMessage(null)
     setPairingCode(null)
-    setConnectionInstructionsOpen(true)
     setErrorMessage(null)
     try {
       const result = await createAgentPairingCode({ name: 'Connected local worker', runtimeType: 'hermes', ttlMinutes: 10 })
@@ -95,12 +136,34 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
       })
       const copied = await copyHermesConnectCommandToClipboard(command, typeof navigator === 'undefined' ? null : navigator.clipboard)
       setPairingCode({ code: result.pairingCode, expiresAt: result.expiresAt })
-      setMessage(copied
-        ? 'Pairing code created. Run the copied connector command on the machine running the agent.'
-        : 'Pairing code created. Copy the connector command below and run it on the machine running the agent.')
-      showToast(copied ? 'Connector command copied to clipboard.' : 'Pairing code created. Copy the connector command below.')
+      setConnectorModal({
+        pairingCode: result.pairingCode,
+        pairingCommand: command,
+        copied,
+        expiresAt: result.expiresAt,
+      })
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to create pairing code')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDisconnectConfirmed = async () => {
+    if (!canManage || saving || !activeConnection) return
+    setSaving(true)
+    setErrorMessage(null)
+    try {
+      const result = await revokeAgentConnection(activeConnection.id, { clearQueue: true })
+      setDisconnectModalOpen(false)
+      setPairingCode(null)
+      setConnectorModal(null)
+      setToast(null)
+      await refresh()
+      const cleared = (result.cancelledJobs ?? 0) + (result.cancelledRuns ?? 0)
+      showToast({ kind: 'message', text: cleared > 0 ? `Agent disconnected. Cleared ${cleared} queued or running workflow item${cleared === 1 ? '' : 's'}.` : 'Agent disconnected. Workflow queue is clear.' })
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to revoke connection')
     } finally {
       setSaving(false)
     }
@@ -109,72 +172,101 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   const handleRevokeConnection = async () => {
     if (!canManage || saving) return
     if (!activeConnection) {
-      if (pairingCode || connectionInstructionsOpen) {
+      if (pairingCode) {
         setPairingCode(null)
-        setConnectionInstructionsOpen(false)
-        setMessage(null)
+        setConnectorModal(null)
+        setToast(null)
         return
       }
       await handleCreatePairingCode()
       return
     }
 
-    setSaving(true)
-    setErrorMessage(null)
-    try {
-      await revokeAgentConnection(activeConnection.id)
-      setPairingCode(null)
-      setConnectionInstructionsOpen(false)
-      await refresh()
-      setMessage('Agent connection revoked.')
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to revoke connection')
-    } finally {
-      setSaving(false)
-    }
+    setDisconnectModalOpen(true)
   }
 
   return (
     <div style={{ display: 'grid', gap: compact ? 6 : 8, justifyItems: compact ? 'end' : 'stretch', minWidth: 0 }}>
-      {toastMessage ? <div role="status" aria-live="polite" style={toastStyle}>{toastMessage}</div> : null}
+      {toast ? <AutomationToastView toast={toast} /> : null}
+      {connectorModal ? <AgentConnectorModal modal={connectorModal} onClose={() => setConnectorModal(null)} /> : null}
+      {disconnectModalOpen && activeConnection ? <AgentDisconnectModal hasActiveWorkflowWork={hasActiveWorkflowWork} saving={saving} onCancel={() => setDisconnectModalOpen(false)} onConfirm={() => void handleDisconnectConfirmed()} /> : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: compact ? 'flex-end' : 'flex-start', alignItems: 'center' }}>
-        <button type="button" role="switch" aria-checked={workflowEnabled} disabled={!canManage || saving} onClick={() => void handleAutomationToggle()} style={toggleButton(workflowEnabled)}>
-          <span style={toggleKnob(workflowEnabled)} />
-          <span>{workflowEnabled ? 'Automation enabled' : 'Automation disabled'}</span>
+        <button type="button" role="switch" aria-checked={connectionToggleOn} disabled={!canManage || saving} onClick={() => void handleRevokeConnection()} style={automationIslandControlStyle(connectionToggleOn, agentPrerequisiteHighlight)}>
+          {connectionToggleOn ? 'Agent connected' : 'Agent disconnected'}
         </button>
-        <button type="button" role="switch" aria-checked={connectionToggleOn} disabled={!canManage || saving} onClick={() => void handleRevokeConnection()} style={toggleButton(connectionToggleOn)}>
-          <span style={toggleKnob(connectionToggleOn)} />
-          <span>{connectionToggleOn ? 'Agent connected' : 'Agent disconnected'}</span>
-        </button>
-        <button type="button" disabled={!canManage || starting || !workflowEnabled} onClick={() => void handleStartWorkflow()} style={primaryButton(true)}>{starting ? 'Starting…' : 'Plan & start workflow'}</button>
+        <button type="button" disabled={!canManage || starting || saving} onClick={() => void handleStartWorkflow()} style={automationIslandControlStyle(workflowControl.active)}>{workflowControl.label}</button>
       </div>
-      {message ? <div style={{ color: '#34d399', fontSize: 12, textAlign: compact ? 'right' : 'left' }}>{message}</div> : null}
       {errorMessage ? <div style={{ color: 'var(--danger-text)', fontSize: 12, textAlign: compact ? 'right' : 'left' }}>{errorMessage}</div> : null}
-      {connectionInstructionsOpen ? <div style={connectionBox}>
-        <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Agent connection instructions</div>
-        {pairingCode ? <>
-          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Pairing code: <code>{pairingCode.code}</code></div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Expires {formatTime(pairingCode.expiresAt)}. Run this where Hermes is installed.</div>
-          {pairingCommand ? <pre style={commandBlock}><code>{pairingCommand}</code></pre> : null}
-        </> : <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{activeConnection ? 'Toggle off to revoke the connected agent.' : 'Toggle on to create a pairing code and copy the connector command.'}</div>}
-      </div> : null}
       {!canManage ? <div style={{ justifySelf: compact ? 'end' : 'start' }}><span style={pill('var(--form-bg)', 'var(--text-secondary)')}>read-only</span></div> : null}
     </div>
   )
 }
 
-function primaryButton(primary: boolean): CSSProperties {
-  return { border: '1px solid var(--panel-border)', borderRadius: 999, padding: '9px 14px', background: primary ? 'var(--accent)' : 'var(--form-bg)', color: primary ? '#fff' : 'var(--text-primary)', fontWeight: 800, cursor: 'pointer' }
+function AutomationToastView({ toast }: { toast: AutomationToast }) {
+  return <div role="status" aria-live="polite" style={toastStyle}>{toast.text}</div>
 }
 
-function toggleButton(on: boolean): CSSProperties {
-  return { border: `1px solid ${on ? 'rgba(22,101,52,0.35)' : 'var(--panel-border)'}`, borderRadius: 999, padding: '5px 12px 5px 5px', background: on ? '#dcfce7' : 'var(--form-bg)', color: on ? '#166534' : 'var(--text-primary)', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }
+function AgentConnectorModal({ modal, onClose }: { modal: AgentConnectorModalState; onClose: () => void }) {
+  return (
+    <div data-agent-connector-modal="true" style={modalBackdrop}>
+      <div role="dialog" aria-modal="true" aria-labelledby="agent-connector-title" style={modalPanel}>
+        <button type="button" aria-label="Close agent connector modal" onClick={onClose} style={modalCloseButton}>×</button>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div id="agent-connector-title" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>Agent connection instructions</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            {modal.copied ? 'Connector command copied to clipboard.' : 'Copy this connector command and run it where Hermes is installed.'}
+          </div>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Pairing code: <code>{modal.pairingCode}</code></div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Expires {formatTime(modal.expiresAt)}. Run this where Hermes is installed.</div>
+          <pre style={modalCommandBlock}><code>{modal.pairingCommand}</code></pre>
+        </div>
+      </div>
+    </div>
+  )
 }
 
-function toggleKnob(on: boolean): CSSProperties {
-  return { width: 30, height: 18, borderRadius: 999, background: on ? '#22c55e' : '#94a3b8', display: 'inline-flex', alignItems: 'center', justifyContent: on ? 'flex-end' : 'flex-start', padding: 2, boxSizing: 'border-box' }
+function AgentDisconnectModal({ hasActiveWorkflowWork, saving, onCancel, onConfirm }: { hasActiveWorkflowWork: boolean; saving: boolean; onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div data-agent-disconnect-modal="true" style={modalBackdrop}>
+      <div role="dialog" aria-modal="true" aria-labelledby="agent-disconnect-title" style={modalPanel}>
+        <button type="button" aria-label="Close disconnect modal" onClick={onCancel} style={modalCloseButton}>×</button>
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div id="agent-disconnect-title" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>Disconnect agent and clear queue?</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Disconnecting the agent removes this runtime from Sally and clears workflow work so no stale automation continues against the project.</div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: 13, display: 'grid', gap: 6 }}>
+            <li>Queued workflow jobs will be cancelled.</li>
+            <li>Running workflow work will be marked cancelled.</li>
+            <li>The agent can be connected again later with a new pairing code.</li>
+          </ul>
+          {hasActiveWorkflowWork ? <div style={{ border: '1px solid rgba(239,68,68,0.28)', borderRadius: 12, padding: 10, background: 'rgba(239,68,68,0.08)', color: 'var(--danger-text)', fontSize: 13 }}>Active workflow work is present. Disconnecting will stop Sally from continuing the queued/running workflow.</div> : <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No queued or running workflow work is currently visible.</div>}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button type="button" onClick={onCancel} disabled={saving} style={secondaryModalButton}>Cancel</button>
+            <button type="button" onClick={onConfirm} disabled={saving} style={dangerModalButton}>{saving ? 'Disconnecting…' : 'Disconnect and clear queue'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function automationIslandControlStyle(active: boolean, danger = false): CSSProperties {
+  return {
+    textDecoration: 'none',
+    padding: '10px 14px',
+    borderRadius: 12,
+    fontWeight: 400,
+    background: active ? 'rgba(16, 185, 129, 0.10)' : 'var(--form-bg)',
+    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+    border: danger ? '1px solid var(--danger-text)' : active ? '1px solid var(--form-border-focus)' : '1px solid var(--form-border)',
+    boxShadow: danger ? '0 0 0 3px rgba(239, 68, 68, 0.18), 0 10px 24px rgba(239, 68, 68, 0.18)' : undefined,
+    cursor: 'pointer',
+  }
 }
 
 const toastStyle: CSSProperties = { position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, border: '1px solid rgba(34,197,94,0.35)', borderRadius: 999, padding: '10px 14px', background: '#dcfce7', color: '#166534', fontWeight: 800, boxShadow: '0 12px 30px rgba(15,23,42,0.18)' }
-const connectionBox: CSSProperties = { justifySelf: 'stretch', border: '1px solid var(--panel-border)', borderRadius: 12, padding: 12, background: 'var(--form-bg)', color: 'var(--text-primary)', display: 'grid', gap: 8, maxWidth: 720, minWidth: 0 }
-const commandBlock: CSSProperties = { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', border: '1px solid var(--panel-border)', borderRadius: 10, padding: 10, background: 'rgba(15,23,42,0.05)', color: 'var(--text-primary)', fontSize: 12 }
+const modalBackdrop: CSSProperties = { position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: 18, background: 'rgba(15, 23, 42, 0.52)' }
+const modalPanel: CSSProperties = { position: 'relative', width: 'min(720px, calc(100vw - 36px))', maxHeight: 'min(720px, calc(100vh - 36px))', overflowY: 'auto', border: '1px solid var(--panel-border)', borderRadius: 18, padding: '22px 48px 22px 22px', background: 'var(--panel-bg)', color: 'var(--text-primary)', boxShadow: '0 28px 80px rgba(15,23,42,0.34)' }
+const modalCloseButton: CSSProperties = { position: 'absolute', top: 12, right: 14, border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 24, lineHeight: 1 }
+const modalCommandBlock: CSSProperties = { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', border: '1px solid var(--panel-border)', borderRadius: 12, padding: 12, background: 'rgba(15,23,42,0.05)', color: 'var(--text-primary)', fontSize: 12 }
+const secondaryModalButton: CSSProperties = { border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 14px', background: 'var(--form-bg)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }
+const dangerModalButton: CSSProperties = { border: '1px solid rgba(239,68,68,0.42)', borderRadius: 12, padding: '10px 14px', background: 'rgba(239,68,68,0.12)', color: 'var(--danger-text)', cursor: 'pointer', fontWeight: 700 }

@@ -217,6 +217,7 @@ export const infoFlagText: CSSProperties = {
   textTransform: 'none',
   letterSpacing: 'normal',
   lineHeight: 1.45,
+  whiteSpace: 'pre-line',
 }
 
 function varsFor(mode: ThemeMode) {
