@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { WorkspaceMember } from '@sally/types/src'
 import { AssigneeAvatar } from './assignee-avatar'
 import { cancelWorkspaceInvite, createProject, getWorkspaceMembers } from '../lib/api'
-import { inviteWorkspaceMember, removeWorkspaceMember, resendWorkspaceInvite, updateWorkspaceMember } from '../lib/api'
+import { inviteWorkspaceMember, removeWorkspaceMember, resendWorkspaceInvite, updateAccountPlatformRole, updateWorkspaceMember } from '../lib/api'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { canEditProject } from '../lib/permissions'
 import { qk, useClientsQuery, useProjectsQuery } from '../lib/query'
@@ -26,7 +26,10 @@ function WorkspaceMemberAvatar({
   canEditRole,
   canRemove,
   canManageInvite,
+  canEditPlatformRole,
+  platformRoleUpdating,
   onChangeRole,
+  onChangePlatformRole,
   onRemove,
   onResendInvite,
   onCancelInvite,
@@ -38,7 +41,10 @@ function WorkspaceMemberAvatar({
   canEditRole: boolean
   canRemove: boolean
   canManageInvite: boolean
+  canEditPlatformRole: boolean
+  platformRoleUpdating: boolean
   onChangeRole: (memberId: string, role: string) => void
+  onChangePlatformRole: (accountId: string, role: 'NONE' | 'ADMIN' | 'SUPERADMIN') => void
   onRemove: (memberId: string, memberName?: string | null) => void
   onResendInvite: (inviteId: string) => void
   onCancelInvite: (inviteId: string, email: string) => void
@@ -109,6 +115,25 @@ function WorkspaceMemberAvatar({
               <div style={memberRoleStatic}>{workspaceRoleLabel(member.role)}</div>
             )}
             <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>{workspaceRoleHelp(member.role)}</div>
+            {!member.invited ? (
+              <div style={{ marginTop: 8, display: 'grid', gap: 5 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Platform role</div>
+                {canEditPlatformRole ? (
+                  <select
+                    value={(member.platformRole || 'NONE') as 'NONE' | 'ADMIN' | 'SUPERADMIN'}
+                    onChange={(event) => onChangePlatformRole(member.accountId, event.target.value as 'NONE' | 'ADMIN' | 'SUPERADMIN')}
+                    disabled={platformRoleUpdating}
+                    style={memberRoleInlineSelect}
+                  >
+                    <option value="NONE">User</option>
+                    <option value="ADMIN">Admin</option>
+                    <option value="SUPERADMIN">Superadmin</option>
+                  </select>
+                ) : (
+                  <div style={memberRoleStatic}>{platformRoleLabel(member.platformRole)}</div>
+                )}
+              </div>
+            ) : null}
             {member.invited && member.inviteId && canManageInvite ? (
               <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" onClick={() => onResendInvite(member.inviteId!)} disabled={inviteActionBusy} style={memberActionButton}>{inviteActionBusy ? 'Working…' : 'Resend'}</button>
@@ -253,6 +278,7 @@ export function WorkspaceMembersCard() {
   const [memberPickerOpen, setMemberPickerOpen] = useState(false)
   const [memberInviteMode, setMemberInviteMode] = useState(false)
   const [roleUpdatingId, setRoleUpdatingId] = useState<string | null>(null)
+  const [platformRoleUpdatingId, setPlatformRoleUpdatingId] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [inviteActionId, setInviteActionId] = useState<string | null>(null)
 
@@ -270,7 +296,7 @@ export function WorkspaceMembersCard() {
   }
   const inviteDecision = canInviteWorkspaceMembers(workspaceViewer)
   const inviteRoleOptions = useMemo(() => {
-    if (session?.account?.platformRole === 'SUPERADMIN') return workspaceRoleOptions
+    if (session?.account?.platformRole === 'SUPERADMIN' || session?.account?.platformRole === 'ADMIN') return workspaceRoleOptions
     return workspaceRoleOptions.filter((role) => role.value !== 'OWNER')
   }, [session?.account?.platformRole])
 
@@ -334,6 +360,20 @@ export function WorkspaceMembersCard() {
       setError(err instanceof Error ? err.message : 'Failed to update role')
     } finally {
       setRoleUpdatingId(null)
+    }
+  }
+
+  const handlePlatformRoleChange = async (accountId: string, platformRole: 'NONE' | 'ADMIN' | 'SUPERADMIN') => {
+    if (!workspaceId) return
+    setPlatformRoleUpdatingId(accountId)
+    setError(null)
+    try {
+      await updateAccountPlatformRole(accountId, { platformRole })
+      await loadMembers(workspaceId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update platform role')
+    } finally {
+      setPlatformRoleUpdatingId(null)
     }
   }
 
@@ -403,7 +443,10 @@ export function WorkspaceMembersCard() {
                 canEditRole={roleDecision.visible && roleDecision.allowed}
                 canRemove={removeDecision.visible && removeDecision.allowed}
                 canManageInvite={inviteManageTargetDecision.visible && inviteManageTargetDecision.allowed}
+                canEditPlatformRole={session?.account?.platformRole === 'SUPERADMIN' && !member.invited && member.accountId !== session?.account?.id}
+                platformRoleUpdating={platformRoleUpdatingId === member.accountId}
                 onChangeRole={handleRoleChange}
+                onChangePlatformRole={handlePlatformRoleChange}
                 onRemove={handleRemove}
                 onResendInvite={handleResendInvite}
                 onCancelInvite={handleCancelInvite}

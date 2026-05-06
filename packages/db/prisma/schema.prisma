@@ -23,6 +23,7 @@ enum TaskStatusType {
 
 enum PlatformRole {
   NONE
+  ADMIN
   SUPERADMIN
 }
 

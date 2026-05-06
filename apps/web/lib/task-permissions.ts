@@ -15,7 +15,7 @@ function decision(allowed: boolean): PermissionDecision {
 
 export function canEditTask(viewer: TaskPermissionViewer, archived = false): PermissionDecision {
   if (archived) return decision(false)
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole === 'OWNER') return decision(true)
   if (viewer.projectRole === 'OWNER' || viewer.projectRole === 'MEMBER') return decision(true)
   return decision(false)

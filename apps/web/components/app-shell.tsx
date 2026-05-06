@@ -280,7 +280,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                         )
                       })}
                     </div>
-                    {loadSession()?.account?.platformRole === 'SUPERADMIN' ? (
+                    {loadSession()?.account?.platformRole === 'SUPERADMIN' || loadSession()?.account?.platformRole === 'ADMIN' ? (
                       <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--panel-border)' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Create workspace</div>
                         <input

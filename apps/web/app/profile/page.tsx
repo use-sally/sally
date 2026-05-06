@@ -46,7 +46,7 @@ async function compressProfileImage(file: File): Promise<{ mimeType: string; bas
 }
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<{ id: string; name: string | null; email: string; avatarUrl: string | null; pendingEmail: string | null; platformRole?: 'NONE' | 'SUPERADMIN'; emailLocked?: boolean } | null>(null)
+  const [profile, setProfile] = useState<{ id: string; name: string | null; email: string; avatarUrl: string | null; pendingEmail: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN'; emailLocked?: boolean } | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')

@@ -13,7 +13,7 @@ function decision(allowed: boolean): PermissionDecision {
 }
 
 export function canManageClients(viewer: ClientPermissionViewer): PermissionDecision {
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole === 'OWNER') return decision(true)
   return decision(false)
 }
