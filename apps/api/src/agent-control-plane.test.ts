@@ -54,6 +54,7 @@ test('normalizeCapabilityNames trims, lowercases, slugifies, and deduplicates', 
 test('control-plane constants expose the initial Sally-native vocabulary', () => {
   assert.deepEqual(WORKFLOW_STAGES, [
     'INTAKE',
+    'PLANNING',
     'ARCHITECTURE',
     'EXECUTION',
     'REVIEW',
@@ -116,6 +117,11 @@ test('buildStartProjectWorkflowJobPayload creates a safe first PM workflow job p
     workflowRunId: 'run_1',
     workflowStep: 1,
     maxSteps: 30,
-    payload: { source: 'sally_ui', action: 'start_project_workflow' },
+    payload: {
+      source: 'sally_ui',
+      action: 'audit_and_plan_project',
+      planningFirst: true,
+      instructions: 'First audit the project and existing tasks, create or update a coherent visible Sally task plan, then start work only from those visible tasks. Do not begin private implementation before the task plan exists.',
+    },
   })
 })

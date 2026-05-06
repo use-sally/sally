@@ -35,8 +35,8 @@ test('project automation panel avoids fixed-width grids that cause horizontal ov
 })
 
 test('project automation panel leaves task workflow visibility to the board', () => {
-  assert.match(automationPanelSource, /One connected local agent runs a simple project workflow/i)
-  assert.match(automationPanelSource, /queued work, current work, blockers, approvals, and recent progress/i)
+  assert.match(automationPanelSource, /One connected local agent runs a plan-first project workflow/i)
+  assert.match(automationPanelSource, /creates or updates visible tasks, then works from those cards/i)
   assert.doesNotMatch(automationPanelSource, /Workflow visibility/)
   assert.doesNotMatch(automationPanelSource, /Working now/)
   assert.doesNotMatch(automationPanelSource, /Queued next/)
@@ -48,8 +48,8 @@ test('project automation panel presents one-agent workflow instead of role-agent
   assert.match(automationPanelSource, /role="switch"/)
   assert.match(automationPanelSource, /Agent disconnected/)
   assert.match(automationPanelSource, /Agent connected/)
-  assert.match(automationPanelSource, /Start workflow/)
-  assert.ok(automationPanelSource.indexOf('role="switch"') < automationPanelSource.indexOf('Start workflow'))
+  assert.match(automationPanelSource, /Start plan-first workflow/)
+  assert.ok(automationPanelSource.indexOf('role="switch"') < automationPanelSource.indexOf('Start plan-first workflow'))
   assert.doesNotMatch(automationPanelSource, /Role mapping/)
   assert.doesNotMatch(automationPanelSource, /Default PM agent/)
   assert.doesNotMatch(automationPanelSource, /Start PM workflow/)
