@@ -769,10 +769,10 @@ async function maybeRepairBlockedStatuses(targetDir: string, postgresUser: strin
   )
 }
 
-async function maybeResolveFailedBlockedMigration(targetDir: string) {
+async function maybeResolveFailedBlockedMigration(targetDir: string, postgresUser: string, postgresDb: string) {
   const raw = await runCommandCapture(
     'docker',
-    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', 'sally', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', `SELECT COUNT(*) FROM "_prisma_migrations" WHERE migration_name = '20260415162500_add_blocked_status' AND finished_at IS NULL AND rolled_back_at IS NULL;`],
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', `SELECT COUNT(*) FROM "_prisma_migrations" WHERE migration_name = '20260415162500_add_blocked_status' AND finished_at IS NULL AND rolled_back_at IS NULL;`],
     targetDir,
   ).catch(() => '0')
 
@@ -999,6 +999,17 @@ async function maybeRepairTaskPeopleMigrationState(targetDir: string, postgresUs
   )
 }
 
+async function applyDatabaseMigrations(targetDir: string, postgresUser: string, postgresDb: string) {
+  await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)
+  await maybeRepairInitSchemaDrift(targetDir, postgresUser, postgresDb)
+  await maybeRepairBlockedStatuses(targetDir, postgresUser, postgresDb)
+  await maybeRepairTaskPeopleMigrationState(targetDir, postgresUser, postgresDb)
+  await maybeResolveFailedBlockedMigration(targetDir, postgresUser, postgresDb)
+
+  section('Applying database migrations')
+  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate deploy --schema prisma/schema.prisma'], targetDir)
+}
+
 async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl: string, postgresUser: string, postgresDb: string) {
   section('Pulling fresh Sally images')
   await runCommand('docker', ['compose', 'pull', 'api', 'web'], targetDir)
@@ -1007,14 +1018,7 @@ async function runInstallerCommands(mode: InstallMode, targetDir: string, appUrl
   await runCommand('docker', ['compose', 'up', '-d', 'postgres'], targetDir)
   await waitForPostgres(targetDir, postgresUser, postgresDb)
 
-  await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)
-  await maybeRepairInitSchemaDrift(targetDir, postgresUser, postgresDb)
-  await maybeRepairBlockedStatuses(targetDir, postgresUser, postgresDb)
-  await maybeRepairTaskPeopleMigrationState(targetDir, postgresUser, postgresDb)
-  await maybeResolveFailedBlockedMigration(targetDir)
-
-  section('Applying database migrations')
-  await runCommand('docker', ['compose', 'run', '--rm', 'api', 'sh', '-lc', 'cd /app/packages/db && pnpm exec prisma migrate deploy --schema prisma/schema.prisma'], targetDir)
+  await applyDatabaseMigrations(targetDir, postgresUser, postgresDb)
 
   const envText = await fs.readFile(path.join(targetDir, '.env'), 'utf8')
   if (/^BOOTSTRAP_SUPERADMIN_PASSWORD=.+$/m.test(envText)) {
@@ -1178,6 +1182,16 @@ async function doctorFlow(options: CliOptions) {
     console.log(`${paint('url', color.brightYellow)}: ${current.appUrl}`)
     console.log(`${paint('version', color.brightYellow)}: ${current.imageTag}`)
     console.log(`${paint('superadmin', color.brightYellow)}: ${current.superadminEmail}`)
+
+    section('Doctor migration check')
+    try {
+      await runCommand('docker', ['compose', 'up', '-d', 'postgres'], targetDir)
+      await waitForPostgres(targetDir, current.postgresUser, current.postgresDb)
+      await applyDatabaseMigrations(targetDir, current.postgresUser, current.postgresDb)
+      console.log(`${paint('database migrations', color.brightYellow)}: ${paint('applied', color.green)}`)
+    } catch (error) {
+      console.log(`${paint('database migrations', color.brightYellow)}: ${paint(`failed (${error instanceof Error ? error.message : String(error)})`, color.red)}`)
+    }
 
     section('Schema checks')
     try {
