@@ -17,6 +17,7 @@ import { buildTaskParticipantWrites, resolveVisibleTaskPeople } from './task-peo
 import { chooseCreateTimesheetUserId } from './timesheet-helpers.js'
 import { serveProfileImage, saveProfileImage } from './profile-images.js'
 import { cleanupRemovedDescriptionImages, saveTaskImage, serveTaskImage } from './task-description-images.js'
+import { cleanupRemovedProjectDescriptionImages, saveProjectImage, serveProjectImage } from './project-description-images.js'
 import { assertNoSecretLikeJson, buildProjectAutomationPatch, buildStartProjectWorkflowJobPayload, normalizeAgentRole, normalizeCapabilityNames, normalizeHermesProfile } from './agent-control-plane.js'
 import { buildAgentConnectionPatch, buildAgentEventPayload, chooseAgentEventCursor, createAgentWorkerToken, hashAgentWorkerToken, normalizeRuntimeType, redactAgentConnection, verifyAgentWorkerToken } from './agent-connector.js'
 import { buildApprovalDecisionPatch, buildApprovalRequestPayload, buildBlockerPayload, buildBlockerResolutionPatch } from './blockers-approvals.js'
@@ -1388,7 +1389,7 @@ const start = async () => {
 
     app.addHook('preHandler', async (request, reply) => {
       const url = request.raw.url || ''
-      if (url.startsWith('/health') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/profile-images/')) return
+      if (url.startsWith('/health') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/project-images/') || url.startsWith('/uploads/profile-images/')) return
       if (url.startsWith('/agent-connections/complete-pairing')) return
       if (url.startsWith('/agent-worker/')) {
         if (!(await ensureWorkerAuth(request, reply))) return reply.code(401).send({ ok: false, error: 'Unauthorized worker' })
@@ -1414,6 +1415,14 @@ const start = async () => {
     app.get('/uploads/task-images/:taskId/:fileName', async (request, reply) => {
       const { taskId, fileName } = request.params as { taskId: string; fileName: string }
       const file = serveTaskImage([taskId, fileName])
+      if (!file) return reply.code(404).send({ ok: false, error: 'Image not found' })
+      reply.header('Content-Type', file.mimeType)
+      return reply.send(fs.createReadStream(file.absolutePath))
+    })
+
+    app.get('/uploads/project-images/:projectId/:fileName', async (request, reply) => {
+      const { projectId, fileName } = request.params as { projectId: string; fileName: string }
+      const file = serveProjectImage([projectId, fileName])
       if (!file) return reply.code(404).send({ ok: false, error: 'Image not found' })
       reply.header('Content-Type', file.mimeType)
       return reply.send(fs.createReadStream(file.absolutePath))
@@ -2061,9 +2070,19 @@ const start = async () => {
       const { connectionId } = request.params as { connectionId: string }
       const connection = await prisma.agentConnection.findFirst({ where: { id: connectionId, workspaceId: workspace.id, revokedAt: null }, select: { id: true } })
       if (!connection) return reply.code(404).send({ ok: false, error: 'Connection not found' })
-      await prisma.agentConnection.delete({ where: { id: connection.id } })
-      await emitAgentEvent({ workspaceId: workspace.id, type: 'connection.revoked', payload: { connectionId } })
-      return { ok: true }
+      const clearQueue = (request.body as { clearQueue?: boolean } | null)?.clearQueue !== false
+      const { cancelledJobs, cancelledRuns } = await prisma.$transaction(async (tx) => {
+        let cancelledJobs = { count: 0 }
+        let cancelledRuns = { count: 0 }
+        if (clearQueue) {
+          cancelledJobs = await tx.agentJob.updateMany({ where: { workspaceId: workspace.id, status: { in: [AgentJobStatus.QUEUED, AgentJobStatus.CLAIMED, AgentJobStatus.RUNNING] } }, data: { status: AgentJobStatus.CANCELLED, finishedAt: new Date(), error: 'Cancelled because the connected agent was disconnected.' } })
+          cancelledRuns = await tx.agentRun.updateMany({ where: { workspaceId: workspace.id, status: { in: [AgentRunStatus.QUEUED, AgentRunStatus.RUNNING] } }, data: { status: AgentRunStatus.CANCELLED, finishedAt: new Date(), error: 'Cancelled because the connected agent was disconnected.' } })
+        }
+        await tx.agentConnection.delete({ where: { id: connection.id } })
+        return { cancelledJobs, cancelledRuns }
+      })
+      await emitAgentEvent({ workspaceId: workspace.id, type: 'connection.revoked', payload: { connectionId, clearQueue, cancelledJobs: cancelledJobs.count, cancelledRuns: cancelledRuns.count } })
+      return { ok: true, clearQueue, cancelledJobs: cancelledJobs.count, cancelledRuns: cancelledRuns.count }
     })
 
     app.get('/agent-worker/me', async (request) => {
@@ -3342,8 +3361,22 @@ const start = async () => {
       if ((nextDescription || null) !== (project.description || null)) details.push('description changed')
       if (body.clientId !== undefined && (nextClientId || null) !== (project.clientId || null)) details.push(activityChange('client', currentClient?.name || null, nextClientName))
       await prisma.project.update({ where: { id: projectId }, data: { ...(body.name !== undefined ? { name: nextName } : {}), ...(body.description !== undefined ? { description: nextDescription } : {}), ...(body.clientId !== undefined ? { clientId: nextClientId ?? null } : {}), slug: nextSlug } })
+      if (body.description !== undefined) cleanupRemovedProjectDescriptionImages(project.description, nextDescription)
       await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'project.updated', summary: `Updated project ${project.name}.`, payload: { projectId, details } })
       return { ok: true }
+    })
+
+    app.post('/projects/:projectId/image-upload', async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { projectId } = request.params as { projectId: string }
+      const body = request.body as { fileName?: string; mimeType?: string; base64?: string }
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null } })
+      if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
+      if (!body.base64) return reply.code(400).send({ ok: false, error: 'base64 is required' })
+      const saved = saveProjectImage(projectId, { fileName: body.fileName, mimeType: body.mimeType, base64: body.base64 })
+      return { ok: true, url: saved.url }
     })
 
     app.post('/projects/:projectId/archive', async (request, reply) => {

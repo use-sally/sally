@@ -4,14 +4,14 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { DndContext, DragEndEvent, DragOverEvent, PointerSensor, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
+import { SortableContext, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { BoardCard, BoardColumn, ProjectAutomationOverview } from '@sally/types/src'
 import { createProjectStatus, createTask, reorderProjectStatuses, reorderTask, updateProjectStatus } from '../lib/api'
 import { qk } from '../lib/query'
 import { automationBadgeStyle, getTaskAutomationBadge } from '../lib/task-automation'
 import { pill, priorityStars, tagStyle } from './app-shell'
-import { TaskPeopleField } from './task-people-field'
+import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
 import { labelText, projectInputField, taskTitleText } from '../lib/theme'
 import { canonicalStatusColor, resolveStatusPair, statusChipStyle, statusThemeVars, STATUS_COLOR_PAIRS } from '../lib/status-colors'
 
@@ -30,6 +30,8 @@ function dueBadge(dueDate: string | null) {
 type StatusType = 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'BLOCKED' | 'REVIEW' | 'DONE'
 type StatusEditDraft = { name: string; type: StatusType; color: string }
 
+const BOARD_COLUMN_WIDTH = 320
+
 export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses = false, canManageStatuses = canReorderStatuses, automationOverview }: { columns: BoardColumn[]; taskBaseHref?: string; projectId: string; canReorderStatuses?: boolean; canManageStatuses?: boolean; automationOverview?: ProjectAutomationOverview | null }) {
   const qc = useQueryClient()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
@@ -40,7 +42,6 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
   const [newStatusType, setNewStatusType] = useState<StatusType>('BACKLOG')
   const [statusSaving, setStatusSaving] = useState(false)
   const [statusError, setStatusError] = useState<string | null>(null)
-  const [openColorStatusId, setOpenColorStatusId] = useState<string | null>(null)
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null)
   const [statusEditDraft, setStatusEditDraft] = useState<StatusEditDraft>({ name: '', type: 'BACKLOG', color: '#1F2937' })
 
@@ -125,7 +126,11 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
 
   async function saveStatusEdit(status: BoardColumn) {
     const name = statusEditDraft.name.trim()
-    if (!name || statusSaving) return
+    if (statusSaving) return
+    if (!name) {
+      setEditingStatusId(null)
+      return
+    }
     const color = canonicalStatusColor(statusEditDraft.color) || statusEditDraft.color || '#1F2937'
     setStatusSaving(true)
     setStatusError(null)
@@ -214,15 +219,17 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
 
   return (
     <DndContext sensors={sensors} onDragOver={onDragOver} onDragEnd={(e) => { void onDragEnd(e) }}>
-      <SortableContext items={movableColumns.map((column) => column.id)} strategy={verticalListSortingStrategy}>
-        <div style={{ display: 'grid', gap: 10 }}>
+      <SortableContext items={movableColumns.map((column) => column.id)} strategy={horizontalListSortingStrategy}>
+        <div style={{ display: 'grid', gap: 10, minWidth: 0 }}>
           {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{statusError}</div> : null}
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(board.length + (canManageStatuses ? 1 : 0), 1)}, minmax(0, 1fr))`, gap: 14 }}>
-            {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} pinned canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} /> : null}
-            {movableColumns.map((column) => (
-              <BoardColumnView key={column.id} column={column} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} reorderable={canReorderStatuses} canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} />
-            ))}
-            {canManageStatuses ? <AddStatusColumn newStatus={newStatus} setNewStatus={setNewStatus} newStatusType={newStatusType} setNewStatusType={setNewStatusType} addStatus={addStatus} statusSaving={statusSaving} /> : null}
+          <div data-board-scroll="true" style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', paddingBottom: 8 }}>
+            <div data-board-columns="true" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, width: 'max-content', minWidth: '100%' }}>
+              {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} pinned canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} /> : null}
+              {movableColumns.map((column) => (
+                <BoardColumnView key={column.id} column={column} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} reorderable={canReorderStatuses} canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} />
+              ))}
+              {canManageStatuses ? <AddStatusColumn newStatus={newStatus} setNewStatus={setNewStatus} newStatusType={newStatusType} setNewStatusType={setNewStatusType} addStatus={addStatus} statusSaving={statusSaving} /> : null}
+            </div>
           </div>
         </div>
       </SortableContext>
@@ -239,7 +246,9 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
 
   return (
     <div ref={(node) => { setNodeRef(node); sortable.setNodeRef(node) }} style={{ ...boardColumnStyle(displayColor), ...statusThemeVars(displayColor), transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition, opacity: sortable.isDragging ? 0.7 : 1 }}>
-      <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+      <div data-board-status-editor={isEditing ? column.id : undefined} onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void saveStatusEdit(column)
+      }} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             {reorderable ? <button type="button" {...sortable.attributes} {...sortable.listeners} aria-label={`Reorder ${column.title}`} style={boardDragHandle}>⋮⋮</button> : null}
@@ -265,7 +274,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
           </div>
           <div style={{ color: colorPair?.darkText ?? 'var(--text-muted)', fontSize: 13 }}>{column.cards.length}</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
           {isEditing ? (
             <select
               value={statusEditDraft.type}
@@ -282,14 +291,11 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
               <option value="DONE">Done</option>
             </select>
           ) : <span style={{ ...labelText, fontSize: 11 }}>{statusTypeLabel ? statusTypeLabel(column.type) : column.type}</span>}
-          <span style={{ ...boardColorTrigger, color: colorPair?.darkText ?? 'var(--text-secondary)' }}>{colorPair?.id ?? 'default'}</span>
         </div>
         {isEditing ? (
           <StatusEditor
             draft={statusEditDraft}
             setDraft={setStatusEditDraft}
-            onSave={() => void saveStatusEdit(column)}
-            onCancel={cancelStatusEdit}
             saving={statusSaving}
           />
         ) : null}
@@ -297,7 +303,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
 
       <SortableContext items={column.cards.map((c: BoardCard) => c.id)} strategy={verticalListSortingStrategy}>
         <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} taskBaseHref={taskBaseHref} projectId={column.projectId} automationOverview={automationOverview} />)}
+          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} taskBaseHref={taskBaseHref} automationOverview={automationOverview} />)}
         </div>
       </SortableContext>
 
@@ -315,7 +321,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
   )
 }
 
-function StatusEditor({ draft, setDraft, onSave, onCancel, saving }: { draft: StatusEditDraft; setDraft: (draft: StatusEditDraft) => void; onSave: () => void; onCancel: () => void; saving: boolean }) {
+function StatusEditor({ draft, setDraft, saving }: { draft: StatusEditDraft; setDraft: (draft: StatusEditDraft) => void; saving: boolean }) {
   return (
     <div style={statusEditorStyle}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -332,10 +338,7 @@ function StatusEditor({ draft, setDraft, onSave, onCancel, saving }: { draft: St
           </button>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="button" onClick={onSave} disabled={saving || !draft.name.trim()} style={statusSaveButton}>{saving ? 'Saving…' : 'Save'}</button>
-        <button type="button" onClick={onCancel} disabled={saving} style={statusCancelButton}>Cancel</button>
-      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{saving ? 'Saving…' : 'Changes save when focus leaves this editor.'}</div>
     </div>
   )
 }
@@ -368,7 +371,7 @@ function AddStatusColumn({ newStatus, setNewStatus, newStatusType, setNewStatusT
   )
 }
 
-function SortableTaskCard({ card, taskBaseHref, projectId, automationOverview }: { card: BoardCard; taskBaseHref: string; projectId: string; automationOverview?: ProjectAutomationOverview | null }) {
+function SortableTaskCard({ card, taskBaseHref, automationOverview }: { card: BoardCard; taskBaseHref: string; automationOverview?: ProjectAutomationOverview | null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
   const badge = dueBadge(card.dueDate)
   const automationBadge = getTaskAutomationBadge(automationOverview, card.id)
@@ -376,43 +379,39 @@ function SortableTaskCard({ card, taskBaseHref, projectId, automationOverview }:
 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, minWidth: 0 }}>
-      <div style={{ ...boardCardStyle(card.statusColor), color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden' }}>
-        <Link href={`${taskBaseHref}?task=${card.id}`} style={{ textAlign: 'left', textDecoration: 'none', color: 'inherit', display: 'block', minWidth: 0 }}>
+      <Link href={`${taskBaseHref}?view=board&task=${card.id}`} style={{ textAlign: 'left', textDecoration: 'none', color: 'inherit', display: 'block', minWidth: 0 }}>
+        <div style={{ ...boardCardStyle(card.statusColor), color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden', cursor: 'pointer' }}>
           <div {...attributes} {...listeners} style={{ cursor: 'grab', minWidth: 0 }}>
             <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}{card.title}</div>
           </div>
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
-          <TaskPeopleField projectId={projectId} taskId={card.id} owner={card.owner} ownerAvatarUrl={card.ownerAvatarUrl} participants={card.participants} assignee={card.assignee} assigneeAvatarUrl={card.assigneeAvatarUrl} collaborators={card.collaborators} compact />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-            <span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span>
-            <span className="status-chip" style={statusChipStyle(card.statusColor)}>{card.status}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
+            <TaskPeopleAvatarStack owner={card.owner} ownerAvatarUrl={card.ownerAvatarUrl} participants={card.participants} assignee={card.assignee} assigneeAvatarUrl={card.assigneeAvatarUrl} collaborators={card.collaborators} size={28} maxVisible={3} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+              <span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span>
+              <span className="status-chip" style={statusChipStyle(card.statusColor)}>{card.status}</span>
+            </div>
+          </div>
+          {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {automationBadge && automationTone ? <span title={automationBadge.detail || undefined} style={pill(automationTone.background, automationTone.color)}>{automationBadge.label}</span> : null}
+            {card.todoProgress ? <span style={pill('#ecfeff', '#155e75')}>Todos {card.todoProgress}</span> : null}
+            {badge ? <span style={pill(badge.bg, badge.color)}>{badge.label}</span> : null}
           </div>
         </div>
-        {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {automationBadge && automationTone ? <span title={automationBadge.detail || undefined} style={pill(automationTone.background, automationTone.color)}>{automationBadge.label}</span> : null}
-          {card.todoProgress ? <span style={pill('#ecfeff', '#155e75')}>Todos {card.todoProgress}</span> : null}
-          {badge ? <span style={pill(badge.bg, badge.color)}>{badge.label}</span> : null}
-        </div>
-      </div>
+      </Link>
     </div>
   )
 }
 
 const boardInput: React.CSSProperties = { ...projectInputField, padding: '10px 12px' }
 const boardDragHandle: React.CSSProperties = { background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'grab', fontSize: 18, lineHeight: 1, padding: 2 }
-const boardColorTrigger: React.CSSProperties = { listStyle: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, textTransform: 'lowercase' }
-const boardColorMenu: React.CSSProperties = { position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 12, minWidth: 140, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
 const boardColorOptionButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 13, fontWeight: 500 }
 const statusTitleButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }
 const statusNameInputStyle: React.CSSProperties = { background: 'transparent', border: 'none', borderBottom: '1px solid currentColor', borderRadius: 0, padding: '2px 0', minWidth: 0, width: '100%', outline: 'none' }
 const statusTypeSelectStyle: React.CSSProperties = { ...projectInputField, width: 'auto', minWidth: 118, padding: '7px 28px 7px 10px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', borderRadius: 999 }
 const statusEditorStyle: React.CSSProperties = { display: 'grid', gap: 8, padding: 10, border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }
 const statusColorOptionButton: React.CSSProperties = { background: 'transparent', border: '1px solid var(--panel-border)', padding: '5px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 12, fontWeight: 700 }
-const statusSaveButton: React.CSSProperties = { background: '#34d399', color: '#052e16', border: 'none', borderRadius: 10, padding: '8px 10px', fontWeight: 800, cursor: 'pointer' }
-const statusCancelButton: React.CSSProperties = { background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--panel-border)', borderRadius: 10, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }
-const addStatusColumnStyle: React.CSSProperties = { border: '1px dashed var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)', padding: 12, minWidth: 0, alignSelf: 'start' }
+const addStatusColumnStyle: React.CSSProperties = { border: '1px dashed var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)', padding: 12, flex: `0 0 ${BOARD_COLUMN_WIDTH}px`, width: BOARD_COLUMN_WIDTH, minWidth: BOARD_COLUMN_WIDTH, alignSelf: 'start', boxSizing: 'border-box' }
 const addStatusButton: React.CSSProperties = { background: '#34d399', color: '#052e16', border: 'none', borderRadius: 10, padding: '10px 12px', fontWeight: 800, cursor: 'pointer' }
 
 function statusGroupTextStyle(color?: string | null): React.CSSProperties {
@@ -437,7 +436,9 @@ function boardColumnStyle(color?: string | null): React.CSSProperties {
     borderRadius: 16,
     padding: 12,
     boxShadow: `0 10px 24px color-mix(in srgb, ${border} 12%, transparent)`,
-    minWidth: 0,
+    flex: `0 0 ${BOARD_COLUMN_WIDTH}px`,
+    width: BOARD_COLUMN_WIDTH,
+    minWidth: BOARD_COLUMN_WIDTH,
     overflow: 'hidden',
   }
 }

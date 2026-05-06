@@ -1,5 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import {
   buildAgentConnectionPatch,
@@ -11,6 +14,9 @@ import {
   redactAgentConnection,
   verifyAgentWorkerToken,
 } from './agent-connector.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const apiIndexSource = fs.readFileSync(path.join(__dirname, 'index.ts'), 'utf8')
 
 test('worker tokens are generated once and verified by hash only', () => {
   const token = createAgentWorkerToken()
@@ -78,4 +84,12 @@ test('redacted connection summaries do not expose token hashes', () => {
 
   assert.equal('tokenHash' in summary, false)
   assert.equal(summary.tokenPrefix, 'sallyw_abc')
+})
+
+test('revoke connection clears queued and active workflow work in the workspace', () => {
+  assert.match(apiIndexSource, /const clearQueue = \(request\.body as \{ clearQueue\?: boolean \} \| null\)\?\.clearQueue !== false/)
+  assert.match(apiIndexSource, /if \(clearQueue\) \{[\s\S]*tx\.agentJob\.updateMany\(\{ where: \{ workspaceId: workspace\.id, status: \{ in: \[AgentJobStatus\.QUEUED, AgentJobStatus\.CLAIMED, AgentJobStatus\.RUNNING\] \} \}/)
+  assert.match(apiIndexSource, /tx\.agentRun\.updateMany\(\{ where: \{ workspaceId: workspace\.id, status: \{ in: \[AgentRunStatus\.QUEUED, AgentRunStatus\.RUNNING\] \} \}/)
+  assert.match(apiIndexSource, /payload: \{ connectionId, clearQueue, cancelledJobs: cancelledJobs\.count, cancelledRuns: cancelledRuns\.count \}/)
+  assert.match(apiIndexSource, /return \{ ok: true, clearQueue, cancelledJobs: cancelledJobs\.count, cancelledRuns: cancelledRuns\.count \}/)
 })

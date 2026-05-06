@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ProjectAutomationOverview, ProjectMember, ProjectTaskListItem } from '@sally/types/src'
 import { archiveTask, createProjectStatus, createTask, getProjectMembers, reorderProjectStatuses, reorderProjectTasks, updateProjectStatus } from '../lib/api'
@@ -14,7 +14,6 @@ import { pill, priorityStars, tagStyle } from './app-shell'
 import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
 import { canonicalStatusColor, resolveStatusPair, statusChipStyle, STATUS_COLOR_PAIRS } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
-import { InlineTaskPanel } from './inline-task-panel'
 import { automationBadgeStyle, getTaskAutomationBadge } from '../lib/task-automation'
 import { labelText, projectInputField, sortableHeaderButton } from '../lib/theme'
 
@@ -29,9 +28,9 @@ type StatusEditDraft = { name: string; type: StatusType; color: string }
 export function ProjectTasksTable({ projectId, showFilters = true, limit, archived = false, automationOverview, canManageStatuses = false }: { projectId: string; showFilters?: boolean; limit?: number; archived?: boolean; automationOverview?: ProjectAutomationOverview | null; canManageStatuses?: boolean }) {
   const qc = useQueryClient()
   const pathname = usePathname()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const tableRef = useRef<HTMLDivElement | null>(null)
-  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(archived ? null : (searchParams.get('task') || null))
   const [status, setStatus] = useState('')
   const [assignee, setAssignee] = useState('')
@@ -57,6 +56,15 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
 
   const filters = useMemo(() => ({ status: status.startsWith('!') ? '' : status, assignee, search, label, archived: showArchived }), [status, assignee, search, label, showArchived])
 
+  const setExpandedTaskParam = useCallback((taskId: string | null) => {
+    setExpandedTaskId(taskId)
+    const params = new URLSearchParams(searchParams.toString())
+    if (taskId) params.set('task', taskId)
+    else params.delete('task')
+    const next = params.toString()
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
+  }, [pathname, router, searchParams])
+
   useEffect(() => {
     setShowArchived(archived)
     if (archived) {
@@ -64,9 +72,9 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
       const params = new URLSearchParams(searchParams.toString())
       params.delete('task')
       const next = params.toString()
-      window.history.replaceState(window.history.state, '', next ? `${pathname}?${next}` : pathname)
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false })
     }
-  }, [archived, pathname, searchParams])
+  }, [archived, pathname, router, searchParams])
 
   useEffect(() => {
     if (archived) return
@@ -95,20 +103,6 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
   }, [projectId])
 
   useEffect(() => {
-    if (!expandedTaskId) return
-    const node = rowRefs.current[expandedTaskId]
-    if (!node) return
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const marginTop = 24
-        const rect = node.getBoundingClientRect()
-        const targetTop = Math.max(0, window.scrollY + rect.top - marginTop)
-        window.scrollTo({ top: targetTop, behavior: 'smooth' })
-      })
-    })
-  }, [expandedTaskId])
-
-  useEffect(() => {
     function closeWhenSafe() {
       if (!tableRef.current) return
       const saving = tableRef.current.querySelector('[data-description-saving="true"]')
@@ -129,7 +123,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
     }
     document.addEventListener('mousedown', handleOutsideClick)
     return () => document.removeEventListener('mousedown', handleOutsideClick)
-  }, [showFilters, pathname, searchParams])
+  }, [setExpandedTaskParam])
 
   const workspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
   const currentProjectRole = projectMembers.find((member) => member.accountId === session?.account?.id)?.role ?? null
@@ -196,14 +190,6 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
     return groups
   }, [statusList, sortedTasks, status])
 
-  function setExpandedTaskParam(taskId: string | null) {
-    setExpandedTaskId(taskId)
-    const params = new URLSearchParams(searchParams.toString())
-    if (taskId) params.set('task', taskId)
-    else params.delete('task')
-    const next = params.toString()
-    window.history.replaceState(window.history.state, '', next ? `${pathname}?${next}` : pathname)
-  }
 
   function toggleSort(nextKey: SortKey) {
     if (sortKey === nextKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -322,7 +308,11 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
 
   async function saveStatusEdit(projectStatus: ProjectStatusOption) {
     const name = statusEditDraft.name.trim()
-    if (!name || statusSaving || projectStatus.id === '__unknown__') return
+    if (statusSaving || projectStatus.id === '__unknown__') return
+    if (!name) {
+      setEditingStatusId(null)
+      return
+    }
     const color = canonicalStatusColor(statusEditDraft.color) || statusEditDraft.color || '#1F2937'
     setStatusSaving(true)
     setStatusError(null)
@@ -429,7 +419,7 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
                           <div style={{ display: 'grid', gap: 10 }}>
                             {group.tasks.map((task) => {
                               const expanded = expandedTaskId === task.id
-                              return <SortableTaskListItem key={task.id} task={task} expanded={expanded} projectId={projectId} statuses={statusList} taskPermissionViewer={taskPermissionViewer} setExpandedTaskParam={setExpandedTaskParam} rowRefs={rowRefs} automationOverview={automationOverview} />
+                              return <SortableTaskListItem key={task.id} task={task} expanded={expanded} projectId={projectId} statuses={statusList} taskPermissionViewer={taskPermissionViewer} setExpandedTaskParam={setExpandedTaskParam} automationOverview={automationOverview} />
                             })}
                             {!group.tasks.length ? <div style={{ padding: '12px 14px', color: 'var(--text-muted)', border: '1px dashed var(--panel-border)', borderRadius: 14, background: 'var(--panel-bg)' }}>No tasks in {group.status.name}.</div> : null}
                             {group.status.id !== '__unknown__' ? (
@@ -459,26 +449,30 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
 }
 
 function TaskStatusGroup({ status, count, children, reorderable, pinned, sortableId, collapsed, dragCompact, canManageStatuses, editing, statusEditDraft, setStatusEditDraft, onOpenEditor, onSaveEdit, onCancelEdit, statusSaving, onToggleCollapsed }: { status: ProjectStatusOption; count: number; children: React.ReactNode; reorderable?: boolean; pinned?: boolean; sortableId: string; collapsed?: boolean; dragCompact?: boolean; canManageStatuses?: boolean; editing?: boolean; statusEditDraft: StatusEditDraft; setStatusEditDraft: (draft: StatusEditDraft) => void; onOpenEditor: () => void; onSaveEdit: () => void; onCancelEdit: () => void; statusSaving: boolean; onToggleCollapsed: () => void }) {
-  const sortable = useSortable({ id: sortableId, disabled: !reorderable })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sortableId, disabled: !reorderable })
   const taskLabel = count === 1 ? '1 task' : `${count} tasks`
   const displayColor = editing ? statusEditDraft.color : status.color
   return (
     <section
-      ref={sortable.setNodeRef}
+      data-task-status-editor={editing ? status.id : undefined}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onSaveEdit()
+      }}
+      ref={setNodeRef}
       style={{
         ...statusGroupCardStyle(displayColor),
         display: 'grid',
         gap: collapsed ? 0 : 12,
         padding: collapsed ? '10px 12px' : 14,
         borderRadius: 18,
-        transform: CSS.Transform.toString(sortable.transform),
-        transition: sortable.transition,
-        opacity: sortable.isDragging ? 0.72 : 1,
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.72 : 1,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
-          {reorderable ? <button type="button" {...sortable.attributes} {...sortable.listeners} aria-label={`Reorder ${status.name}`} title="Drag to reorder status group" style={statusGroupDragHandle}>⋮⋮</button> : null}
+          {reorderable ? <button type="button" {...attributes} {...listeners} aria-label={`Reorder ${status.name}`} title="Drag to reorder status group" style={statusGroupDragHandle}>⋮⋮</button> : null}
           <button type="button" onClick={onToggleCollapsed} disabled={dragCompact} aria-expanded={!collapsed} aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${status.name}`} title={dragCompact ? 'Status groups are collapsed while dragging' : `${collapsed ? 'Expand' : 'Collapse'} status group`} style={statusGroupCollapseButton}>{collapsed ? '▸' : '▾'}</button>
           {canManageStatuses && editing ? (
             <input
@@ -518,7 +512,7 @@ function TaskStatusGroup({ status, count, children, reorderable, pinned, sortabl
         </div>
         <div style={{ color: 'var(--text-muted)', fontSize: 13, whiteSpace: 'nowrap' }}>{taskLabel}</div>
       </div>
-      {editing ? <StatusEditor draft={statusEditDraft} setDraft={setStatusEditDraft} onSave={onSaveEdit} onCancel={onCancelEdit} saving={statusSaving} /> : null}
+      {editing ? <StatusEditor draft={statusEditDraft} setDraft={setStatusEditDraft} saving={statusSaving} /> : null}
       {!collapsed ? children : null}
     </section>
   )
@@ -540,7 +534,7 @@ function AddTaskInStatus({ status, value, onChange, onAdd, creating }: { status:
   )
 }
 
-function StatusEditor({ draft, setDraft, onSave, onCancel, saving }: { draft: StatusEditDraft; setDraft: (draft: StatusEditDraft) => void; onSave: () => void; onCancel: () => void; saving: boolean }) {
+function StatusEditor({ draft, setDraft, saving }: { draft: StatusEditDraft; setDraft: (draft: StatusEditDraft) => void; saving: boolean }) {
   return (
     <div style={statusEditorStyle}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -557,10 +551,7 @@ function StatusEditor({ draft, setDraft, onSave, onCancel, saving }: { draft: St
           </button>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button type="button" onClick={onSave} disabled={saving || !draft.name.trim()} style={statusSaveButton}>{saving ? 'Saving…' : 'Save'}</button>
-        <button type="button" onClick={onCancel} disabled={saving} style={statusCancelButton}>Cancel</button>
-      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{saving ? 'Saving…' : 'Changes save when focus leaves this editor.'}</div>
     </div>
   )
 }
@@ -596,8 +587,6 @@ const statusNameInputStyle: React.CSSProperties = { background: 'transparent', b
 const statusTypeSelectStyle: React.CSSProperties = { ...inputStyle, width: 'auto', minWidth: 118, padding: '7px 28px 7px 10px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', borderRadius: 999 }
 const statusEditorStyle: React.CSSProperties = { display: 'grid', gap: 8, padding: 10, border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }
 const statusColorOptionButton: React.CSSProperties = { background: 'transparent', border: '1px solid var(--panel-border)', padding: '5px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 12, fontWeight: 700 }
-const statusSaveButton: React.CSSProperties = { background: '#34d399', color: '#052e16', border: 'none', borderRadius: 10, padding: '8px 10px', fontWeight: 800, cursor: 'pointer' }
-const statusCancelButton: React.CSSProperties = { background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--panel-border)', borderRadius: 10, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }
 
 const statusGroupCollapseButton: React.CSSProperties = {
   width: 26,
@@ -669,13 +658,13 @@ function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskList
   )
 }
 
-function SortableTaskListItem({ task, expanded, projectId, statuses, taskPermissionViewer, setExpandedTaskParam, rowRefs, automationOverview }: { task: ProjectTaskListItem; expanded: boolean; projectId: string; statuses: any[]; taskPermissionViewer: any; setExpandedTaskParam: (taskId: string | null) => void; rowRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>; automationOverview?: ProjectAutomationOverview | null }) {
+function SortableTaskListItem({ task, expanded, projectId, statuses, taskPermissionViewer, setExpandedTaskParam, automationOverview }: { task: ProjectTaskListItem; expanded: boolean; projectId: string; statuses: any[]; taskPermissionViewer: any; setExpandedTaskParam: (taskId: string | null) => void; automationOverview?: ProjectAutomationOverview | null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   const automationBadge = getTaskAutomationBadge(automationOverview, task.id)
   const automationTone = automationBadge ? automationBadgeStyle(automationBadge.tone) : null
   return (
     <div
-      ref={(node) => { setNodeRef(node); rowRefs.current[task.id] = node }}
+      ref={setNodeRef}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -692,7 +681,6 @@ function SortableTaskListItem({ task, expanded, projectId, statuses, taskPermiss
         <EditableTaskRow task={task} projectId={projectId} statuses={statuses} expanded={expanded} onActivate={() => setExpandedTaskParam(task.id)} taskPermissionViewer={taskPermissionViewer} />
       </div>
       {automationBadge && automationTone ? <div style={{ display: 'flex', padding: '0 14px 12px 40px', marginTop: -4 }}><span title={automationBadge.detail || undefined} style={pill(automationTone.background, automationTone.color)}>{automationBadge.label}</span></div> : null}
-      {expanded ? <InlineTaskPanel taskId={task.id} projectId={projectId} /> : null}
     </div>
   )
 }
