@@ -90,7 +90,7 @@ export function ProjectAutomationPanel({ projectId, canManage }: { projectId: st
     try {
       const result = await startProjectWorkflow(projectId)
       await refresh()
-      setMessage(`Queued workflow job ${result.job.id.slice(0, 8)}.`)
+      setMessage(`Queued audit and planning job ${result.job.id.slice(0, 8)}. Sally will create or update visible tasks before execution starts.`)
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to start workflow')
     } finally {
@@ -197,7 +197,7 @@ export function ProjectAutomationPanel({ projectId, canManage }: { projectId: st
             <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Agent automation</div>
             <span style={pill(isFetching ? '#dbeafe' : '#dcfce7', isFetching ? '#1d4ed8' : '#166534')}>{isFetching ? 'Syncing…' : 'Live'}</span>
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>One connected local agent runs a simple project workflow. Sally shows queued work, current work, blockers, approvals, and recent progress. Auto-refreshes every 2s{dataUpdatedAt ? ` · updated ${formatTime(new Date(dataUpdatedAt).toISOString())}` : ''}.</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>One connected local agent runs a plan-first project workflow. Sally first audits the project and creates or updates visible tasks, then works from those cards. Auto-refreshes every 2s{dataUpdatedAt ? ` · updated ${formatTime(new Date(dataUpdatedAt).toISOString())}` : ''}.</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
           <button type="button" role="switch" aria-checked={connectionToggleOn} disabled={!canManage || saving} onClick={() => void handleConnectionToggle()} style={toggleButton(connectionToggleOn)}>
@@ -205,7 +205,7 @@ export function ProjectAutomationPanel({ projectId, canManage }: { projectId: st
             <span>{connectionToggleOn ? 'Agent connected' : 'Agent disconnected'}</span>
           </button>
           <button type="button" disabled={!canManage || saving} onClick={() => void savePatch({ workflowEnabled: !(config?.workflowEnabled ?? false) })} style={primaryButton(config?.workflowEnabled ? false : true)}>{config?.workflowEnabled ? 'Disable automation' : 'Enable automation'}</button>
-          <button type="button" disabled={!canManage || starting || !(config?.workflowEnabled ?? false)} onClick={() => void handleStartWorkflow()} style={primaryButton(true)}>{starting ? 'Starting…' : 'Start workflow'}</button>
+          <button type="button" disabled={!canManage || starting || !(config?.workflowEnabled ?? false)} onClick={() => void handleStartWorkflow()} style={primaryButton(true)}>{starting ? 'Starting…' : 'Start plan-first workflow'}</button>
         </div>
       </div>
 
@@ -221,14 +221,15 @@ export function ProjectAutomationPanel({ projectId, canManage }: { projectId: st
       </div>
 
       <div style={{ border: '1px solid var(--panel-border)', borderRadius: 12, padding: 12, background: 'var(--form-bg)', color: 'var(--text-muted)', fontSize: 13, display: 'grid', gap: 8 }}>
-        <div style={{ color: 'var(--text-primary)', fontWeight: 750 }}>Simple workflow model</div>
+        <div style={{ color: 'var(--text-primary)', fontWeight: 750 }}>Plan-first workflow model</div>
         <div>{AGENT_IDENTITY_EMPTY_STATE}</div>
+        <div>First step: audit project → create or update visible tasks → execute from those cards.</div>
         <div>Internal modes: Planning → Building → Reviewing/Testing → Done or Waiting for approval/blocker.</div>
         <div>Live actions approval: {config?.liveActionsRequireApproval ?? true ? 'required' : 'not required'} · staging first: {config?.stagingFirst ?? true ? 'yes' : 'no'}</div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {['single connected agent', 'workflow modes are internal', 'approval gates stay visible'].map((capability) => <span key={capability} style={pill('var(--form-bg)', 'var(--text-secondary)')}>{capability}</span>)}
+        {['plan first', 'visible task plan', 'single connected agent', 'approval gates stay visible'].map((capability) => <span key={capability} style={pill('var(--form-bg)', 'var(--text-secondary)')}>{capability}</span>)}
       </div>
       {message ? <div style={{ color: '#34d399', fontSize: 13 }}>{message}</div> : null}
       {connectionInstructionsOpen ? <div style={{ border: '1px solid var(--panel-border)', borderRadius: 12, padding: 12, background: 'var(--form-bg)', color: 'var(--text-primary)', display: 'grid', gap: 8 }}>

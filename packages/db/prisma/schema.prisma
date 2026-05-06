@@ -50,6 +50,7 @@ enum PrincipalType {
 
 enum WorkflowStage {
   INTAKE
+  PLANNING
   ARCHITECTURE
   EXECUTION
   REVIEW
