@@ -117,7 +117,7 @@ test('runtime prompt gives local Sally context needed to work current project ta
   assert.match(prompt, /SALLY_API_KEY/)
 })
 
-test('pm workflow prompt orchestrates architect first instead of merely moving a task stage', () => {
+test('pm workflow prompt audits and creates visible task plan before execution', () => {
   const prompt = buildRuntimePrompt({
     id: 'job_pm_1',
     workspaceId: 'workspace_123',
@@ -125,12 +125,15 @@ test('pm workflow prompt orchestrates architect first instead of merely moving a
     taskId: null,
     role: 'pm',
     mode: 'workflow',
-    payload: { action: 'start_project_workflow', preferredRuntimeType: 'hermes' },
+    payload: { action: 'audit_and_plan_project', planningFirst: true, preferredRuntimeType: 'hermes' },
   } as any)
 
   assert.match(prompt, /PM orchestration/i)
-  assert.match(prompt, /architect/i)
+  assert.match(prompt, /Plan-first workflow rule/i)
+  assert.match(prompt, /visible Sally task plan/i)
+  assert.match(prompt, /normal Sally tasks\/cards/i)
   assert.match(prompt, /POST \/agent-jobs/)
+  assert.match(prompt, /taskId/i)
   assert.match(prompt, /Do not treat moving a task to In Progress as sufficient/i)
 })
 

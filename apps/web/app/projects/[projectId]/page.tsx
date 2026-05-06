@@ -1,15 +1,15 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { ProjectAutomationOverview } from '@sally/types/src'
 import { useQueryClient } from '@tanstack/react-query'
 import { AssigneeAvatar } from '../../../components/assignee-avatar'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AppShell, panel, pill, priorityStars, tagStyle } from '../../../components/app-shell'
-import { ProjectTabs } from '../../../components/project-tabs'
-import { StatusSettings } from '../../../components/status-settings'
+import { type ProjectIslandView, ProjectTabs } from '../../../components/project-tabs'
 import { TimesheetsTable } from '../../../components/timesheets-table'
-import { ProjectCurrentTasks } from '../../../components/project-current-tasks'
 import { ProjectAutomationPanel } from '../../../components/project-automation-panel'
+import { ProjectAutomationControls } from '../../../components/project-automation-controls'
 import { ProjectTasksTable } from '../../../components/project-tasks-table'
 import { TaskBoard } from '../../../components/task-board'
 import { BottomTaskDrawer } from '../../../components/bottom-task-drawer'
@@ -31,6 +31,41 @@ function formatActivityActor(event: { actorName: string | null; actorEmail: stri
 
 function formatActivityTimestamp(value: string) {
   return new Date(value).toLocaleString()
+}
+
+function agentWorkflowFingerprint(automation: ProjectAutomationOverview | null | undefined) {
+  if (!automation) return ''
+  return JSON.stringify({
+    config: {
+      automationState: automation.config?.automationState ?? null,
+      currentStage: automation.config?.currentStage ?? null,
+      nextRole: automation.config?.nextRole ?? null,
+      workflowEnabled: automation.config?.workflowEnabled ?? null,
+    },
+    jobs: (automation.jobs ?? []).map((job: any) => ({
+      id: job.id,
+      taskId: job.taskId ?? null,
+      status: job.status,
+      role: job.role ?? null,
+      updatedAt: job.updatedAt ?? null,
+      createdAt: job.createdAt ?? null,
+      error: job.error ?? null,
+    })),
+    blockers: (automation.blockers ?? []).map((blocker: any) => ({
+      id: blocker.id,
+      taskId: blocker.taskId ?? null,
+      status: blocker.status,
+      updatedAt: blocker.updatedAt ?? null,
+      createdAt: blocker.createdAt ?? null,
+    })),
+    approvals: (automation.approvalRequests ?? []).map((approval: any) => ({
+      id: approval.id,
+      taskId: approval.taskId ?? null,
+      status: approval.status,
+      updatedAt: approval.updatedAt ?? null,
+      createdAt: approval.createdAt ?? null,
+    })),
+  })
 }
 
 function projectMemberRoleLabel(member: { role: string; workspaceRole?: string | null; platformRole?: string | null }) {
@@ -146,7 +181,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const qc = useQueryClient()
   const archivedParam = searchParams.get('archived') === 'true'
   const rawView = searchParams.get('view')
-  const currentView: 'overview' | 'board' | 'tasks' = rawView === 'board' || rawView === 'tasks' ? rawView : 'overview'
+  const currentView: ProjectIslandView = rawView === 'automation' || rawView === 'board' || rawView === 'timesheets' ? rawView : 'tasks'
   const taskId = searchParams.get('task') || ''
   const [projectId, setProjectId] = useState<string>('')
   const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null; details: string[]; createdAt: string }[]>([])
@@ -166,6 +201,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const [projectDescriptionDraft, setProjectDescriptionDraft] = useState('')
   const [projectHeaderSaving, setProjectHeaderSaving] = useState(false)
   const [projectDangerSaving, setProjectDangerSaving] = useState<'archive' | 'delete' | null>(null)
+  const [workflowRefreshNotice, setWorkflowRefreshNotice] = useState<string | null>(null)
+  const workflowFingerprintRef = useRef<string | null>(null)
 
   useEffect(() => {
     void params.then((p) => setProjectId(p.projectId))
@@ -212,6 +249,27 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const { data: automationOverview } = useProjectAutomationQuery(projectId)
   const { data: boardColumns = [], error: boardError, isLoading: boardLoading } = useBoardQuery(projectId)
   const workflowSummary = projectWorkflowSummary(automationOverview)
+  const workflowFingerprint = agentWorkflowFingerprint(automationOverview)
+
+  useEffect(() => {
+    if (!projectId || !workflowFingerprint) return
+    if (workflowFingerprintRef.current === null) {
+      workflowFingerprintRef.current = workflowFingerprint
+      return
+    }
+    if (workflowFingerprintRef.current === workflowFingerprint) return
+    workflowFingerprintRef.current = workflowFingerprint
+
+    void Promise.all([
+      qc.invalidateQueries({ queryKey: ['projectTasks', projectId], exact: false }),
+      qc.invalidateQueries({ queryKey: qk.board(projectId) }),
+      qc.invalidateQueries({ queryKey: qk.project(projectId, archivedParam) }),
+      taskId ? qc.invalidateQueries({ queryKey: qk.task(taskId) }) : Promise.resolve(),
+    ])
+    setWorkflowRefreshNotice('Agent workflow changed. Tasks and board refreshed.')
+    const timeout = window.setTimeout(() => setWorkflowRefreshNotice(null), 3500)
+    return () => window.clearTimeout(timeout)
+  }, [archivedParam, projectId, qc, taskId, workflowFingerprint])
 
   useEffect(() => {
     if (!project) return
@@ -219,7 +277,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
     setProjectDescriptionDraft(project.description || '')
   }, [project?.id, project?.name, project?.description])
   const session = loadSession()
-  const recentTasks = project?.recentTasks.slice(0, 5) ?? []
   const taskOptions = project?.recentTasks.map((task) => ({ id: task.id, title: task.title })) ?? []
   const availableWorkspaceMembers = workspaceMembers.filter((member) => !members.some((projectMember) => projectMember.accountId === member.accountId))
   const currentAccountId = session?.account?.id ?? null
@@ -394,66 +451,174 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
     <AppShell title={projectTitle} subtitle={projectSubtitle}>
       {project ? (
         <div style={{ display: 'grid', gap: 12, marginBottom: 18 }}>
-          <div>
-            {projectEditDecision.visible ? (
-              editingProjectName ? (
-                <input
-                  autoFocus
-                  value={projectNameDraft}
-                  onChange={(event) => setProjectNameDraft(event.target.value)}
-                  onBlur={() => {
-                    setEditingProjectName(false)
-                    if (projectNameDraft.trim() && projectNameDraft.trim() !== project.name) void saveProjectHeader({ name: projectNameDraft.trim() })
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      event.currentTarget.blur()
-                    }
-                    if (event.key === 'Escape') {
-                      setProjectNameDraft(project.name)
+          <div style={projectHeaderGrid}>
+            <div style={{ minWidth: 0 }}>
+              {projectEditDecision.visible ? (
+                editingProjectName ? (
+                  <input
+                    autoFocus
+                    value={projectNameDraft}
+                    onChange={(event) => setProjectNameDraft(event.target.value)}
+                    onBlur={() => {
                       setEditingProjectName(false)
-                    }
-                  }}
-                  disabled={projectHeaderSaving}
-                  style={projectHeaderNameInput}
-                />
+                      if (projectNameDraft.trim() && projectNameDraft.trim() !== project.name) void saveProjectHeader({ name: projectNameDraft.trim() })
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        event.currentTarget.blur()
+                      }
+                      if (event.key === 'Escape') {
+                        setProjectNameDraft(project.name)
+                        setEditingProjectName(false)
+                      }
+                    }}
+                    disabled={projectHeaderSaving}
+                    style={projectHeaderNameInput}
+                  />
+                ) : (
+                  <button type="button" onClick={() => setEditingProjectName(true)} style={projectHeaderNameButton}>{project.name}</button>
+                )
               ) : (
-                <button type="button" onClick={() => setEditingProjectName(true)} style={projectHeaderNameButton}>{project.name}</button>
-              )
-            ) : (
-              <div style={projectHeaderNameText}>{project.name}</div>
-            )}
+                <div style={projectHeaderNameText}>{project.name}</div>
+              )}
 
-            {projectEditDecision.visible ? (
-              editingProjectDescription ? (
-                <textarea
-                  autoFocus
-                  value={projectDescriptionDraft}
-                  onChange={(event) => setProjectDescriptionDraft(event.target.value)}
-                  onBlur={() => {
-                    setEditingProjectDescription(false)
-                    if (projectDescriptionDraft !== (project.description || '')) void saveProjectHeader({ description: projectDescriptionDraft })
-                  }}
-                  onKeyDown={(event) => {
-                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                      event.preventDefault()
-                      event.currentTarget.blur()
-                    }
-                    if (event.key === 'Escape') {
-                      setProjectDescriptionDraft(project.description || '')
+              {projectEditDecision.visible ? (
+                editingProjectDescription ? (
+                  <textarea
+                    autoFocus
+                    value={projectDescriptionDraft}
+                    onChange={(event) => setProjectDescriptionDraft(event.target.value)}
+                    onBlur={() => {
                       setEditingProjectDescription(false)
-                    }
-                  }}
-                  disabled={projectHeaderSaving}
-                  style={projectHeaderDescriptionInput}
-                />
+                      if (projectDescriptionDraft !== (project.description || '')) void saveProjectHeader({ description: projectDescriptionDraft })
+                    }}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                        event.preventDefault()
+                        event.currentTarget.blur()
+                      }
+                      if (event.key === 'Escape') {
+                        setProjectDescriptionDraft(project.description || '')
+                        setEditingProjectDescription(false)
+                      }
+                    }}
+                    disabled={projectHeaderSaving}
+                    style={projectHeaderDescriptionInput}
+                  />
+                ) : (
+                  <button type="button" onClick={() => setEditingProjectDescription(true)} style={projectHeaderDescriptionButton}>{project.description || 'Project overview and recent work.'}</button>
+                )
               ) : (
-                <button type="button" onClick={() => setEditingProjectDescription(true)} style={projectHeaderDescriptionButton}>{project.description || 'Project overview and recent work.'}</button>
-              )
-            ) : (
-              <div style={projectHeaderDescriptionText}>{project.description || 'Project overview and recent work.'}</div>
-            )}
+                <div style={projectHeaderDescriptionText}>{project.description || 'Project overview and recent work.'}</div>
+              )}
+            </div>
+
+            <div style={projectHeaderMetaGrid}>
+              <div style={{ ...panel, ...headerMetaCard, display: 'grid', alignContent: 'start', gap: 8 }}>
+                <div style={labelText}>Client</div>
+                {!clientChangeDecision.visible ? (
+                  <div style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
+                ) : archivedParam ? (
+                  <div style={{ color: 'var(--text-primary)', fontSize: 15, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
+                ) : (
+                  <select
+                    value={project.client?.id || ''}
+                    onChange={(event) => void handleClientChange(event.target.value)}
+                    disabled={clientSaving || !clientChangeDecision.allowed}
+                    style={projectInputField}
+                  >
+                    <option value="">No client / internal</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>{client.name}</option>
+                    ))}
+                  </select>
+                )}
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={project.client ? linkedText : unlinkedText}>{project.client ? 'Linked' : 'Unlinked'}</span>
+                </div>
+              </div>
+
+              <div style={{ ...panel, ...headerMetaCard, display: 'grid', alignContent: 'start', gap: 8 }}>
+                <div style={labelText}>Project members</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {members.length ? members.map((member) => {
+                    const roleDecision = canChangeProjectMemberRole(permissionViewer, member, permissionContext)
+                    const removeDecision = canRemoveProjectMember(permissionViewer, member, permissionContext)
+                    return (
+                      <ProjectMemberAvatar
+                        key={member.accountId}
+                        member={member}
+                        canEditRole={roleDecision.visible}
+                        canRemove={removeDecision.visible}
+                        onChangeRole={handleProjectRoleChange}
+                        onRemove={handleRemoveProjectMember}
+                        roleSaving={memberActionSaving}
+                      />
+                    )
+                  }) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  {addMemberDecision.visible || inviteMemberDecision.visible ? (
+                    <div style={{ position: 'relative' }}>
+                      {memberInviteMode && inviteMemberDecision.visible ? (
+                        <input
+                          autoFocus
+                          value={inviteEmail}
+                          onChange={(event) => setInviteEmail(event.target.value)}
+                          onBlur={() => { if (!memberActionSaving && !inviteEmail.trim()) setMemberInviteMode(false) }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              void handleInviteProjectMember()
+                            }
+                            if (event.key === 'Escape') {
+                              setInviteEmail('')
+                              setMemberInviteMode(false)
+                              setMemberPickerOpen(false)
+                            }
+                          }}
+                          placeholder="Invite by email"
+                          style={memberAddInput}
+                        />
+                      ) : (
+                        <button type="button" onClick={() => setMemberPickerOpen((value) => !value)} style={memberAddButton}>Add member</button>
+                      )}
+                      {memberPickerOpen && !memberInviteMode && (addMemberDecision.visible || inviteMemberDecision.visible) ? (
+                        <div style={memberAddMenu}>
+                          {addMemberDecision.visible ? availableWorkspaceMembers.map((member) => (
+                            <button
+                              key={member.accountId}
+                              type="button"
+                              onClick={() => {
+                                setSelectedWorkspaceMemberId(member.accountId)
+                                void handleAddExistingMember(member.accountId)
+                              }}
+                              disabled={memberActionSaving}
+                              style={memberAddOption}
+                            >
+                              {member.name || member.email}
+                            </button>
+                          )) : null}
+                          {inviteMemberDecision.visible ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMemberInviteMode(true)
+                                setMemberPickerOpen(false)
+                              }}
+                              style={memberAddOption}
+                            >
+                              Invite by email
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                {memberActionInfo ? <div style={{ color: '#34d399', fontSize: 12 }}>{memberActionInfo}</div> : null}
+                {memberActionError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{memberActionError}</div> : null}
+              </div>
+            </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <ProjectTabs projectId={projectId} current={currentView} />
@@ -475,32 +640,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 
       {project ? (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 16, marginBottom: 20, alignItems: 'stretch', minWidth: 0 }}>
-            <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 10 }}>
-              <div style={labelText}>Client</div>
-              {!clientChangeDecision.visible ? (
-                <div style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
-              ) : archivedParam ? (
-                <div style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>{project.client ? project.client.name : 'Not linked'}</div>
-              ) : (
-                <select
-                  value={project.client?.id || ''}
-                  onChange={(event) => void handleClientChange(event.target.value)}
-                  disabled={clientSaving || !clientChangeDecision.allowed}
-                  style={projectInputField}
-                >
-                  <option value="">No client / internal</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>{client.name}</option>
-                  ))}
-                </select>
-              )}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={project.client ? linkedText : unlinkedText}>{project.client ? 'Linked' : 'Unlinked'}</span>
-              </div>
-            </div>
-
-            {project.dependencies?.length || project.dependedOnBy?.length ? (
+          {project.dependencies?.length || project.dependedOnBy?.length ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 16, marginBottom: 20, alignItems: 'stretch', minWidth: 0 }}>
               <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 8 }}>
                 {project.dependencies?.length ? (
                   <div>
@@ -523,154 +664,80 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                   </div>
                 ) : null}
               </div>
-            ) : null}
-
-            <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 8 }}>
-              <div style={labelText}>Total tasks</div>
-              <div style={{ color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>{project.taskCount} {project.taskCount === 1 ? 'task' : 'tasks'}</div>
             </div>
-
-            <div style={{ ...panel, ...summaryCardPanel, display: 'grid', alignContent: 'start', gap: 10 }}>
-              <div style={labelText}>Project members</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {members.length ? members.map((member) => {
-                  const roleDecision = canChangeProjectMemberRole(permissionViewer, member, permissionContext)
-                  const removeDecision = canRemoveProjectMember(permissionViewer, member, permissionContext)
-                  return (
-                    <ProjectMemberAvatar
-                      key={member.accountId}
-                      member={member}
-                      canEditRole={roleDecision.visible}
-                      canRemove={removeDecision.visible}
-                      onChangeRole={handleProjectRoleChange}
-                      onRemove={handleRemoveProjectMember}
-                      roleSaving={memberActionSaving}
-                    />
-                  )
-                }) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                {addMemberDecision.visible || inviteMemberDecision.visible ? (
-                  <div style={{ position: 'relative' }}>
-                    {memberInviteMode && inviteMemberDecision.visible ? (
-                      <input
-                        autoFocus
-                        value={inviteEmail}
-                        onChange={(event) => setInviteEmail(event.target.value)}
-                        onBlur={() => { if (!memberActionSaving && !inviteEmail.trim()) setMemberInviteMode(false) }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            void handleInviteProjectMember()
-                          }
-                          if (event.key === 'Escape') {
-                            setInviteEmail('')
-                            setMemberInviteMode(false)
-                            setMemberPickerOpen(false)
-                          }
-                        }}
-                        placeholder="Invite by email"
-                        style={memberAddInput}
-                      />
-                    ) : (
-                      <button type="button" onClick={() => setMemberPickerOpen((value) => !value)} style={memberAddButton}>Add member</button>
-                    )}
-                    {memberPickerOpen && !memberInviteMode && (addMemberDecision.visible || inviteMemberDecision.visible) ? (
-                      <div style={memberAddMenu}>
-                        {addMemberDecision.visible ? availableWorkspaceMembers.map((member) => (
-                          <button
-                            key={member.accountId}
-                            type="button"
-                            onClick={() => {
-                              setSelectedWorkspaceMemberId(member.accountId)
-                              void handleAddExistingMember(member.accountId)
-                            }}
-                            disabled={memberActionSaving}
-                            style={memberAddOption}
-                          >
-                            {member.name || member.email}
-                          </button>
-                        )) : null}
-                        {inviteMemberDecision.visible ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMemberInviteMode(true)
-                              setMemberPickerOpen(false)
-                            }}
-                            style={memberAddOption}
-                          >
-                            Invite by email
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              {memberActionInfo ? <div style={{ color: '#34d399', fontSize: 12 }}>{memberActionInfo}</div> : null}
-              {memberActionError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{memberActionError}</div> : null}
-            </div>
-          </div>
-
-          {workflowDecision.visible ? <div style={{ marginBottom: 24 }}><StatusSettings projectId={projectId} statuses={project.statuses} canManage={workflowDecision.allowed} /></div> : null}
-          {workflowDecision.visible ? <div style={{ marginBottom: 24 }}><ProjectAutomationPanel projectId={projectId} canManage={workflowDecision.allowed} /></div> : null}
+          ) : null}
 
           <div style={{ display: 'grid', gap: 20 }}>
 
-            <div style={panel}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-                <div>
-                  <div style={{ fontWeight: 750 }}>Project workflow</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3 }}>Project-level automation stays here. Task-level automation is shown on the cards below.</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={pill(workflowSummary.enabled ? '#dcfce7' : '#fee2e2', workflowSummary.enabled ? '#166534' : '#991b1b')}>{workflowSummary.enabled ? 'automation enabled' : 'automation disabled'}</span>
-                  <span style={pill(workflowSummary.connectionCount ? '#dcfce7' : 'var(--form-bg)', workflowSummary.connectionCount ? '#166534' : 'var(--text-secondary)')}>{workflowSummary.connectionCount ? 'agent connected' : 'no agent'}</span>
-                  <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>{workflowSummary.phase}</span>
-                  {workflowSummary.activeLabel ? <span style={pill('#dbeafe', '#1d4ed8')}>{workflowSummary.activeLabel}</span> : null}
-                  {workflowSummary.pendingApprovals ? <span style={pill('#ffedd5', '#9a3412')}>{workflowSummary.pendingApprovals} approval</span> : null}
-                  {workflowSummary.openBlockers ? <span style={pill('#fee2e2', '#991b1b')}>{workflowSummary.openBlockers} blocker</span> : null}
-                </div>
-              </div>
-              {currentView === 'board' ? (
-                boardError ? <div style={{ color: 'var(--danger-text)' }}>{boardError instanceof Error ? boardError.message : 'Failed to load board'}</div> :
-                boardColumns.length ? <TaskBoard columns={boardColumns} taskBaseHref={`/projects/${projectId}`} projectId={projectId} canReorderStatuses={true} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>
-              ) : currentView === 'tasks' ? (
-                <ProjectTasksTable projectId={projectId} automationOverview={automationOverview} />
+            {currentView === 'automation' ? (
+              workflowDecision.visible ? (
+                <ProjectAutomationPanel projectId={projectId} canManage={workflowDecision.allowed} />
               ) : (
-                <ProjectCurrentTasks project={project} archived={archivedParam} />
-              )}
-            </div>
-
-            <div style={panel}>
-              <SectionHeaderWithInfo
-                title="Recent activity"
-                info="Live project log. Shows the latest 100 events with actor, API key usage, and timestamp."
-                marginBottom={14}
-              />
-              {activity.length ? (
-                <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }}>
-                  {[...activity].reverse().map((event, index, items) => (
-                    <div key={event.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, alignItems: 'start', padding: '10px 12px', borderBottom: index === items.length - 1 ? 'none' : '1px solid var(--panel-border)', fontSize: 13, lineHeight: 1.45, minWidth: 0 }}>
-                      <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatActivityTimestamp(event.createdAt)}</div>
-                      <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{formatActivityActor(event)}</div>
-                      <div style={{ display: 'grid', gap: 4 }}>
-                        <div style={{ color: 'var(--text-primary)' }}>{event.summary}</div>
-                        {event.details.length ? <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{event.details.join(' · ')}</div> : null}
+                <div style={panel}>
+                  <div style={{ fontWeight: 750 }}>Agent automation</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>Agent automation is not available for your current project role.</div>
+                </div>
+              )
+            ) : currentView === 'timesheets' ? (
+              <div style={panel}>
+                <SectionHeaderWithInfo
+                  title="Timesheets"
+                  info="Validated entries are hidden by default. Turn this on to review them and uncheck validation to restore them."
+                  marginBottom={14}
+                />
+                {archivedParam ? <ArchivedProjectTimesheets entries={project.recentTimesheets} /> : <TimesheetsTable lockedProjectId={projectId} lockedProjectName={project.name} taskOptions={taskOptions} showProjectColumn={false} showCustomerColumn={false} />}
+              </div>
+            ) : (
+              <>
+                <div style={panel}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 750 }}>Project workflow</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3 }}>Project-level automation status. Task-level automation is shown on the cards below.</div>
+                    </div>
+                    <div style={{ display: 'grid', gap: 8, justifyItems: 'end', minWidth: 0 }}>
+                      <ProjectAutomationControls projectId={projectId} canManage={workflowDecision.allowed} compact />
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>Listening for agent changes</span>
+                        <span style={pill('var(--form-bg)', 'var(--text-secondary)')}>{workflowSummary.phase}</span>
+                        {workflowSummary.activeLabel ? <span style={pill('#dbeafe', '#1d4ed8')}>{workflowSummary.activeLabel}</span> : null}
+                        {workflowSummary.pendingApprovals ? <span style={pill('#ffedd5', '#9a3412')}>{workflowSummary.pendingApprovals} approval</span> : null}
+                        {workflowSummary.openBlockers ? <span style={pill('#fee2e2', '#991b1b')}>{workflowSummary.openBlockers} blocker</span> : null}
+                        {workflowRefreshNotice ? <span role="status" aria-live="polite" style={pill('#dcfce7', '#166534')}>{workflowRefreshNotice}</span> : null}
                       </div>
                     </div>
-                  ))}
+                  </div>
+                  {currentView === 'board' ? (
+                    boardError ? <div style={{ color: 'var(--danger-text)' }}>{boardError instanceof Error ? boardError.message : 'Failed to load board'}</div> :
+                    boardColumns.length ? <TaskBoard columns={boardColumns} taskBaseHref={`/projects/${projectId}`} projectId={projectId} canReorderStatuses={workflowDecision.allowed} canManageStatuses={workflowDecision.allowed} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>
+                  ) : (
+                    <ProjectTasksTable projectId={projectId} automationOverview={automationOverview} canManageStatuses={workflowDecision.allowed} />
+                  )}
                 </div>
-              ) : <div style={{ color: 'var(--text-muted)' }}>No activity recorded yet.</div>}
-            </div>
 
-            <div style={panel}>
-              <SectionHeaderWithInfo
-                title="Timesheets"
-                info="Validated entries are hidden by default. Turn this on to review them and uncheck validation to restore them."
-                marginBottom={14}
-              />
-              {archivedParam ? <ArchivedProjectTimesheets entries={project.recentTimesheets} /> : <TimesheetsTable lockedProjectId={projectId} lockedProjectName={project.name} taskOptions={taskOptions} showProjectColumn={false} showCustomerColumn={false} />}
-            </div>
+                <div style={panel}>
+                  <SectionHeaderWithInfo
+                    title="Recent activity"
+                    info="Live project log. Shows the latest 100 events with actor, API key usage, and timestamp."
+                    marginBottom={14}
+                  />
+                  {activity.length ? (
+                    <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }}>
+                      {[...activity].reverse().map((event, index, items) => (
+                        <div key={event.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, alignItems: 'start', padding: '10px 12px', borderBottom: index === items.length - 1 ? 'none' : '1px solid var(--panel-border)', fontSize: 13, lineHeight: 1.45, minWidth: 0 }}>
+                          <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatActivityTimestamp(event.createdAt)}</div>
+                          <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{formatActivityActor(event)}</div>
+                          <div style={{ display: 'grid', gap: 4 }}>
+                            <div style={{ color: 'var(--text-primary)' }}>{event.summary}</div>
+                            {event.details.length ? <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{event.details.join(' · ')}</div> : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div style={{ color: 'var(--text-muted)' }}>No activity recorded yet.</div>}
+                </div>
+              </>
+            )}
           </div>
         </>
       ) : <div style={{ color: 'var(--text-muted)' }}>Loading project…</div>}
@@ -681,6 +748,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
 }
 
 const summaryCardPanel: React.CSSProperties = { minHeight: 120, height: '100%' }
+const projectHeaderGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))', gap: 16, alignItems: 'start', minWidth: 0 }
+const projectHeaderMetaGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 12, minWidth: 0 }
+const headerMetaCard: React.CSSProperties = { minHeight: 96, padding: 14 }
 const linkedText: React.CSSProperties = { color: '#34d399', fontSize: 14, fontWeight: 400 }
 const unlinkedText: React.CSSProperties = { color: 'var(--danger-text)', fontSize: 14, fontWeight: 400 }
 const smallActionBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 12px', fontWeight: 700, whiteSpace: 'nowrap' }

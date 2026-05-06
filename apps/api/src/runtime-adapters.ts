@@ -151,11 +151,15 @@ function roleGuidance(job: AgentRuntimeJob): string[] {
   if (role === 'pm' && job.mode === 'workflow') {
     return [
       ...pmPlaybookGuidance(),
-      'PM orchestration role: own forward motion, but do not do specialist work yourself.',
-      'On start_project_workflow or intake for a new project: read the project brief and existing tasks, then queue an architect job first so architecture can plan the actual project.',
+      'PM orchestration role: own forward motion, but do not do specialist implementation work yourself.',
+      'Plan-first workflow rule: the first project workflow step is an audit and planning step. Read the project brief, existing tasks, statuses, comments, blockers, and recent activity, then create or update a coherent visible Sally task plan before any execution work starts.',
+      'If the project starts from one vague task, split that work into concrete Sally tasks with useful titles, descriptions, acceptance criteria, recommended role/mode, priority, and status. Prefer a small coherent plan over many microtasks.',
+      'Do not work in a private black box. All substantial next work must become normal Sally tasks/cards first, so humans can inspect the plan in Tasks and Board.',
+      'If existing tasks are already good, audit and normalize their descriptions/status/ordering instead of duplicating them. If the plan is risky, destructive, client-facing, or changes many existing tasks, create an approval request or blocker and wait.',
+      'After the visible plan exists, choose the first actionable task and queue one bounded specialist job against that taskId. Use the same workflowRunId when present, workflowStep incremented by one, and payload.instructions that reference the visible Sally task and acceptance criteria.',
+      'To invoke a specialist, POST /agent-jobs with a bounded role such as coder, reviewer, tester, infra, or architect only when architecture is the next visible task. Keep PM as orchestrator, not implementer.',
       'Do not treat moving a task to In Progress as sufficient progress. Status movement is only valid when paired with a clear next specialist job or verified completed work.',
-      'To invoke the architect, POST /agent-jobs with role "architect", mode "workflow", same projectId, workflowRunId when present, workflowStep incremented by one, and payload.instructions asking for stack-fit architecture, task breakdown, implementation briefs, risks, and handoff back to PM.',
-      'When architect hands back a plan, inspect prior architect jobs/runs in the same workflowRunId, read their result/summary, create or update Sally tasks/briefs for the appropriate next roles such as coder, reviewer/tester, infra, or marketer, then queue those bounded jobs. Keep PM as orchestrator, not implementer.',
+      'When specialist jobs hand back results, inspect prior jobs/runs in the same workflowRunId, read their result/summary, update the relevant Sally task comments/status/todos, then queue the next bounded visible-task job or stop with evidence.',
       'Use PATCH /projects/{projectId}/automation when needed to set currentStage/nextRole, and add Sally comments documenting routing decisions and evidence.',
     ]
   }
@@ -195,7 +199,7 @@ export function buildRuntimePrompt(job: AgentRuntimeJob): string {
     'Stop and report a blocker if the work requires production access, credentials, irreversible actions, or unclear business judgment.',
     'If blocked, start the final output with BLOCKER:. If human approval is required, start with APPROVAL_REQUIRED:.',
     'Use the workspaceId and projectId below as authoritative for this local Sally current project.',
-    'If native Sally MCP does not expose this local project, use the local Sally REST API from SALLY_API_BASE_URL with SALLY_API_KEY as Authorization: Bearer <value> and X-Workspace-Id set to workspaceId. Useful routes are GET /projects/{projectId}, GET /projects/{projectId}/tasks, GET /agent-jobs?status=SUCCEEDED, POST /agent-jobs, PATCH /projects/{projectId}/automation, PATCH /tasks/{taskId}, and POST /tasks/{taskId}/comments. Never print the key.',
+    'If native Sally MCP does not expose this local project, use the local Sally REST API from SALLY_API_BASE_URL with SALLY_API_KEY as Authorization: Bearer *** and X-Workspace-Id set to workspaceId. Useful routes are GET /projects/{projectId}, GET /projects/{projectId}/tasks, POST /tasks, PATCH /tasks/{taskId}, POST /tasks/{taskId}/comments, GET /agent-jobs?status=SUCCEEDED, POST /agent-jobs, and PATCH /projects/{projectId}/automation. Never print the key.',
     ...roleGuidance(job),
     'Respond with a concise final summary plus evidence of validation.',
     '',

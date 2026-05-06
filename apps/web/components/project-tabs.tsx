@@ -2,11 +2,14 @@
 
 import Link from 'next/link'
 
-export function ProjectTabs({ projectId, current }: { projectId: string; current: 'overview' | 'board' | 'tasks' }) {
+export type ProjectIslandView = 'tasks' | 'board' | 'automation' | 'timesheets'
+
+export function ProjectTabs({ projectId, current }: { projectId: string; current: ProjectIslandView }) {
   const items = [
-    { key: 'overview', href: `/projects/${projectId}`, label: 'Overview' },
+    { key: 'tasks', href: `/projects/${projectId}`, label: 'Tasks' },
     { key: 'board', href: `/projects/${projectId}?view=board`, label: 'Board' },
-    { key: 'tasks', href: `/projects/${projectId}?view=tasks`, label: 'Tasks' },
+    { key: 'automation', href: `/projects/${projectId}?view=automation`, label: 'Agent automation' },
+    { key: 'timesheets', href: `/projects/${projectId}?view=timesheets`, label: 'Timesheets' },
   ] as const
 
   return (

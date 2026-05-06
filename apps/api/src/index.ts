@@ -2945,8 +2945,8 @@ const start = async () => {
         },
         include: { agent: true },
       })
-      await prisma.projectAutomationConfig.update({ where: { projectId }, data: { automationState: 'queued', currentStage: 'INTAKE', nextRole: 'pm' } })
-      await logActivity({ workspaceId: workspace.id, projectId, ...actorFromRequest(request), type: 'agent_job.created', summary: 'Started PM workflow', payload: { jobId: job.id, workflowRunId } })
+      await prisma.projectAutomationConfig.update({ where: { projectId }, data: { automationState: 'queued', currentStage: 'PLANNING', nextRole: 'pm' } })
+      await logActivity({ workspaceId: workspace.id, projectId, ...actorFromRequest(request), type: 'agent_job.created', summary: 'Started project audit and planning workflow', payload: { jobId: job.id, workflowRunId, planningFirst: true } })
       await emitAgentEvent({ workspaceId: workspace.id, agentId: job.agentId, type: 'job.created', payload: { jobId: job.id, projectId, taskId: null, role: job.role, mode: job.mode, workflowRunId: job.workflowRunId, workflowStep: job.workflowStep, maxSteps: job.maxSteps } })
       return { ok: true, job, workflowRunId }
     })
@@ -3014,7 +3014,7 @@ const start = async () => {
       const { projectId } = request.params as { projectId: string }
       const query = request.query as { status?: string; assignee?: string; search?: string; label?: string; archived?: string }
       const archivedFilter = query.archived === 'true'
-      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, ...(archivedFilter ? { archivedAt: { not: null } } : { archivedAt: null }) } })
+      const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, projectId)
@@ -3205,7 +3205,7 @@ const start = async () => {
 
     app.post('/projects/:projectId/statuses', async (request, reply) => {
       const workspace = (request as any).workspace
-      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { projectId } = request.params as { projectId: string }
       const body = request.body as { name: string; type: TaskStatusType }
       const name = body.name?.trim()
@@ -3222,25 +3222,29 @@ const start = async () => {
 
     app.patch('/projects/:projectId/statuses/:statusId', async (request, reply) => {
       const workspace = (request as any).workspace
-      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { projectId, statusId } = request.params as { projectId: string; statusId: string }
-      const body = request.body as { name?: string; color?: string }
+      const body = request.body as { name?: string; type?: TaskStatusType; color?: string }
       const status = await prisma.taskStatus.findFirst({ where: { id: statusId, projectId, project: { workspaceId: workspace.id } } })
       if (!status) return reply.code(404).send({ ok: false, error: 'Status not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
+      if (body.type !== undefined && !['BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE'].includes(body.type)) return reply.code(400).send({ ok: false, error: 'valid type is required' })
       const nextName = body.name !== undefined ? body.name.trim() : status.name
+      if (!nextName) return reply.code(400).send({ ok: false, error: 'name is required' })
+      const nextType = body.type !== undefined ? body.type : status.type
       const nextColor = body.color !== undefined ? (body.color.trim() || '#1F2937') : status.color
       const details: string[] = []
       if (nextName !== status.name) details.push(activityChange('name', status.name, nextName))
+      if (nextType !== status.type) details.push(activityChange('type', status.type, nextType))
       if ((nextColor || null) !== (status.color || null)) details.push(activityChange('color', status.color, nextColor))
-      await prisma.taskStatus.update({ where: { id: statusId }, data: { ...(body.name !== undefined ? { name: nextName } : {}), ...(body.color !== undefined ? { color: nextColor } : {}) } })
-      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.updated', summary: `Updated status ${status.name}.`, payload: { statusId, name: body.name, color: body.color, details } })
+      await prisma.taskStatus.update({ where: { id: statusId }, data: { ...(body.name !== undefined ? { name: nextName } : {}), ...(body.type !== undefined ? { type: nextType } : {}), ...(body.color !== undefined ? { color: nextColor } : {}) } })
+      await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.updated', summary: `Updated status ${status.name}.`, payload: { statusId, name: body.name, type: body.type, color: body.color, details } })
       return { ok: true }
     })
 
     app.post('/projects/:projectId/statuses/reorder', async (request, reply) => {
       const workspace = (request as any).workspace
-      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { projectId } = request.params as { projectId: string }
       const body = request.body as { orderedStatusIds?: string[] }
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null } })
@@ -3258,6 +3262,9 @@ const start = async () => {
         return reply.code(400).send({ ok: false, error: 'orderedStatusIds must match the movable project statuses exactly' })
       }
       await prisma.$transaction(async (tx) => {
+        for (let index = 0; index < statuses.length; index += 1) {
+          await tx.taskStatus.update({ where: { id: statuses[index].id }, data: { position: -(index + 1) } })
+        }
         await tx.taskStatus.update({ where: { id: pinned.id }, data: { position: 0 } })
         for (let index = 0; index < orderedStatusIds.length; index += 1) {
           await tx.taskStatus.update({ where: { id: orderedStatusIds[index] }, data: { position: index + 1 } })
@@ -3269,7 +3276,7 @@ const start = async () => {
 
     app.post('/projects/:projectId/statuses/:statusId/delete', async (request, reply) => {
       const workspace = (request as any).workspace
-      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { projectId, statusId } = request.params as { projectId: string; statusId: string }
       const body = request.body as { targetStatusId?: string }
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null } })
