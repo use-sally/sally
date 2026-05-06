@@ -30,7 +30,7 @@ test('updater bootstraps superadmin through the api package script instead of a 
 })
 
 test('updater resolves failed blocked-status migration before deploy', () => {
-  assert.ok(source.includes('maybeResolveFailedBlockedMigration(targetDir)'))
+  assert.ok(source.includes('maybeResolveFailedBlockedMigration(targetDir, postgresUser, postgresDb)'))
   assert.ok(source.includes('migrate resolve --rolled-back 20260415162500_add_blocked_status'))
 })
 
@@ -76,4 +76,24 @@ test('updater inspects and repairs task owner/participants rollout drift before 
 test('updater refuses ambiguous task owner/participants drift states', () => {
   assert.ok(source.includes('Detected ambiguous task owner/participants schema drift'))
   assert.ok(source.includes('Refusing automatic reconciliation because the database is only partially through the owner/participants rollout.'))
+})
+
+test('install and update run one ordered migration pipeline before starting services', () => {
+  assert.ok(source.includes('async function applyDatabaseMigrations(targetDir: string, postgresUser: string, postgresDb: string)'))
+  assert.ok(source.includes('await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)'))
+  assert.ok(source.includes('await maybeRepairInitSchemaDrift(targetDir, postgresUser, postgresDb)'))
+  assert.ok(source.includes('await maybeRepairBlockedStatuses(targetDir, postgresUser, postgresDb)'))
+  assert.ok(source.includes('await maybeRepairTaskPeopleMigrationState(targetDir, postgresUser, postgresDb)'))
+  assert.ok(source.includes('await maybeResolveFailedBlockedMigration(targetDir, postgresUser, postgresDb)'))
+  assert.ok(source.includes("pnpm exec prisma migrate deploy --schema prisma/schema.prisma"))
+  assert.ok(source.indexOf('await applyDatabaseMigrations(targetDir, postgresUser, postgresDb)') < source.indexOf("section('Starting Sally services')"))
+})
+
+test('doctor starts postgres and applies pending migrations for managed instances', () => {
+  assert.ok(source.includes("section('Doctor migration check')"))
+  assert.ok(source.includes("await runCommand('docker', ['compose', 'up', '-d', 'postgres'], targetDir)"))
+  assert.ok(source.includes('await waitForPostgres(targetDir, current.postgresUser, current.postgresDb)'))
+  assert.ok(source.includes('await applyDatabaseMigrations(targetDir, current.postgresUser, current.postgresDb)'))
+  assert.ok(source.includes("paint('database migrations', color.brightYellow)"))
+  assert.ok(source.includes("paint('applied', color.green)"))
 })
