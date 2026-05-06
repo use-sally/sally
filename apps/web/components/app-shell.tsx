@@ -162,6 +162,8 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const unreadCount = notifications.filter((notification) => !notification.readAt).length
 
   const activeWorkspace = workspaceOptions.find((option) => option.id === activeWorkspaceId)
+  const platformRole = loadSession()?.account?.platformRole
+  const isPlatformAdminSession = platformRole === 'SUPERADMIN' || platformRole === 'ADMIN'
 
   const handleNotificationClick = async (notification: Notification) => {
     await readNotification(notification.id)
@@ -280,7 +282,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                         )
                       })}
                     </div>
-                    {loadSession()?.account?.platformRole === 'SUPERADMIN' || loadSession()?.account?.platformRole === 'ADMIN' ? (
+                    {isPlatformAdminSession ? (
                       <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--panel-border)' }}>
                         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Create workspace</div>
                         <input
@@ -336,6 +338,25 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   </Link>
                 )
               })}
+              {isPlatformAdminSession ? (
+                <Link
+                  href="/team"
+                  style={{
+                    display: 'block',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    color: pathname.startsWith('/team') ? '#052e16' : 'var(--text-secondary)',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    lineHeight: 1.2,
+                    textDecoration: 'none',
+                    background: pathname.startsWith('/team') ? '#fcd34d' : 'transparent',
+                    border: pathname.startsWith('/team') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                  }}
+                >
+                  Team
+                </Link>
+              ) : null}
             </nav>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, flex: 1 }}>

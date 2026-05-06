@@ -221,6 +221,32 @@ export function cancelWorkspaceInvite(workspaceId: string, inviteId: string): Pr
   return getJson(`/workspaces/${workspaceId}/invites/${inviteId}`, { method: 'DELETE' })
 }
 
+export type TeamAccountHub = {
+  ok: boolean
+  workspaceMemberships: { id: string; name: string; slug?: string }[]
+  projectMemberships: { id: string; name: string; workspaceId: string; workspaceName: string }[]
+  accounts: {
+    id: string
+    name: string | null
+    email: string
+    avatarUrl: string | null
+    platformRole: 'NONE' | 'ADMIN' | 'SUPERADMIN'
+    archivedAt: string | null
+    createdAt: string
+    updatedAt: string
+    memberships: { id: string; workspaceId: string; workspaceName: string; workspaceSlug?: string; role: string }[]
+    projectMemberships: { id: string; projectId: string; projectName: string; workspaceId: string; workspaceName: string; role: string }[]
+  }[]
+}
+
+export function getTeamAccounts(): Promise<TeamAccountHub> { return getJson('/team/accounts') }
+export function createTeamAccount(payload: { name?: string; email: string }): Promise<{ ok: boolean; accountId: string; existing?: boolean }> { return getJson('/team/accounts', { method: 'POST', body: JSON.stringify(payload) }) }
+export function archiveTeamAccount(accountId: string, archived = true): Promise<{ ok: boolean; account: { id: string; archivedAt: string | null } }> { return getJson(`/team/accounts/${accountId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
+export function addTeamAccountToWorkspace(accountId: string, payload: { workspaceId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/workspaces`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function removeTeamAccountFromWorkspace(accountId: string, membershipId: string): Promise<{ ok: boolean }> { return getJson(`/team/accounts/${accountId}/workspaces/${membershipId}`, { method: 'DELETE' }) }
+export function addTeamAccountToProject(accountId: string, payload: { projectId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/projects`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function removeTeamAccountFromProject(accountId: string, membershipId: string): Promise<{ ok: boolean }> { return getJson(`/team/accounts/${accountId}/projects/${membershipId}`, { method: 'DELETE' }) }
+
 export function apiUrl(path: string): string { return `${API_BASE_URL}${path}` }
 
 export function getMcpKeys(): Promise<McpKey[]> { return getJson('/auth/mcp-keys') }
