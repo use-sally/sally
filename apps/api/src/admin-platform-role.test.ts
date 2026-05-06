@@ -22,9 +22,10 @@ test('ADMIN gets superadmin-like workspace and project permissions', () => {
   assert.match(apiIndexSource, /const workspaces = isPlatformAdmin\(request\)[\s\S]*prisma\.workspace\.findMany/)
 })
 
-test('only the configured superadmin can promote or demote platform admins', () => {
+test('only the configured superadmin can promote or demote platform admins, never themselves', () => {
   assert.match(apiIndexSource, /app\.patch\('\/accounts\/:accountId\/platform-role'[\s\S]*if \(!isSuperadmin\(request\)\)/)
   assert.match(apiIndexSource, /normalizePlatformRole\(body\.platformRole\)/)
+  assert.match(apiIndexSource, /if \(accountId === requestAccountId\)[\s\S]*cannot change your own platform role/)
   assert.match(apiIndexSource, /if \(isConfiguredSuperadminEmail\(target\.email\) && role !== PlatformRole\.SUPERADMIN\)/)
   assert.match(apiIndexSource, /prisma\.account\.update\(\{ where: \{ id: accountId \}, data: \{ platformRole: role \} \}\)/)
 })

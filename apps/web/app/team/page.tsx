@@ -111,6 +111,7 @@ export default function TeamPage() {
               key={account.id}
               account={account}
               hub={hub}
+              currentAccountId={session?.account?.id ?? null}
               isSuperadmin={isSuperadmin}
               saving={saving}
               onAction={run}
@@ -123,12 +124,13 @@ export default function TeamPage() {
   )
 }
 
-function TeamAccountRow({ account, hub, isSuperadmin, saving, onAction }: { account: TeamAccount; hub: TeamAccountHub | null; isSuperadmin: boolean; saving: string | null; onAction: (key: string, action: () => Promise<unknown>, message: string) => Promise<void> }) {
+function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, onAction }: { account: TeamAccount; hub: TeamAccountHub | null; currentAccountId: string | null; isSuperadmin: boolean; saving: string | null; onAction: (key: string, action: () => Promise<unknown>, message: string) => Promise<void> }) {
   const [workspaceId, setWorkspaceId] = useState('')
   const [workspaceRole, setWorkspaceRole] = useState('MEMBER')
   const [projectId, setProjectId] = useState('')
   const [projectRole, setProjectRole] = useState('MEMBER')
   const archived = !!account.archivedAt
+  const isCurrentAccount = account.id === currentAccountId
   const availableWorkspaces = (hub?.workspaceMemberships ?? []).filter((workspace) => !account.memberships.some((membership) => membership.workspaceId === workspace.id))
   const availableProjects = (hub?.projectMemberships ?? []).filter((project) => !account.projectMemberships.some((membership) => membership.projectId === project.id))
 
@@ -144,7 +146,7 @@ function TeamAccountRow({ account, hub, isSuperadmin, saving, onAction }: { acco
           Platform role
           <select
             value={account.platformRole}
-            disabled={!isSuperadmin || saving === `role:${account.id}`}
+            disabled={!isSuperadmin || isCurrentAccount || saving === `role:${account.id}`}
             onChange={(event) => void onAction(`role:${account.id}`, () => updateAccountPlatformRole(account.id, { platformRole: event.target.value as 'NONE' | 'ADMIN' | 'SUPERADMIN' }), 'Platform role updated.')}
             style={inputStyle}
           >

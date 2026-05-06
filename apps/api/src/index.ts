@@ -2537,9 +2537,11 @@ const start = async () => {
     app.patch('/accounts/:accountId/platform-role', async (request, reply) => {
       if (!isSuperadmin(request)) return reply.code(403).send({ ok: false, error: 'Only the superadmin can change platform roles' })
       const { accountId } = request.params as { accountId: string }
+      const requestAccountId = (request as any).account?.id
       const body = request.body as { platformRole?: string | null }
       const role = normalizePlatformRole(body.platformRole)
       if (!role) return reply.code(400).send({ ok: false, error: 'platformRole is invalid' })
+      if (accountId === requestAccountId) return reply.code(403).send({ ok: false, error: 'You cannot change your own platform role' })
       const target = await prisma.account.findUnique({ where: { id: accountId } })
       if (!target) return reply.code(404).send({ ok: false, error: 'Account not found' })
       if (isConfiguredSuperadminEmail(target.email) && role !== PlatformRole.SUPERADMIN) {

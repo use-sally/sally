@@ -30,6 +30,11 @@ test('Team page exposes promote demote add remove and archive controls', () => {
   assert.match(teamPageSource, /removeTeamAccountFromProject/)
 })
 
+test('Team page does not allow a superadmin to promote or demote themselves', () => {
+  assert.match(teamPageSource, /const isCurrentAccount = account\.id === currentAccountId/)
+  assert.match(teamPageSource, /disabled=\{!isSuperadmin \|\| isCurrentAccount \|\| saving === `role:\$\{account\.id\}`\}/)
+})
+
 test('Web API client exposes Team hub endpoints', () => {
   assert.match(apiSource, /export function getTeamAccounts/)
   assert.match(apiSource, /export function createTeamAccount/)
