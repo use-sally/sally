@@ -11,11 +11,17 @@ import { workspaceRoleLabel } from '../lib/roles'
 import type { ThemeMode } from '../lib/theme'
 import { appBuildTime, appVersionLabel } from '../lib/version'
 
-const navItems = [
+const appNavItems = [
   { href: '/', label: 'Overview' },
   { href: '/projects', label: 'Projects' },
   { href: '/clients', label: 'Clients' },
   { href: '/timesheets', label: 'Timesheets' },
+]
+
+const adminNavItems = [
+  { href: '/team', label: 'Team' },
+  { href: '/security', label: 'Security' },
+  { href: '/system', label: 'System' },
 ]
 
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
@@ -164,6 +170,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const activeWorkspace = workspaceOptions.find((option) => option.id === activeWorkspaceId)
   const platformRole = loadSession()?.account?.platformRole
   const isPlatformAdminSession = platformRole === 'SUPERADMIN' || platformRole === 'ADMIN'
+  const isAdminArea = pathname.startsWith('/team') || pathname.startsWith('/security') || pathname.startsWith('/system')
 
   const handleNotificationClick = async (notification: Notification) => {
     await readNotification(notification.id)
@@ -222,7 +229,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
-            {workspaceOptions.length ? (
+            {!isAdminArea && workspaceOptions.length ? (
               <div ref={workspaceMenuRef} style={{ display: 'grid', gap: 6, position: 'relative' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Workspace</div>
                 <button
@@ -315,83 +322,87 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
             ) : null}
 
             <nav style={{ display: 'grid', gap: 8 }}>
-              {navItems.filter((item) => item.href !== '/projects').map((item) => {
-                const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    style={{
-                      display: 'block',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      color: active ? '#052e16' : 'var(--text-secondary)',
-                      fontWeight: 700,
-                      fontSize: 13,
-                      lineHeight: 1.2,
-                      textDecoration: 'none',
-                      background: active ? '#fcd34d' : 'transparent',
-                      border: active ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
-                    }}
-                  >
-                    {item.label}
-                  </Link>
-                )
-              })}
-              {isPlatformAdminSession ? (
+              {isAdminArea ? (
                 <>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Admin</div>
                   <Link
-                    href="/team"
-                    style={{
-                      display: 'block',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      color: pathname.startsWith('/team') ? '#052e16' : 'var(--text-secondary)',
-                      fontWeight: 700,
-                      fontSize: 13,
-                      lineHeight: 1.2,
-                      textDecoration: 'none',
-                      background: pathname.startsWith('/team') ? '#fcd34d' : 'transparent',
-                      border: pathname.startsWith('/team') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
-                    }}
+                    href="/projects"
+                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, lineHeight: 1.2, textDecoration: 'none', background: 'transparent', border: '1px solid var(--panel-border)' }}
                   >
-                    Team
+                    Back to app
                   </Link>
-                  <Link
-                    href="/security"
-                    style={{
-                      display: 'block',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      color: pathname.startsWith('/security') ? '#052e16' : 'var(--text-secondary)',
-                      fontWeight: 700,
-                      fontSize: 13,
-                      lineHeight: 1.2,
-                      textDecoration: 'none',
-                      background: pathname.startsWith('/security') ? '#fcd34d' : 'transparent',
-                      border: pathname.startsWith('/security') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
-                    }}
-                  >Security</Link>
-                  <Link
-                    href="/system"
-                    style={{
-                      display: 'block',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      color: pathname.startsWith('/system') ? '#052e16' : 'var(--text-secondary)',
-                      fontWeight: 700,
-                      fontSize: 13,
-                      lineHeight: 1.2,
-                      textDecoration: 'none',
-                      background: pathname.startsWith('/system') ? '#fcd34d' : 'transparent',
-                      border: pathname.startsWith('/system') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
-                    }}
-                  >System</Link>
+                  {adminNavItems.map((item) => {
+                    const active = pathname.startsWith(item.href)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        style={{
+                          display: 'block',
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          color: active ? '#052e16' : 'var(--text-secondary)',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          lineHeight: 1.2,
+                          textDecoration: 'none',
+                          background: active ? '#fcd34d' : 'transparent',
+                          border: active ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                        }}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  })}
                 </>
-              ) : null}
+              ) : (
+                <>
+                  {appNavItems.filter((item) => item.href !== '/projects').map((item) => {
+                    const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        style={{
+                          display: 'block',
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          color: active ? '#052e16' : 'var(--text-secondary)',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          lineHeight: 1.2,
+                          textDecoration: 'none',
+                          background: active ? '#fcd34d' : 'transparent',
+                          border: active ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                        }}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  })}
+                  {isPlatformAdminSession ? (
+                    <Link
+                      href="/team"
+                      style={{
+                        display: 'block',
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        color: 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: 13,
+                        lineHeight: 1.2,
+                        textDecoration: 'none',
+                        background: 'transparent',
+                        border: '1px solid transparent',
+                      }}
+                    >Admin</Link>
+                  ) : null}
+                </>
+              )}
             </nav>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, flex: 1 }}>
+            {!isAdminArea ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, flex: 1 }}>
               <Link
                 href="/projects"
                 style={{
@@ -437,7 +448,8 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   )
                 })}
               </div>
-            </div>
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: 'grid', gap: 12, marginTop: 'auto' }}>

@@ -7,9 +7,11 @@ const appShellSource = fs.readFileSync(path.join(process.cwd(), 'components/app-
 const teamPageSource = fs.existsSync(path.join(process.cwd(), 'app/team/page.tsx')) ? fs.readFileSync(path.join(process.cwd(), 'app/team/page.tsx'), 'utf8') : ''
 const apiSource = fs.readFileSync(path.join(process.cwd(), 'lib/api.ts'), 'utf8')
 
-test('Team navigation is visible only to platform admins', () => {
+test('Team navigation lives behind the platform-admin Admin mode', () => {
   assert.match(appShellSource, /platformRole === 'SUPERADMIN' \|\| .*platformRole === 'ADMIN'/)
-  assert.match(appShellSource, /href="\/team"[\s\S]*Team/)
+  assert.match(appShellSource, /href="\/team"[\s\S]*>Admin</)
+  assert.match(appShellSource, /const adminNavItems = \[/)
+  assert.match(appShellSource, /\{ href: '\/team', label: 'Team' \}/)
 })
 
 test('Team page is the central user hub for all Sally accounts', () => {

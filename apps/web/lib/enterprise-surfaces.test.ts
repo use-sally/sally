@@ -10,11 +10,16 @@ const systemPageSource = fs.existsSync(path.join(root, 'app/system/page.tsx')) ?
 const lockedCardSource = fs.existsSync(path.join(root, 'components/enterprise-locked-card.tsx')) ? fs.readFileSync(path.join(root, 'components/enterprise-locked-card.tsx'), 'utf8') : ''
 const editionClientSource = fs.existsSync(path.join(root, 'lib/edition.ts')) ? fs.readFileSync(path.join(root, 'lib/edition.ts'), 'utf8') : ''
 
-test('platform admin nav exposes Global Security and System surfaces', () => {
-  assert.match(appShellSource, /href="\/security"/)
-  assert.match(appShellSource, />Security</)
-  assert.match(appShellSource, /href="\/system"/)
-  assert.match(appShellSource, />System</)
+test('platform admin nav uses a dedicated Admin mode instead of cramming admin links into app nav', () => {
+  assert.match(appShellSource, /const isAdminArea =/)
+  assert.match(appShellSource, /href="\/team"[^]*>Admin</)
+  assert.match(appShellSource, /Back to app/)
+  assert.match(appShellSource, /const adminNavItems =/)
+  assert.match(appShellSource, /Team/)
+  assert.match(appShellSource, /Security/)
+  assert.match(appShellSource, /System/)
+  const appNavBlock = appShellSource.slice(appShellSource.indexOf("const appNavItems"), appShellSource.indexOf("const adminNavItems"))
+  assert.doesNotMatch(appNavBlock, /Security|System|Team/)
 })
 
 test('web has reusable Enterprise locked card and edition client', () => {
