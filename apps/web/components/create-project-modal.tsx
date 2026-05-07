@@ -29,7 +29,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
     const currentName = session?.account?.name || session?.account?.email || 'You'
     const currentEmail = session?.account?.email || '—'
     if (session?.account?.id) {
-      members.set(session.account.id, { accountId: session.account.id, name: currentName, email: currentEmail, note: session.account.platformRole === 'SUPERADMIN' ? 'Project owner · Superadmin' : 'Project owner' })
+      members.set(session.account.id, { accountId: session.account.id, name: currentName, email: currentEmail, note: session.account.platformRole === 'SUPERADMIN' ? 'Project owner · Superadmin' : session.account.platformRole === 'ADMIN' ? 'Project owner · Admin' : 'Project owner' })
     }
     workspaceMembers.filter((member) => member.role === 'OWNER').forEach((member) => {
       members.set(member.accountId, {
@@ -37,7 +37,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
         name: member.name,
         email: member.email,
         note: member.accountId === session?.account?.id
-          ? (session?.account?.platformRole === 'SUPERADMIN' ? 'Project owner · Workspace owner · Superadmin' : 'Project owner · Workspace owner')
+          ? (session?.account?.platformRole === 'SUPERADMIN' ? 'Project owner · Workspace owner · Superadmin' : session?.account?.platformRole === 'ADMIN' ? 'Project owner · Workspace owner · Admin' : 'Project owner · Workspace owner')
           : 'Workspace owner',
       })
     })

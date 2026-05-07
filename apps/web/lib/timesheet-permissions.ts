@@ -20,20 +20,20 @@ function decision(allowed: boolean): PermissionDecision {
 }
 
 export function canViewTimesheets(viewer: TimesheetPermissionViewer): PermissionDecision {
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole === 'OWNER') return decision(true)
   if (viewer.projectRole === 'OWNER' || viewer.projectRole === 'MEMBER') return decision(true)
   return decision(false)
 }
 
 export function canAddTimesheet(viewer: TimesheetPermissionViewer): PermissionDecision {
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.projectRole === 'OWNER' || viewer.projectRole === 'MEMBER') return decision(true)
   return decision(false)
 }
 
 export function canEditTimesheet(viewer: TimesheetPermissionViewer, entry: TimesheetPermissionEntry): PermissionDecision {
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.projectRole === 'OWNER') return decision(true)
   if (viewer.projectRole === 'MEMBER' && viewer.timesheetUserId && entry.userId === viewer.timesheetUserId && !entry.validated) return decision(true)
   return decision(false)
@@ -44,7 +44,7 @@ export function canDeleteTimesheet(viewer: TimesheetPermissionViewer, entry: Tim
 }
 
 export function canValidateTimesheet(viewer: TimesheetPermissionViewer): PermissionDecision {
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.projectRole === 'OWNER') return decision(true)
   return decision(false)
 }

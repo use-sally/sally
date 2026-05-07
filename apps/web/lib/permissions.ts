@@ -31,7 +31,7 @@ function roleRank(role?: string | null) {
 
 export function canEditProject(viewer: ProjectPermissionViewer, context: ProjectPermissionContext = {}): PermissionDecision {
   if (context.archived) return decision(false)
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole === 'OWNER') return decision(true)
   if (viewer.projectRole === 'OWNER') return decision(true)
   return decision(false)
@@ -57,7 +57,7 @@ export function canChangeProjectMemberRole(viewer: ProjectPermissionViewer, targ
   if (context.archived) return decision(false)
   if (target.locked) return decision(false)
   if (viewer.accountId && target.accountId === viewer.accountId) return decision(false)
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole === 'OWNER') return decision(true)
   if (viewer.projectRole === 'OWNER' && roleRank(viewer.projectRole) > roleRank(target.role)) return decision(true)
   return decision(false)
@@ -68,7 +68,7 @@ export function canRemoveProjectMember(viewer: ProjectPermissionViewer, target: 
   if (target.locked) return decision(false)
   if (viewer.accountId && target.accountId === viewer.accountId) return decision(false)
   if (target.role === 'OWNER' && (context.projectOwnerCount ?? 0) <= 1) return decision(false)
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole === 'OWNER') return decision(true)
   if (viewer.projectRole === 'OWNER' && roleRank(viewer.projectRole) > roleRank(target.role)) return decision(true)
   return decision(false)

@@ -24,7 +24,7 @@ function roleRank(role?: string | null) {
 }
 
 export function canInviteWorkspaceMembers(viewer: WorkspacePermissionViewer): PermissionDecision {
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole === 'OWNER') return decision(true)
   return decision(false)
 }
@@ -32,7 +32,7 @@ export function canInviteWorkspaceMembers(viewer: WorkspacePermissionViewer): Pe
 export function canChangeWorkspaceMemberRole(viewer: WorkspacePermissionViewer, target: WorkspacePermissionTarget, nextRole?: string): PermissionDecision {
   if (target.invited) return decision(false)
   if (viewer.accountId && target.accountId === viewer.accountId) return decision(false)
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole !== 'OWNER') return decision(false)
   const requesterRank = roleRank(viewer.workspaceRole)
   const targetRank = roleRank(target.role)
@@ -43,7 +43,7 @@ export function canChangeWorkspaceMemberRole(viewer: WorkspacePermissionViewer, 
 export function canRemoveWorkspaceMember(viewer: WorkspacePermissionViewer, target: WorkspacePermissionTarget): PermissionDecision {
   if (target.invited) return decision(false)
   if (viewer.accountId && target.accountId === viewer.accountId) return decision(false)
-  if (viewer.platformRole === 'SUPERADMIN') return decision(true)
+  if ((viewer.platformRole === 'SUPERADMIN' || viewer.platformRole === 'ADMIN')) return decision(true)
   if (viewer.workspaceRole !== 'OWNER') return decision(false)
   return decision(roleRank(viewer.workspaceRole) > roleRank(target.role))
 }

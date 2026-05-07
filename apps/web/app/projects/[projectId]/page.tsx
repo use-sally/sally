@@ -73,7 +73,9 @@ function agentWorkflowFingerprint(automation: ProjectAutomationOverview | null |
 function projectMemberRoleLabel(member: { role: string; workspaceRole?: string | null; platformRole?: string | null }) {
   return member.platformRole === 'SUPERADMIN'
     ? 'Superadmin'
-    : member.workspaceRole === 'OWNER'
+    : member.platformRole === 'ADMIN'
+      ? 'Admin'
+      : member.workspaceRole === 'OWNER'
       ? 'Workspace owner'
       : member.role === 'OWNER'
         ? 'Project owner'

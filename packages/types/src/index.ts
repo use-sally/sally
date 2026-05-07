@@ -320,6 +320,7 @@ export type AccountSummary = {
   id: string
   name: string | null
   email: string
+  platformRole?: string | null
   memberships: { id: string; workspaceId: string; workspaceName: string; role: string }[]
 }
 
@@ -335,6 +336,7 @@ export type WorkspaceMember = {
   inviteId?: string | null
   inviteAcceptedAt?: string | null
   inviteExpiresAt?: string | null
+  platformRole?: string | null
 }
 
 export type ProjectActivityEvent = {

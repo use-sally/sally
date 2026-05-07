@@ -1,5 +1,5 @@
 export type Membership = { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }
-export type AuthAccount = { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'SUPERADMIN' }
+export type AuthAccount = { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' }
 export type AuthSession = {
   token: string
   expiresAt?: string

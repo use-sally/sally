@@ -4,7 +4,7 @@ export const workspaceRoleOptions = [
 ] as const
 
 export function platformRoleLabel(role?: string | null) {
-  return role === 'SUPERADMIN' ? 'Superadmin' : role || 'User'
+  return role === 'SUPERADMIN' ? 'Superadmin' : role === 'ADMIN' ? 'Admin' : 'User'
 }
 
 export const projectRoleOptions = [
