@@ -22,6 +22,7 @@ test('API resolves edition from env and exposes available features', () => {
   assert.match(editionSource, /function getSallyEdition\(/)
   assert.match(editionSource, /function hasFeature\(/)
   assert.match(apiIndexSource, /app\.get\('\/edition'/)
+  assert.match(apiIndexSource, /url\.startsWith\('\/edition'\)/)
   assert.match(apiIndexSource, /availableFeatures/)
 })
 

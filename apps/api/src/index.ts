@@ -1432,7 +1432,7 @@ const start = async () => {
 
     app.addHook('preHandler', async (request, reply) => {
       const url = request.raw.url || ''
-      if (url.startsWith('/health') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/project-images/') || url.startsWith('/uploads/profile-images/')) return
+      if (url.startsWith('/health') || url.startsWith('/edition') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/project-images/') || url.startsWith('/uploads/profile-images/')) return
       if (url.startsWith('/agent-connections/complete-pairing')) return
       if (url.startsWith('/agent-worker/')) {
         if (!(await ensureWorkerAuth(request, reply))) return reply.code(401).send({ ok: false, error: 'Unauthorized worker' })
