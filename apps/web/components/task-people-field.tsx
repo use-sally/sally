@@ -1,7 +1,8 @@
 'use client'
 
 import type React from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { ProjectMember, TaskCollaborator, TaskParticipant } from '@sally/types/src'
 import { useQueryClient } from '@tanstack/react-query'
 import { addProjectMember, getProjectMembers, inviteWorkspaceMember, updateTask } from '../lib/api'
@@ -40,10 +41,14 @@ export function TaskPeopleField({
 }: TaskPeopleFieldProps) {
   const qc = useQueryClient()
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [loaded, setLoaded] = useState(false)
   const [open, setOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [hoveredOptionValue, setHoveredOptionValue] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [inviteMode, setInviteMode] = useState(false)
@@ -59,7 +64,10 @@ export function TaskPeopleField({
   useEffect(() => {
     if (!open) return
     function handlePointerDown(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false)
+      const target = event.target as Node
+      if (rootRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
     }
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false)
@@ -71,6 +79,25 @@ export function TaskPeopleField({
       document.removeEventListener('keydown', handleEscape)
     }
   }, [open])
+
+  useLayoutEffect(() => {
+    if (!open || !compact || !triggerRef.current) {
+      setMenuPos(null)
+      return
+    }
+    function updatePosition() {
+      if (!triggerRef.current) return
+      const rect = triggerRef.current.getBoundingClientRect()
+      setMenuPos({ top: rect.bottom + 8, left: rect.left })
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [open, compact])
 
   const options = useMemo(() => buildTaskPeopleOptions(members, selection), [members, selection])
   const firstPerson = selection[0] || 'Unassigned'
@@ -173,8 +200,84 @@ export function TaskPeopleField({
     }
   }
 
+  function renderMenu() {
+    const menuStyle: React.CSSProperties = compact
+      ? { ...compactMenu, position: 'fixed', top: menuPos?.top ?? 0, left: menuPos?.left ?? 0 }
+      : fullMenu
+    const content = (
+      <div
+        ref={menuRef}
+        style={menuStyle}
+        onClick={(event) => event.stopPropagation()}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        {!inviteMode ? (
+          <>
+            <div style={{ display: 'grid', gap: 4 }}>
+              {options.map((option) => {
+                const member = members.find((entry) => (entry.name || entry.email) === option.value || entry.email === option.value)
+                const isHoveredToggle = hoveredOptionValue === option.value
+                const showRemoveHint = option.selected && isHoveredToggle
+                return (
+                  <div
+                    key={option.value}
+                    style={{ ...optionRow, ...(option.selected ? optionRowSelected : null) }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void togglePerson(option.value)}
+                      disabled={saving}
+                      style={optionButton}
+                      title={option.selected ? 'Click to remove from task' : 'Click to add to task'}
+                      onMouseEnter={() => setHoveredOptionValue(option.value)}
+                      onMouseLeave={() => setHoveredOptionValue((current) => current === option.value ? null : current)}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <TaskPeopleAvatarStack assignee={option.value} assigneeAvatarUrl={member?.avatarUrl ?? null} collaborators={[]} size={24} maxVisible={1} />
+                        <div style={{ minWidth: 0, textAlign: 'left' }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }}>{option.label}</div>
+                          <div style={{ marginTop: 2, fontSize: 11, color: option.selected ? 'rgba(5, 46, 22, 0.76)' : 'var(--text-muted)' }}>{option.secondaryLabel}</div>
+                        </div>
+                      </div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: option.selected ? '#052e16' : 'var(--text-muted)', fontSize: 11, fontWeight: 700 }}>
+                        {option.selected ? (
+                          <span
+                            aria-hidden="true"
+                            style={{ ...removeHintStyle, visibility: showRemoveHint ? 'visible' : 'hidden' }}
+                          >
+                            ×
+                          </span>
+                        ) : null}
+                        {option.role === 'owner' ? 'FIRST' : option.selected ? 'ON' : 'ADD'}
+                      </span>
+                    </button>
+                    {option.role === 'collaborator' ? (
+                      <button type="button" onClick={() => void promotePerson(option.value)} disabled={saving} style={promoteButton}>Make first person</button>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+            {canManage ? <button type="button" onClick={() => { setInviteMode(true); setError(null) }} disabled={saving} style={inviteButton}>Invite new user…</button> : null}
+          </>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" style={inviteInput} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || saving} style={inviteButton}>{saving ? 'Inviting…' : 'Invite + add to task'}</button>
+              <button type="button" onClick={() => { setInviteMode(false); setInviteEmail(''); setError(null) }} disabled={saving} style={cancelButton}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+    if (compact && typeof document !== 'undefined') return createPortal(content, document.body)
+    return content
+  }
+
   const trigger = (
     <button
+      ref={triggerRef}
       type="button"
       onClick={() => void openMenu()}
       disabled={saving}
@@ -221,47 +324,7 @@ export function TaskPeopleField({
         </div>
       ) : null}
 
-      {open ? (
-        <div style={compact ? compactMenu : fullMenu}>
-          {!inviteMode ? (
-            <>
-              <div style={{ display: 'grid', gap: 4 }}>
-                {options.map((option) => {
-                  const member = members.find((entry) => (entry.name || entry.email) === option.value || entry.email === option.value)
-                  return (
-                    <div key={option.value} style={{ ...optionRow, ...(option.selected ? optionRowSelected : null) }}>
-                      <button type="button" onClick={() => void togglePerson(option.value)} disabled={saving} style={optionButton}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                          <TaskPeopleAvatarStack assignee={option.value} assigneeAvatarUrl={member?.avatarUrl ?? null} collaborators={[]} size={24} maxVisible={1} />
-                          <div style={{ minWidth: 0, textAlign: 'left' }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }}>{option.label}</div>
-                            <div style={{ marginTop: 2, fontSize: 11, color: option.selected ? 'rgba(5, 46, 22, 0.76)' : 'var(--text-muted)' }}>{option.secondaryLabel}</div>
-                          </div>
-                        </div>
-                        <span style={{ color: option.selected ? '#052e16' : 'var(--text-muted)', fontSize: 11, fontWeight: 700 }}>
-                          {option.role === 'owner' ? 'FIRST' : option.selected ? 'ON' : 'ADD'}
-                        </span>
-                      </button>
-                      {option.role === 'collaborator' ? (
-                        <button type="button" onClick={() => void promotePerson(option.value)} disabled={saving} style={promoteButton}>Make first person</button>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </div>
-              {canManage ? <button type="button" onClick={() => { setInviteMode(true); setError(null) }} disabled={saving} style={inviteButton}>Invite new user…</button> : null}
-            </>
-          ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" style={inviteInput} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="button" onClick={() => void handleInvite()} disabled={!inviteEmail.trim() || saving} style={inviteButton}>{saving ? 'Inviting…' : 'Invite + add to task'}</button>
-                <button type="button" onClick={() => { setInviteMode(false); setInviteEmail(''); setError(null) }} disabled={saving} style={cancelButton}>Cancel</button>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : null}
+      {open ? renderMenu() : null}
 
       {error ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{error}</div> : null}
     </div>
@@ -364,6 +427,20 @@ const optionButton: React.CSSProperties = {
   gap: 10,
   cursor: 'pointer',
   color: 'inherit',
+}
+
+const removeHintStyle: React.CSSProperties = {
+  display: 'inline-grid',
+  placeItems: 'center',
+  width: 14,
+  height: 14,
+  borderRadius: 999,
+  fontSize: 12,
+  lineHeight: 1,
+  color: '#7f1d1d',
+  background: 'rgba(239, 68, 68, 0.18)',
+  border: '1px solid rgba(239, 68, 68, 0.32)',
+  fontWeight: 800,
 }
 
 const promoteButton: React.CSSProperties = {
