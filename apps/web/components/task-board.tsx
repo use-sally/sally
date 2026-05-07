@@ -12,6 +12,7 @@ import { qk } from '../lib/query'
 import { automationBadgeStyle, getTaskAutomationBadge } from '../lib/task-automation'
 import { pill, priorityStars, tagStyle } from './app-shell'
 import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
+import { StatusChipPicker } from './status-chip-picker'
 import { labelText, projectInputField, taskTitleText } from '../lib/theme'
 import { canonicalStatusColor, resolveStatusPair, statusChipStyle, statusThemeVars, STATUS_COLOR_PAIRS } from '../lib/status-colors'
 
@@ -49,6 +50,7 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
 
   const pinnedColumn = useMemo(() => board[0] || null, [board])
   const movableColumns = useMemo(() => board.slice(1), [board])
+  const statusOptions = useMemo(() => board.map((col) => ({ id: col.id, name: col.title, color: col.color ?? null })), [board])
 
   async function invalidateBoard() {
     await Promise.all([
@@ -224,9 +226,9 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
           {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{statusError}</div> : null}
           <div data-board-scroll="true" style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', paddingBottom: 8 }}>
             <div data-board-columns="true" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, width: 'max-content', minWidth: '100%' }}>
-              {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} pinned canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} /> : null}
+              {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} projectId={projectId} statusOptions={statusOptions} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} pinned canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} /> : null}
               {movableColumns.map((column) => (
-                <BoardColumnView key={column.id} column={column} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} reorderable={canReorderStatuses} canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} />
+                <BoardColumnView key={column.id} column={column} projectId={projectId} statusOptions={statusOptions} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} reorderable={canReorderStatuses} canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} />
               ))}
               {canManageStatuses ? <AddStatusColumn newStatus={newStatus} setNewStatus={setNewStatus} newStatusType={newStatusType} setNewStatusType={setNewStatusType} addStatus={addStatus} statusSaving={statusSaving} /> : null}
             </div>
@@ -237,7 +239,7 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
   )
 }
 
-function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTask, savingFor, automationOverview, reorderable = false, pinned = false, canManageStatuses = false, statusTypeLabel, statusSaving, editingStatusId, statusEditDraft, setStatusEditDraft, openStatusEditor, saveStatusEdit, cancelStatusEdit }: any) {
+function BoardColumnView({ column, projectId, statusOptions, taskBaseHref, drafts, setDrafts, addInlineTask, savingFor, automationOverview, reorderable = false, pinned = false, canManageStatuses = false, statusTypeLabel, statusSaving, editingStatusId, statusEditDraft, setStatusEditDraft, openStatusEditor, saveStatusEdit, cancelStatusEdit }: any) {
   const { setNodeRef } = useDroppable({ id: column.id })
   const sortable = useSortable({ id: column.id, disabled: !reorderable })
   const isEditing = editingStatusId === column.id
@@ -303,7 +305,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
 
       <SortableContext items={column.cards.map((c: BoardCard) => c.id)} strategy={verticalListSortingStrategy}>
         <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} taskBaseHref={taskBaseHref} automationOverview={automationOverview} />)}
+          {column.cards.map((card: BoardCard) => <SortableTaskCard key={card.id} card={card} projectId={projectId} statusOptions={statusOptions} taskBaseHref={taskBaseHref} automationOverview={automationOverview} />)}
         </div>
       </SortableContext>
 
@@ -371,7 +373,7 @@ function AddStatusColumn({ newStatus, setNewStatus, newStatusType, setNewStatusT
   )
 }
 
-function SortableTaskCard({ card, taskBaseHref, automationOverview }: { card: BoardCard; taskBaseHref: string; automationOverview?: ProjectAutomationOverview | null }) {
+function SortableTaskCard({ card, projectId, statusOptions, taskBaseHref, automationOverview }: { card: BoardCard; projectId: string; statusOptions: { id: string; name: string; color?: string | null }[]; taskBaseHref: string; automationOverview?: ProjectAutomationOverview | null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
   const badge = dueBadge(card.dueDate)
   const automationBadge = getTaskAutomationBadge(automationOverview, card.id)
@@ -388,7 +390,20 @@ function SortableTaskCard({ card, taskBaseHref, automationOverview }: { card: Bo
             <TaskPeopleAvatarStack owner={card.owner} ownerAvatarUrl={card.ownerAvatarUrl} participants={card.participants} assignee={card.assignee} assigneeAvatarUrl={card.assigneeAvatarUrl} collaborators={card.collaborators} size={28} maxVisible={3} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
               <span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span>
-              <span className="status-chip" style={statusChipStyle(card.statusColor)}>{card.status}</span>
+              <div
+                onClick={(event) => { event.stopPropagation(); event.preventDefault() }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <StatusChipPicker
+                  taskId={card.id}
+                  projectId={projectId}
+                  currentStatusId={card.statusId}
+                  currentStatusName={card.status}
+                  currentStatusColor={card.statusColor}
+                  statuses={statusOptions}
+                />
+              </div>
             </div>
           </div>
           {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
