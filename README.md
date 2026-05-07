@@ -172,6 +172,12 @@ Sally works well for:
 - pnpm
 - Docker (for deployment testing)
 
+### Local app setup tutorial
+
+For a complete local setup from a fresh clone, including Postgres, env files, migrations, bootstrap, dev servers, validation, and troubleshooting, use:
+
+- [`docs/local-development-setup.md`](./docs/local-development-setup.md)
+
 ### Install dependencies
 
 ```bash
