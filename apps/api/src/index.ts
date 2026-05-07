@@ -1,6 +1,6 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
-import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus } from '@prisma/client'
+import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -106,6 +106,85 @@ async function ensureWorkerAuth(request: any, reply: any) {
 async function emitAgentEvent(input: { workspaceId: string; agentId?: string | null; type: string; payload: unknown }) {
   const event = buildAgentEventPayload(input.type, input.payload)
   return prisma.agentEvent.create({ data: { workspaceId: input.workspaceId, agentId: input.agentId ?? null, type: event.type, payload: event.payload as any } })
+}
+
+type WorkItemRefBody = {
+  provider?: string | null
+  externalId?: string | null
+  externalUrl?: string | null
+  title?: string | null
+  description?: string | null
+  sallyTaskId?: string | null
+  metadata?: unknown
+}
+
+function normalizeWorkItemProvider(provider?: string | null): WorkItemProvider {
+  const normalized = provider?.trim().toUpperCase()
+  if (!normalized || !(normalized in WorkItemProvider)) throw new Error('invalid work item provider')
+  return WorkItemProvider[normalized as keyof typeof WorkItemProvider]
+}
+
+async function resolveWorkItemRef(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null }) {
+  const explicitId = input.workItemRefId?.trim()
+  if (explicitId) {
+    const existing = await prisma.workItemRef.findFirst({ where: { id: explicitId, workspaceId: input.workspaceId } })
+    if (!existing) throw new Error('Work item ref not found')
+    return existing.id
+  }
+
+  const taskId = input.taskId?.trim() || input.workItemRef?.sallyTaskId?.trim() || null
+  if (taskId) {
+    const task = await prisma.task.findFirst({ where: { id: taskId, project: { workspaceId: input.workspaceId } } })
+    if (!task) throw new Error('Task not found')
+    const existing = await prisma.workItemRef.findFirst({ where: { workspaceId: input.workspaceId, provider: WorkItemProvider.SALLY, sallyTaskId: task.id } })
+    if (existing) return existing.id
+    const created = await prisma.workItemRef.create({
+      data: {
+        workspaceId: input.workspaceId,
+        projectId: task.projectId,
+        provider: WorkItemProvider.SALLY,
+        sallyTaskId: task.id,
+        titleSnapshot: task.title,
+        descriptionSnapshot: task.description,
+      },
+    })
+    return created.id
+  }
+
+  const workItemRef = input.workItemRef
+  if (!workItemRef?.provider) return null
+  const provider = normalizeWorkItemProvider(workItemRef.provider)
+  const externalId = workItemRef.externalId?.trim() || workItemRef.externalUrl?.trim() || null
+  if (!externalId) throw new Error('external work item refs require externalId or externalUrl')
+  if (workItemRef.metadata !== undefined) assertNoSecretLikeJson(workItemRef.metadata, 'workItemRef.metadata')
+  const projectId = input.projectId?.trim() || null
+  const existing = await prisma.workItemRef.findFirst({ where: { workspaceId: input.workspaceId, provider, externalId } })
+  if (existing) {
+    const updated = await prisma.workItemRef.update({
+      where: { id: existing.id },
+      data: {
+        projectId,
+        externalUrl: workItemRef.externalUrl?.trim() || existing.externalUrl,
+        titleSnapshot: workItemRef.title?.trim() || existing.titleSnapshot,
+        descriptionSnapshot: workItemRef.description?.trim() || existing.descriptionSnapshot,
+        metadata: workItemRef.metadata === undefined ? undefined : workItemRef.metadata as any,
+      },
+    })
+    return updated.id
+  }
+  const created = await prisma.workItemRef.create({
+    data: {
+      workspaceId: input.workspaceId,
+      projectId,
+      provider: normalizeWorkItemProvider(workItemRef.provider),
+      externalId,
+      externalUrl: workItemRef.externalUrl?.trim() || null,
+      titleSnapshot: workItemRef.title?.trim() || null,
+      descriptionSnapshot: workItemRef.description?.trim() || null,
+      metadata: workItemRef.metadata === undefined ? undefined : workItemRef.metadata as any,
+    },
+  })
+  return created.id
 }
 
 async function moveTaskForWorkflow(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; targetType: TaskStatusType; reason: string; actor?: ReturnType<typeof actorFromRequest> }) {
@@ -1179,11 +1258,11 @@ const hostedMcpTools: McpTool[] = [
   { name: 'timesheet.update', description: 'Update a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' }, minutes: { type: 'number' }, description: { type: ['string', 'null'] }, date: { type: 'string' }, billable: { type: 'boolean' }, validated: { type: 'boolean' }, taskId: { type: ['string', 'null'] }, userId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
   { name: 'timesheet.delete', description: 'Delete a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
   { name: 'agent.list', description: 'List Sally agent identities in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, role: { type: 'string' }, enabled: { type: 'boolean' } }, additionalProperties: false } },
-  { name: 'agent_job.create', description: 'Queue a Sally-native agent job for Hermes or remote Hermes to claim.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, mode: { type: 'string' }, triggerType: { type: 'string' }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, maxSteps: { type: ['number','null'] }, payload: { type: 'object' } }, required: ['role'], additionalProperties: false } },
+  { name: 'agent_job.create', description: 'Queue a Sally-native or external-work-item agent job for Hermes or remote Hermes to claim.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, mode: { type: 'string' }, triggerType: { type: 'string' }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, maxSteps: { type: ['number','null'] }, workItemRefId: { type: ['string','null'] }, workItemRef: { type: ['object','null'] }, payload: { type: 'object' } }, required: ['role'], additionalProperties: false } },
   { name: 'agent_job.list', description: 'List Sally-native agent jobs in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, status: { type: 'string' }, projectId: { type: 'string' }, taskId: { type: 'string' }, role: { type: 'string' } }, additionalProperties: false } },
   { name: 'agent_job.claim', description: 'Atomically claim a queued Sally-native agent job.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, jobId: { type: 'string' }, agentId: { type: ['string','null'] } }, required: ['jobId'], additionalProperties: false } },
   { name: 'agent_job.update', description: 'Update Sally-native agent job status, error, or safe payload metadata.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, jobId: { type: 'string' }, status: { type: 'string' }, error: { type: ['string','null'] }, payload: { type: 'object' } }, required: ['jobId'], additionalProperties: false } },
-  { name: 'agent_run.create', description: 'Create a visible Sally agent run record for Hermes execution.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, jobId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, status: { type: 'string' }, triggerType: { type: 'string' }, provider: { type: ['string','null'] }, model: { type: ['string','null'] }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, summary: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['role'], additionalProperties: false } },
+  { name: 'agent_run.create', description: 'Create a visible Sally agent run record for Hermes execution.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, jobId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, status: { type: 'string' }, triggerType: { type: 'string' }, provider: { type: ['string','null'] }, model: { type: ['string','null'] }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, workItemRefId: { type: ['string','null'] }, workItemRef: { type: ['object','null'] }, summary: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['role'], additionalProperties: false } },
   { name: 'agent_run.update', description: 'Update a Sally agent run status and safe execution metadata.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, runId: { type: 'string' }, status: { type: 'string' }, summary: { type: ['string','null'] }, error: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['runId'], additionalProperties: false } },
   { name: 'agent_run.heartbeat', description: 'Update the latest heartbeat timestamp for a Sally agent run.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, runId: { type: 'string' } }, required: ['runId'], additionalProperties: false } },
 ]
@@ -1358,13 +1437,13 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       return { items: await injectJson(request, { method: 'GET', url: `/agent-jobs${q ? `?${q}` : ''}`, args }) }
     }
     case 'agent_job.create':
-      return await injectJson(request, { method: 'POST', url: '/agent-jobs', args, payload: buildHostedMcpAgentJobCreatePayload({ projectId: args.projectId, taskId: args.taskId, agentId: args.agentId, role: args.role, mode: args.mode, triggerType: args.triggerType, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, maxSteps: args.maxSteps, payload: args.payload }) })
+      return await injectJson(request, { method: 'POST', url: '/agent-jobs', args, payload: buildHostedMcpAgentJobCreatePayload({ projectId: args.projectId, taskId: args.taskId, agentId: args.agentId, role: args.role, mode: args.mode, triggerType: args.triggerType, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, maxSteps: args.maxSteps, workItemRefId: args.workItemRefId, workItemRef: args.workItemRef, payload: args.payload }) })
     case 'agent_job.claim':
       return await injectJson(request, { method: 'POST', url: `/agent-jobs/${args.jobId}/claim`, args, payload: { agentId: args.agentId } })
     case 'agent_job.update':
       return await injectJson(request, { method: 'PATCH', url: `/agent-jobs/${args.jobId}`, args, payload: buildHostedMcpAgentJobUpdatePayload({ status: args.status, error: args.error, payload: args.payload }) })
     case 'agent_run.create':
-      return await injectJson(request, { method: 'POST', url: '/agent-runs', args, payload: buildHostedMcpAgentRunCreatePayload({ projectId: args.projectId, taskId: args.taskId, jobId: args.jobId, agentId: args.agentId, role: args.role, status: args.status, triggerType: args.triggerType, provider: args.provider, model: args.model, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, summary: args.summary, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
+      return await injectJson(request, { method: 'POST', url: '/agent-runs', args, payload: buildHostedMcpAgentRunCreatePayload({ projectId: args.projectId, taskId: args.taskId, jobId: args.jobId, agentId: args.agentId, role: args.role, status: args.status, triggerType: args.triggerType, provider: args.provider, model: args.model, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, workItemRefId: args.workItemRefId, workItemRef: args.workItemRef, summary: args.summary, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
     case 'agent_run.update':
       return await injectJson(request, { method: 'PATCH', url: `/agent-runs/${args.runId}`, args, payload: buildHostedMcpAgentRunUpdatePayload({ status: args.status, summary: args.summary, error: args.error, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
     case 'agent_run.heartbeat':
@@ -2233,7 +2312,7 @@ const start = async () => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const account = (request as any).account as { id: string } | undefined
-      const body = request.body as { projectId?: string | null; taskId?: string | null; agentId?: string | null; role?: string; mode?: string; triggerType?: string; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null; payload?: unknown }
+      const body = request.body as { projectId?: string | null; taskId?: string | null; agentId?: string | null; role?: string; mode?: string; triggerType?: string; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null; payload?: unknown }
       let role: string
       try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
       if (body.payload !== undefined) assertNoSecretLikeJson(body.payload, 'payload')
@@ -2251,6 +2330,12 @@ const start = async () => {
         const agent = await prisma.agentIdentity.findFirst({ where: { id: body.agentId, workspaceId: workspace.id, enabled: true } })
         if (!agent) return reply.code(404).send({ ok: false, error: 'Agent not found or disabled' })
       }
+      let resolvedWorkItemRefId: string | null = null
+      try {
+        resolvedWorkItemRefId = await resolveWorkItemRef({ workspaceId: workspace.id, projectId, taskId, workItemRefId: body.workItemRefId, workItemRef: body.workItemRef })
+      } catch (err: any) {
+        return reply.code(err.message === 'Work item ref not found' || err.message === 'Task not found' ? 404 : 400).send({ ok: false, error: err.message })
+      }
       const job = await prisma.agentJob.create({
         data: {
           workspaceId: workspace.id,
@@ -2264,6 +2349,7 @@ const start = async () => {
           workflowRunId: body.workflowRunId?.trim() || null,
           workflowStep: body.workflowStep ?? null,
           maxSteps: body.maxSteps ?? null,
+          workItemRefId: resolvedWorkItemRefId,
           payload: body.payload === undefined ? undefined : body.payload as any,
         },
       })
@@ -2337,12 +2423,18 @@ const start = async () => {
     app.post('/agent-runs', async (request, reply) => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
-      const body = request.body as { projectId?: string | null; taskId?: string | null; jobId?: string | null; agentId?: string | null; role?: string; status?: string; triggerType?: string; provider?: string | null; model?: string | null; workflowRunId?: string | null; workflowStep?: number | null; summary?: string | null; logUrl?: string | null; evidenceUrl?: string | null; metadata?: unknown }
+      const body = request.body as { projectId?: string | null; taskId?: string | null; jobId?: string | null; agentId?: string | null; role?: string; status?: string; triggerType?: string; provider?: string | null; model?: string | null; workflowRunId?: string | null; workflowStep?: number | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null; summary?: string | null; logUrl?: string | null; evidenceUrl?: string | null; metadata?: unknown }
       let role: string
       try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
       if (body.metadata !== undefined) assertNoSecretLikeJson(body.metadata, 'metadata')
       const status = body.status ? body.status.trim().toUpperCase() as AgentRunStatus : AgentRunStatus.QUEUED
       if (!Object.values(AgentRunStatus).includes(status)) return reply.code(400).send({ ok: false, error: 'invalid run status' })
+      let resolvedWorkItemRefId: string | null = null
+      try {
+        resolvedWorkItemRefId = await resolveWorkItemRef({ workspaceId: workspace.id, projectId: body.projectId, taskId: body.taskId, workItemRefId: body.workItemRefId, workItemRef: body.workItemRef })
+      } catch (err: any) {
+        return reply.code(err.message === 'Work item ref not found' || err.message === 'Task not found' ? 404 : 400).send({ ok: false, error: err.message })
+      }
       const run = await prisma.agentRun.create({
         data: {
           workspaceId: workspace.id,
@@ -2357,6 +2449,7 @@ const start = async () => {
           model: body.model?.trim() || null,
           workflowRunId: body.workflowRunId?.trim() || null,
           workflowStep: body.workflowStep ?? null,
+          workItemRefId: resolvedWorkItemRefId,
           startedAt: status === AgentRunStatus.RUNNING ? new Date() : null,
           summary: body.summary?.trim() || null,
           logUrl: body.logUrl?.trim() || null,

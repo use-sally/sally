@@ -84,6 +84,13 @@ enum AgentRunStatus {
   TIMED_OUT
 }
 
+enum WorkItemProvider {
+  SALLY
+  LINEAR
+  JIRA
+  GITHUB
+}
+
 enum AgentConnectionStatus {
   ONLINE
   OFFLINE
@@ -149,6 +156,7 @@ model Workspace {
   agentEventAcks           AgentEventAck[]
   agentJobs                AgentJob[]
   agentRuns                AgentRun[]
+  workItemRefs             WorkItemRef[]
   approvalRequests         ApprovalRequest[]
   blockers                 Blocker[]
   projectAutomationConfigs ProjectAutomationConfig[]
@@ -439,6 +447,7 @@ model Project {
   automationConfig ProjectAutomationConfig?
   agentJobs        AgentJob[]
   agentRuns        AgentRun[]
+  workItemRefs     WorkItemRef[]
   approvalRequests ApprovalRequest[]
   blockers         Blocker[]
 
@@ -497,10 +506,37 @@ model Task {
   dependedOnBy     TaskDependency[]   @relation("taskDependedOnBy")
   agentJobs        AgentJob[]
   agentRuns        AgentRun[]
+  workItemRefs     WorkItemRef[]
   approvalRequests ApprovalRequest[]
   blockers         Blocker[]
 
   @@unique([projectId, number])
+}
+
+model WorkItemRef {
+  id                  String           @id @default(cuid())
+  workspaceId         String
+  projectId           String?
+  provider            WorkItemProvider
+  externalId          String?
+  externalUrl         String?
+  titleSnapshot       String?
+  descriptionSnapshot String?
+  sallyTaskId         String?
+  metadata            Json?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project             Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sallyTask           Task?            @relation(fields: [sallyTaskId], references: [id], onDelete: Cascade)
+  agentJobs           AgentJob[]
+  agentRuns           AgentRun[]
+
+  @@unique([workspaceId, provider, externalId])
+  @@unique([workspaceId, provider, sallyTaskId])
+  @@index([workspaceId, provider, createdAt])
+  @@index([projectId, provider, createdAt])
+  @@index([sallyTaskId])
 }
 
 model TaskParticipant {
@@ -714,6 +750,7 @@ model AgentJob {
   workflowRunId String?
   workflowStep  Int?
   maxSteps      Int?
+  workItemRefId String?
   payload       Json?
   lockedAt      DateTime?
   startedAt     DateTime?
@@ -724,6 +761,7 @@ model AgentJob {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task          Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workItemRef   WorkItemRef?   @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
   agent         AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
   createdBy     Account?       @relation("AgentJobCreator", fields: [createdById], references: [id], onDelete: SetNull)
   runs          AgentRun[]
@@ -731,6 +769,7 @@ model AgentJob {
   @@index([workspaceId, status, createdAt])
   @@index([projectId, status, createdAt])
   @@index([taskId, createdAt])
+  @@index([workItemRefId, createdAt])
   @@index([workflowRunId, workflowStep])
 }
 
@@ -748,6 +787,7 @@ model AgentRun {
   model             String?
   workflowRunId     String?
   workflowStep      Int?
+  workItemRefId     String?
   startedAt         DateTime?
   finishedAt        DateTime?
   latestHeartbeatAt DateTime?
@@ -761,12 +801,14 @@ model AgentRun {
   workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project           Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task              Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workItemRef       WorkItemRef?   @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
   job               AgentJob?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
   agent             AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, status, createdAt])
   @@index([projectId, status, createdAt])
   @@index([taskId, createdAt])
+  @@index([workItemRefId, createdAt])
   @@index([jobId])
   @@index([workflowRunId, workflowStep])
 }
