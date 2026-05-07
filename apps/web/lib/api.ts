@@ -1,4 +1,4 @@
-import type { BoardColumn, Client, ClientDetail, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
+import type { BoardColumn, Client, ClientDetail, EditionInfo, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
@@ -44,6 +44,7 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function getHealth(): Promise<Health> { return getJson('/health') }
+export function getEdition(): Promise<EditionInfo> { return getJson('/edition') }
 export function getRuntimeConfig(): Promise<{ ok: boolean; appBaseUrl: string | null }> { return getJson('/runtime-config') }
 export function getNotifications(params?: { unreadOnly?: boolean; limit?: number }): Promise<Notification[]> {
   const search = new URLSearchParams()

@@ -1,3 +1,5 @@
+export * from './edition.js'
+
 export type Health = {
   ok: boolean
   service: 'api'

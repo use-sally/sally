@@ -23,6 +23,7 @@ import { buildAgentConnectionPatch, buildAgentEventPayload, chooseAgentEventCurs
 import { buildApprovalDecisionPatch, buildApprovalRequestPayload, buildBlockerPayload, buildBlockerResolutionPatch } from './blockers-approvals.js'
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
 import { appBuildTime, appGitSha, appVersion } from './version.js'
+import { getEditionInfo } from './edition.js'
 
 function loadSimpleEnv(filePath: string) {
   if (!fs.existsSync(filePath)) return
@@ -1441,13 +1442,17 @@ const start = async () => {
       if ((url.startsWith('/projects') || url.startsWith('/tasks')) && (await ensureWorkerAuth(request, reply))) return
       if (url.startsWith('/auth/login') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
-      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth')) return
+      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth') || url.startsWith('/edition')) return
       const workspace = await resolveWorkspace(request, reply)
       if (!workspace) return
       ;(request as any).workspace = workspace
     })
 
     app.get('/health', async () => ({ ok: true, service: 'api', timestamp: new Date().toISOString() }))
+    app.get('/edition', async () => {
+      const edition = getEditionInfo()
+      return { ...edition, availableFeatures: edition.availableFeatures }
+    })
 
     app.get('/runtime-config', async () => ({
       ok: true,

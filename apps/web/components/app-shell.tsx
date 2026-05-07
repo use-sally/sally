@@ -339,23 +339,55 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                 )
               })}
               {isPlatformAdminSession ? (
-                <Link
-                  href="/team"
-                  style={{
-                    display: 'block',
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    color: pathname.startsWith('/team') ? '#052e16' : 'var(--text-secondary)',
-                    fontWeight: 700,
-                    fontSize: 13,
-                    lineHeight: 1.2,
-                    textDecoration: 'none',
-                    background: pathname.startsWith('/team') ? '#fcd34d' : 'transparent',
-                    border: pathname.startsWith('/team') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
-                  }}
-                >
-                  Team
-                </Link>
+                <>
+                  <Link
+                    href="/team"
+                    style={{
+                      display: 'block',
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      color: pathname.startsWith('/team') ? '#052e16' : 'var(--text-secondary)',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      lineHeight: 1.2,
+                      textDecoration: 'none',
+                      background: pathname.startsWith('/team') ? '#fcd34d' : 'transparent',
+                      border: pathname.startsWith('/team') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                    }}
+                  >
+                    Team
+                  </Link>
+                  <Link
+                    href="/security"
+                    style={{
+                      display: 'block',
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      color: pathname.startsWith('/security') ? '#052e16' : 'var(--text-secondary)',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      lineHeight: 1.2,
+                      textDecoration: 'none',
+                      background: pathname.startsWith('/security') ? '#fcd34d' : 'transparent',
+                      border: pathname.startsWith('/security') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                    }}
+                  >Security</Link>
+                  <Link
+                    href="/system"
+                    style={{
+                      display: 'block',
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      color: pathname.startsWith('/system') ? '#052e16' : 'var(--text-secondary)',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      lineHeight: 1.2,
+                      textDecoration: 'none',
+                      background: pathname.startsWith('/system') ? '#fcd34d' : 'transparent',
+                      border: pathname.startsWith('/system') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                    }}
+                  >System</Link>
+                </>
               ) : null}
             </nav>
 
