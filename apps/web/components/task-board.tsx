@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { DndContext, DragEndEvent, DragOverEvent, PointerSensor, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent, PointerSensor, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { BoardCard, BoardColumn, ProjectAutomationOverview } from '@sally/types/src'
@@ -44,6 +44,7 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
   const [statusError, setStatusError] = useState<string | null>(null)
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null)
   const [statusEditDraft, setStatusEditDraft] = useState<StatusEditDraft>({ name: '', type: 'BACKLOG', color: '#1F2937' })
+  const [activeDragCard, setActiveDragCard] = useState<BoardCard | null>(null)
 
   useEffect(() => setBoard(columns), [columns])
 
@@ -151,6 +152,18 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
     return value.toLowerCase().replace(/_/g, ' ')
   }
 
+  function onDragStart(event: DragStartEvent) {
+    const activeId = String(event.active.id)
+    if (board.find((col) => col.id === activeId)) return
+    for (const col of board) {
+      const card = col.cards.find((c) => c.id === activeId)
+      if (card) {
+        setActiveDragCard(card)
+        return
+      }
+    }
+  }
+
   function onDragOver(event: DragOverEvent) {
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : null
@@ -180,6 +193,7 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
   }
 
   async function onDragEnd(event: DragEndEvent) {
+    setActiveDragCard(null)
     const activeId = String(event.active.id)
     const overId = event.over ? String(event.over.id) : null
     if (!overId) return
@@ -217,8 +231,12 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
     await persistMove(activeId, overCol.id, nextBoard)
   }
 
+  function onDragCancel() {
+    setActiveDragCard(null)
+  }
+
   return (
-    <DndContext sensors={sensors} onDragOver={onDragOver} onDragEnd={(e) => { void onDragEnd(e) }}>
+    <DndContext sensors={sensors} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={(e) => { void onDragEnd(e) }} onDragCancel={onDragCancel}>
       <SortableContext items={movableColumns.map((column) => column.id)} strategy={horizontalListSortingStrategy}>
         <div style={{ display: 'grid', gap: 10, minWidth: 0 }}>
           {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{statusError}</div> : null}
@@ -233,7 +251,31 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
           </div>
         </div>
       </SortableContext>
+      <DragOverlay dropAnimation={null}>
+        {activeDragCard ? <BoardCardPreview card={activeDragCard} /> : null}
+      </DragOverlay>
     </DndContext>
+  )
+}
+
+function BoardCardPreview({ card }: { card: BoardCard }) {
+  const badge = dueBadge(card.dueDate)
+  return (
+    <div style={{ ...boardCardStyle(card.statusColor), color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'grid', gap: 8, minWidth: 0, width: BOARD_COLUMN_WIDTH - 28, boxShadow: '0 18px 36px rgba(0, 0, 0, 0.45)', transform: 'rotate(-1.5deg)', cursor: 'grabbing' }}>
+      <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+        {card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}
+        {card.title}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
+        <TaskPeopleAvatarStack owner={card.owner} ownerAvatarUrl={card.ownerAvatarUrl} participants={card.participants} assignee={card.assignee} assigneeAvatarUrl={card.assigneeAvatarUrl} collaborators={card.collaborators} size={28} maxVisible={3} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          <span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span>
+          <span className="status-chip" style={statusChipStyle(card.statusColor)}>{card.status}</span>
+        </div>
+      </div>
+      {card.labels?.length ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{card.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>)}</div> : null}
+      {badge ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><span style={pill(badge.bg, badge.color)}>{badge.label}</span></div> : null}
+    </div>
   )
 }
 
@@ -378,9 +420,9 @@ function SortableTaskCard({ card, taskBaseHref, automationOverview }: { card: Bo
   const automationTone = automationBadge ? automationBadgeStyle(automationBadge.tone) : null
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, minWidth: 0 }}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1, minWidth: 0 }}>
       <Link href={`${taskBaseHref}?view=board&task=${card.id}`} style={{ textAlign: 'left', textDecoration: 'none', color: 'inherit', display: 'block', minWidth: 0 }}>
-        <div style={{ ...boardCardStyle(card.statusColor), color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: '1px solid var(--form-border)', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden', cursor: 'pointer' }}>
+        <div style={{ ...boardCardStyle(card.statusColor), color: 'var(--form-text)', background: 'var(--form-bg)', borderRadius: 12, border: isDragging ? '1px dashed var(--form-border-focus, var(--form-border))' : '1px solid var(--form-border)', padding: 12, display: 'grid', gap: 8, minWidth: 0, overflow: 'hidden', cursor: 'pointer' }}>
           <div {...attributes} {...listeners} style={{ cursor: 'grab', minWidth: 0 }}>
             <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}{card.title}</div>
           </div>
