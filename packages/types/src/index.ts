@@ -316,6 +316,7 @@ export type WorkspaceInfo = {
   name: string
   slug: string
   createdAt: string
+  archivedAt: string | null
 }
 
 export type AccountSummary = {

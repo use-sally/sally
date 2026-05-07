@@ -2478,14 +2478,17 @@ const start = async () => {
 
     app.get('/workspaces', async (request) => {
       const account = (request as any).account as { id: string } | undefined
+      const includeArchived = String((request.query as { archived?: string } | undefined)?.archived || '').toLowerCase() === 'true'
+      const archiveFilter = includeArchived ? {} : { archivedAt: null }
       const workspaces = isPlatformAdmin(request)
-        ? await prisma.workspace.findMany({ orderBy: { createdAt: 'asc' } })
-        : await prisma.workspace.findMany({ where: account ? { memberships: { some: { accountId: account.id } } } : undefined, orderBy: { createdAt: 'asc' } })
+        ? await prisma.workspace.findMany({ where: archiveFilter, orderBy: { createdAt: 'asc' } })
+        : await prisma.workspace.findMany({ where: account ? { ...archiveFilter, memberships: { some: { accountId: account.id } } } : archiveFilter, orderBy: { createdAt: 'asc' } })
       return workspaces.map((workspace) => ({
         id: workspace.id,
         name: workspace.name,
         slug: workspace.slug,
         createdAt: workspace.createdAt.toISOString(),
+        archivedAt: workspace.archivedAt?.toISOString() ?? null,
       }))
     })
 
@@ -2504,6 +2507,26 @@ const start = async () => {
       const account = (request as any).account as { id: string } | undefined
       const workspace = await prisma.workspace.create({ data: { name, slug, ...(account ? { memberships: { create: { accountId: account.id, role: WorkspaceRole.OWNER } } } : {}) } })
       return { ok: true, workspaceId: workspace.id }
+    })
+
+    app.post('/workspaces/:workspaceId/archive', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const { workspaceId } = request.params as { workspaceId: string }
+      const body = request.body as { archived?: boolean }
+      const archived = body.archived !== false
+      const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+      if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      const updated = await prisma.workspace.update({ where: { id: workspaceId }, data: { archivedAt: archived ? new Date() : null } })
+      return { ok: true, workspace: { id: updated.id, archivedAt: updated.archivedAt?.toISOString() ?? null } }
+    })
+
+    app.delete('/workspaces/:workspaceId', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const { workspaceId } = request.params as { workspaceId: string }
+      const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+      if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      await prisma.workspace.delete({ where: { id: workspaceId } })
+      return { ok: true }
     })
 
     app.get('/accounts', async (request, reply) => {

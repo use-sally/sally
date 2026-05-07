@@ -133,6 +133,7 @@ model Workspace {
   slug                     String                    @unique
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
+  archivedAt               DateTime?
   projects                 Project[]
   clients                  Client[]
   users                    User[]
@@ -151,6 +152,8 @@ model Workspace {
   approvalRequests         ApprovalRequest[]
   blockers                 Blocker[]
   projectAutomationConfigs ProjectAutomationConfig[]
+
+  @@index([archivedAt])
 }
 
 model Account {

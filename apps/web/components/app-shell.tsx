@@ -20,6 +20,7 @@ const appNavItems = [
 
 const adminNavItems = [
   { href: '/team', label: 'Team' },
+  { href: '/workspaces', label: 'Workspaces' },
   { href: '/security', label: 'Security' },
   { href: '/system', label: 'System' },
 ]
@@ -170,7 +171,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const activeWorkspace = workspaceOptions.find((option) => option.id === activeWorkspaceId)
   const platformRole = loadSession()?.account?.platformRole
   const isPlatformAdminSession = platformRole === 'SUPERADMIN' || platformRole === 'ADMIN'
-  const isAdminArea = pathname.startsWith('/team') || pathname.startsWith('/security') || pathname.startsWith('/system')
+  const isAdminArea = pathname.startsWith('/team') || pathname.startsWith('/workspaces') || pathname.startsWith('/security') || pathname.startsWith('/system')
 
   const handleNotificationClick = async (notification: Notification) => {
     await readNotification(notification.id)

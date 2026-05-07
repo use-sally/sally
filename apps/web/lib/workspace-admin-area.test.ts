@@ -1,0 +1,31 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+
+const root = process.cwd()
+const appShellSource = fs.readFileSync(path.join(root, 'components/app-shell.tsx'), 'utf8')
+const apiSource = fs.readFileSync(path.join(root, 'lib/api.ts'), 'utf8')
+const workspaceAdminPageSource = fs.existsSync(path.join(root, 'app/workspaces/page.tsx')) ? fs.readFileSync(path.join(root, 'app/workspaces/page.tsx'), 'utf8') : ''
+
+test('Admin mode includes a Workspaces section beside Team Security and System', () => {
+  assert.match(appShellSource, /const adminNavItems = \[/)
+  assert.match(appShellSource, /\{ href: '\/workspaces', label: 'Workspaces' \}/)
+  assert.match(appShellSource, /pathname\.startsWith\('\/workspaces'\)/)
+})
+
+test('workspace admin page can create archive restore and delete workspaces', () => {
+  assert.match(workspaceAdminPageSource, /getWorkspaces\(\{ archived: true \}\)/)
+  assert.match(workspaceAdminPageSource, /createWorkspace/)
+  assert.match(workspaceAdminPageSource, /archiveWorkspace/)
+  assert.match(workspaceAdminPageSource, /deleteWorkspace/)
+  assert.match(workspaceAdminPageSource, /Archive/)
+  assert.match(workspaceAdminPageSource, /Restore/)
+  assert.match(workspaceAdminPageSource, /Delete/)
+})
+
+test('web API client exposes workspace archive delete and archived listing helpers', () => {
+  assert.match(apiSource, /getWorkspaces\(filters\?: \{ archived\?: boolean \}\)/)
+  assert.match(apiSource, /export function archiveWorkspace/)
+  assert.match(apiSource, /export function deleteWorkspace/)
+})

@@ -199,8 +199,15 @@ export function getMe(): Promise<{ ok: boolean; account: { id: string; name: str
   return getJson('/auth/me')
 }
 
-export function getWorkspaces(): Promise<WorkspaceInfo[]> { return getJson('/workspaces') }
+export function getWorkspaces(filters?: { archived?: boolean }): Promise<WorkspaceInfo[]> {
+  const params = new URLSearchParams()
+  if (filters?.archived) params.set('archived', 'true')
+  const q = params.toString()
+  return getJson(`/workspaces${q ? `?${q}` : ''}`)
+}
 export function createWorkspace(payload: { name: string; slug?: string }): Promise<{ ok: boolean; workspaceId: string }> { return getJson('/workspaces', { method: 'POST', body: JSON.stringify(payload) }) }
+export function archiveWorkspace(workspaceId: string, archived = true): Promise<{ ok: boolean; workspace: { id: string; archivedAt: string | null } }> { return getJson(`/workspaces/${workspaceId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
+export function deleteWorkspace(workspaceId: string): Promise<{ ok: boolean }> { return getJson(`/workspaces/${workspaceId}`, { method: 'DELETE' }) }
 export function updateWorkspace(workspaceId: string, payload: { name: string }): Promise<{ ok: boolean }> { return getJson(`/workspaces/${workspaceId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> { return getJson(`/workspaces/${workspaceId}/members`) }
 export function addWorkspaceMember(workspaceId: string, payload: { email?: string; name?: string; role?: string; accountId?: string }): Promise<{ ok: boolean; membershipId: string; existing?: boolean }> {
