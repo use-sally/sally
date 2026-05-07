@@ -97,6 +97,7 @@ async function ensureWorkerAuth(request: any, reply: any) {
   const hash = hashAgentWorkerToken(token)
   const connection = await prisma.agentConnection.findFirst({ where: { tokenHash: hash, revokedAt: null }, include: { workspace: true } })
   if (!connection || !verifyAgentWorkerToken(token, connection.tokenHash)) return false
+  if (connection.workspace.archivedAt) return false
   await prisma.agentConnection.update({ where: { id: connection.id }, data: { status: AgentConnectionStatus.ONLINE, lastSeenAt: new Date() } })
   ;(request as any).agentConnection = connection
   ;(request as any).workspace = connection.workspace
@@ -349,6 +350,7 @@ async function resolveWorkspace(request: any, reply: any) {
       reply.code(403).send({ ok: false, error: 'Restricted workspace not found' })
       return null
     }
+    if (!ensureWorkspaceIsActive(restrictedWorkspace, reply)) return null
     if ((workspaceId && String(workspaceId) !== mcpKey.workspaceId) || (workspaceSlug && String(workspaceSlug) !== restrictedWorkspace.slug)) {
       reply.code(403).send({ ok: false, error: 'Workspace access denied by MCP key restriction' })
       return null
@@ -362,8 +364,8 @@ async function resolveWorkspace(request: any, reply: any) {
       if (workspaceId) workspace = await prisma.workspace.findUnique({ where: { id: String(workspaceId) } })
       else if (workspaceSlug) workspace = await prisma.workspace.findUnique({ where: { slug: String(workspaceSlug) } })
       else {
-        const count = await prisma.workspace.count()
-        if (count === 1) workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: 'asc' } })
+        const count = await prisma.workspace.count({ where: { archivedAt: null } })
+        if (count === 1) workspace = await prisma.workspace.findFirst({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } })
         else {
           reply.code(400).send({ ok: false, error: 'workspace selector required' })
           return null
@@ -373,6 +375,7 @@ async function resolveWorkspace(request: any, reply: any) {
         reply.code(404).send({ ok: false, error: 'Workspace not found' })
         return null
       }
+      if (!ensureWorkspaceIsActive(workspace, reply)) return null
       return workspace
     }
     const memberships = await prisma.workspaceMembership.findMany({
@@ -399,6 +402,7 @@ async function resolveWorkspace(request: any, reply: any) {
       reply.code(403).send({ ok: false, error: 'Workspace access denied' })
       return null
     }
+    if (!ensureWorkspaceIsActive(membership.workspace, reply)) return null
     ;(request as any).membership = membership
     return membership.workspace
   }
@@ -408,9 +412,9 @@ async function resolveWorkspace(request: any, reply: any) {
   } else if (workspaceSlug) {
     workspace = await prisma.workspace.findUnique({ where: { slug: String(workspaceSlug) } })
   } else {
-    const count = await prisma.workspace.count()
+    const count = await prisma.workspace.count({ where: { archivedAt: null } })
     if (count === 1) {
-      workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: 'asc' } })
+      workspace = await prisma.workspace.findFirst({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } })
     } else {
       reply.code(400).send({ ok: false, error: 'workspace selector required' })
       return null
@@ -420,6 +424,7 @@ async function resolveWorkspace(request: any, reply: any) {
     reply.code(404).send({ ok: false, error: 'Workspace not found' })
     return null
   }
+  if (!ensureWorkspaceIsActive(workspace, reply)) return null
   return workspace
 }
 function toIsoOrNull(input?: string | null) { if (!input) return null; const v = input.trim(); if (!v) return null; return new Date(v).toISOString() }
@@ -451,6 +456,14 @@ function isPlatformAdmin(request: any) {
   return account?.platformRole === PlatformRole.SUPERADMIN || account?.platformRole === PlatformRole.ADMIN
 }
 
+function ensureWorkspaceIsActive(workspace: { archivedAt?: Date | null } | null | undefined, reply: any) {
+  if (workspace?.archivedAt) {
+    reply.code(409).send({ ok: false, error: 'Workspace archived' })
+    return false
+  }
+  return true
+}
+
 function normalizePlatformRole(input?: string | null) {
   const value = input?.trim().toUpperCase()
   if (value === 'SUPERADMIN') return PlatformRole.SUPERADMIN
@@ -461,6 +474,8 @@ function normalizePlatformRole(input?: string | null) {
 
 async function requireWorkspaceRole(request: any, reply: any, roles: WorkspaceRole[]) {
   const account = (request as any).account as { id: string } | undefined
+  const workspace = (request as any).workspace as { archivedAt?: Date | null } | undefined
+  if (!ensureWorkspaceIsActive(workspace, reply)) return false
   if (!account) return true
   if (isPlatformAdmin(request)) return true
   const membership = (request as any).membership as { role: WorkspaceRole } | undefined
@@ -478,6 +493,13 @@ async function requireWorkspaceRole(request: any, reply: any, roles: WorkspaceRo
 
 async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, workspaceId: string, roles: WorkspaceRole[]) {
   const account = (request as any).account as { id: string } | undefined
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  if (!workspace) {
+    reply.code(404).send({ ok: false, error: 'Workspace not found' })
+    return false
+  }
+  if (!ensureWorkspaceIsActive(workspace, reply)) return false
+  ;(request as any).workspace = workspace
   if (!account) return true
   if (isPlatformAdmin(request)) return true
   const membership = await prisma.workspaceMembership.findFirst({ where: { workspaceId, accountId: account.id }, include: { workspace: true } })
@@ -485,6 +507,7 @@ async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, work
     reply.code(403).send({ ok: false, error: 'Workspace access denied' })
     return false
   }
+  if (!ensureWorkspaceIsActive(membership.workspace, reply)) return false
   ;(request as any).membership = membership
   ;(request as any).workspace = membership.workspace
   const effectiveRole = membership.role === WorkspaceRole.VIEWER ? WorkspaceRole.MEMBER : membership.role
@@ -1337,7 +1360,7 @@ async function injectJson(request: any, options: { method: 'GET' | 'POST' | 'PAT
 async function callHostedMcpTool(request: any, name: string, args: Record<string, any>) {
   switch (name) {
     case 'workspace.list': {
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       const items = memberships
         .filter((membership) => !request.mcpKey?.workspaceId || membership.workspaceId === request.mcpKey.workspaceId)
         .map((membership) => ({ id: membership.workspace.id, name: membership.workspace.name, slug: membership.workspace.slug, role: membership.role }))
@@ -1602,13 +1625,13 @@ const start = async () => {
       if (!valid) return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         sessionToken,
         expiresAt: session.expiresAt.toISOString(),
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -1622,11 +1645,11 @@ const start = async () => {
     app.get('/auth/me', async (request, reply) => {
       const account = (request as any).account as { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: PlatformRole | null } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -1983,13 +2006,13 @@ const start = async () => {
       await prisma.accountInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date(), accountId: account.id } })
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         sessionToken,
         expiresAt: session.expiresAt.toISOString(),
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -2038,13 +2061,13 @@ const start = async () => {
       }
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         sessionToken,
         expiresAt: session.expiresAt.toISOString(),
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -2851,6 +2874,7 @@ const start = async () => {
       const body = request.body as { name?: string }
       const workspace = await prisma.workspace.findFirst({ where: { id: workspaceId } })
       if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      if (!ensureWorkspaceIsActive(workspace, reply)) return
       const nextName = body.name?.trim()
       if (!nextName) return reply.code(400).send({ ok: false, error: 'name is required' })
       await prisma.workspace.update({ where: { id: workspaceId }, data: { name: nextName } })

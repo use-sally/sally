@@ -18,3 +18,13 @@ test('workspace admin API lists archived state and supports archive restore and 
   assert.match(apiIndexSource, /app\.post\('\/workspaces\/:workspaceId\/archive'[\s\S]*isPlatformAdmin\(request\)[\s\S]*archivedAt: archived \? new Date\(\) : null/)
   assert.match(apiIndexSource, /app\.delete\('\/workspaces\/:workspaceId'[\s\S]*isPlatformAdmin\(request\)[\s\S]*prisma\.workspace\.delete/)
 })
+
+test('archived workspaces are hidden from active membership sessions and selectors', () => {
+  assert.match(apiIndexSource, /prisma\.workspaceMembership\.findMany\(\{ where: \{ accountId: account\.id, workspace: \{ archivedAt: null \} \}/)
+})
+
+test('archived workspaces reject normal workspace-scoped edits until restored', () => {
+  assert.match(apiIndexSource, /function ensureWorkspaceIsActive\([\s\S]*Workspace archived[\s\S]*return false/)
+  assert.match(apiIndexSource, /app\.patch\('\/workspaces\/:workspaceId'[\s\S]*ensureWorkspaceIsActive\(workspace, reply\)/)
+  assert.match(apiIndexSource, /requireWorkspaceRoleForWorkspaceId[\s\S]*ensureWorkspaceIsActive\(membership\.workspace, reply\)/)
+})

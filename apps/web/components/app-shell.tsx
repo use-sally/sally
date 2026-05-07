@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import type { Notification } from '@sally/types/src'
 import { getWorkspaceId, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId } from '../lib/auth'
 import { apiUrl, createWorkspace, getMe, getNotifications, logout, readAllNotifications, readNotification } from '../lib/api'
@@ -54,6 +54,40 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
 
+  const applySessionMemberships = useCallback((memberships: NonNullable<ReturnType<typeof loadSession>>['memberships'] = [], refreshOptions?: { reloadOnWorkspaceChange?: boolean }) => {
+    const workspaceMemberships = memberships ?? []
+    const options = workspaceMemberships.map((membership) => ({
+      id: membership.workspaceId,
+      name: membership.workspaceName,
+      role: membership.role,
+    }))
+    setWorkspaceOptions(options)
+
+    const storedWorkspace = getWorkspaceId()
+    const nextWorkspace = pickPreferredWorkspaceId(workspaceMemberships, { storedWorkspaceId: storedWorkspace }) || ''
+    setActiveWorkspaceId(nextWorkspace)
+    if (nextWorkspace) {
+      if (nextWorkspace !== storedWorkspace) {
+        setWorkspaceId(nextWorkspace)
+        if (refreshOptions?.reloadOnWorkspaceChange) window.location.reload()
+      }
+    } else if (storedWorkspace) {
+      setWorkspaceId(null)
+      if (refreshOptions?.reloadOnWorkspaceChange) window.location.reload()
+    }
+  }, [])
+
+  const refreshSessionMemberships = useCallback(async () => {
+    const current = loadSession()
+    if (!current?.token) return
+    const me = await getMe()
+    saveSession({ token: current.token, expiresAt: current.expiresAt, account: me.account, memberships: me.memberships })
+    if (me.account?.name) setAccountName(me.account.name)
+    else if (me.account?.email) setAccountName(me.account.email)
+    if (me.account?.avatarUrl) setAccountAvatarUrl(me.account.avatarUrl.startsWith('/') ? apiUrl(me.account.avatarUrl) : me.account.avatarUrl)
+    applySessionMemberships(me.memberships, { reloadOnWorkspaceChange: true })
+  }, [applySessionMemberships])
+
   useEffect(() => {
     const storedTheme = (typeof window !== 'undefined' ? window.localStorage.getItem('theme-mode') : null) as ThemeMode | null
     const nextTheme: ThemeMode = storedTheme === 'light' ? 'light' : 'dark'
@@ -65,21 +99,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     else if (session?.account?.email) setAccountName(session.account.email)
     if (session?.account?.avatarUrl) setAccountAvatarUrl(session.account.avatarUrl.startsWith('/') ? apiUrl(session.account.avatarUrl) : session.account.avatarUrl)
 
-    const memberships = session?.memberships ?? []
-    const options = memberships.map((membership) => ({
-      id: membership.workspaceId,
-      name: membership.workspaceName,
-      role: membership.role,
-    }))
-    setWorkspaceOptions(options)
-
-    const storedWorkspace = getWorkspaceId()
-    const nextWorkspace = pickPreferredWorkspaceId(memberships, { storedWorkspaceId: storedWorkspace }) || ''
-    if (nextWorkspace) {
-      setActiveWorkspaceId(nextWorkspace)
-      if (nextWorkspace !== storedWorkspace) setWorkspaceId(nextWorkspace)
-    }
-  }, [])
+    applySessionMemberships(session?.memberships ?? [])
+    void refreshSessionMemberships()
+  }, [applySessionMemberships, refreshSessionMemberships])
 
   const handleWorkspaceChange = (nextWorkspaceId: string) => {
     if (!nextWorkspaceId || nextWorkspaceId === activeWorkspaceId) return

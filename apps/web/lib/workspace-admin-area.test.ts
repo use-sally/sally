@@ -29,3 +29,17 @@ test('web API client exposes workspace archive delete and archived listing helpe
   assert.match(apiSource, /export function archiveWorkspace/)
   assert.match(apiSource, /export function deleteWorkspace/)
 })
+
+test('workspace dropdown refreshes active memberships so archived workspaces disappear after archive', () => {
+  assert.match(appShellSource, /const refreshSessionMemberships = useCallback\(async \(\) =>/)
+  assert.match(appShellSource, /setWorkspaceOptions\(options\)/)
+  assert.match(appShellSource, /pickPreferredWorkspaceId\(workspaceMemberships/)
+  assert.match(appShellSource, /void refreshSessionMemberships\(\)/)
+})
+
+test('workspace overview does not expose inline editing for archived workspaces', () => {
+  const overviewSource = fs.readFileSync(path.join(root, 'app/page.tsx'), 'utf8')
+  assert.match(overviewSource, /const activeWorkspaceArchived = Boolean/)
+  assert.match(overviewSource, /disabled=\{workspaceNameSaving \|\| activeWorkspaceArchived\}/)
+  assert.doesNotMatch(overviewSource, /onClick=\{\(\) => setEditingWorkspaceName\(true\)\}/)
+})
