@@ -14,6 +14,7 @@ import { pill, priorityStars, tagStyle } from './app-shell'
 import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
 import { labelText, projectInputField, taskTitleText } from '../lib/theme'
 import { canonicalStatusColor, resolveStatusPair, statusChipStyle, statusThemeVars, STATUS_COLOR_PAIRS } from '../lib/status-colors'
+import { applyBoardFilters, boardFiltersActive, collectBoardAssignees, collectBoardLabels, countBoardCards, type BoardFilters } from '../lib/board-filters'
 
 function dueBadge(dueDate: string | null) {
   if (!dueDate) return null
@@ -45,10 +46,44 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
   const [editingStatusId, setEditingStatusId] = useState<string | null>(null)
   const [statusEditDraft, setStatusEditDraft] = useState<StatusEditDraft>({ name: '', type: 'BACKLOG', color: '#1F2937' })
 
+  // Filter state — board-local
+  const [filterSearch, setFilterSearch] = useState('')
+  const [filterAssignee, setFilterAssignee] = useState<string>('')
+  const [filterPriority, setFilterPriority] = useState<'' | 'P1' | 'P2' | 'P3'>('')
+  const [filterLabels, setFilterLabels] = useState<Set<string>>(() => new Set())
+
   useEffect(() => setBoard(columns), [columns])
 
-  const pinnedColumn = useMemo(() => board[0] || null, [board])
-  const movableColumns = useMemo(() => board.slice(1), [board])
+  const filters: BoardFilters = useMemo(() => ({
+    search: filterSearch,
+    assignee: filterAssignee,
+    priority: filterPriority,
+    labels: filterLabels,
+  }), [filterSearch, filterAssignee, filterPriority, filterLabels])
+
+  const availableAssignees = useMemo(() => collectBoardAssignees(board), [board])
+  const availableLabels = useMemo(() => collectBoardLabels(board), [board])
+  const totalCardCount = useMemo(() => countBoardCards(board), [board])
+  const filtersActive = boardFiltersActive(filters)
+  const filteredBoard = useMemo(() => applyBoardFilters(board, filters), [board, filters])
+  const visibleCardCount = useMemo(() => countBoardCards(filteredBoard), [filteredBoard])
+
+  function clearFilters() {
+    setFilterSearch('')
+    setFilterAssignee('')
+    setFilterPriority('')
+    setFilterLabels(new Set())
+  }
+  function toggleLabel(label: string) {
+    setFilterLabels((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label); else next.add(label)
+      return next
+    })
+  }
+
+  const pinnedColumn = useMemo(() => filteredBoard[0] || null, [filteredBoard])
+  const movableColumns = useMemo(() => filteredBoard.slice(1), [filteredBoard])
 
   async function invalidateBoard() {
     await Promise.all([
@@ -222,6 +257,78 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
       <SortableContext items={movableColumns.map((column) => column.id)} strategy={horizontalListSortingStrategy}>
         <div style={{ display: 'grid', gap: 10, minWidth: 0 }}>
           {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{statusError}</div> : null}
+          <div style={filterBarStyle} data-board-filters="true">
+            <input
+              type="search"
+              value={filterSearch}
+              onChange={(event) => setFilterSearch(event.target.value)}
+              placeholder="Search by title…"
+              style={filterSearchInput}
+              aria-label="Search board tasks by title"
+            />
+            <select
+              value={filterAssignee}
+              onChange={(event) => setFilterAssignee(event.target.value)}
+              style={filterSelect}
+              aria-label="Filter by assignee"
+            >
+              <option value="">All people</option>
+              {availableAssignees.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <div style={priorityChipGroup} role="group" aria-label="Filter by priority">
+              {(['P1', 'P2', 'P3'] as const).map((p) => {
+                const active = filterPriority === p
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setFilterPriority((current) => current === p ? '' : p)}
+                    style={{ ...priorityChip, ...(active ? priorityChipActive : null) }}
+                    aria-pressed={active}
+                  >
+                    {p}
+                  </button>
+                )
+              })}
+            </div>
+            {availableLabels.length ? (
+              <div style={labelChipGroup} role="group" aria-label="Filter by label">
+                {availableLabels.map((label) => {
+                  const active = filterLabels.has(label)
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => toggleLabel(label)}
+                      style={{ ...labelChip, ...(active ? labelChipActive : null) }}
+                      aria-pressed={active}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+              {filtersActive ? (
+                <span style={counterBadge}>
+                  <span style={counterNumber}>{visibleCardCount}</span>
+                  <span style={counterDivider}>of</span>
+                  <span style={counterNumberMuted}>{totalCardCount}</span>
+                </span>
+              ) : (
+                <span style={counterBadge}>
+                  <span style={counterNumber}>{totalCardCount}</span>
+                  <span style={counterDivider}>tasks</span>
+                </span>
+              )}
+              {filtersActive ? (
+                <button type="button" onClick={clearFilters} style={clearFiltersButton}>
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
+          </div>
           <div data-board-scroll="true" style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', paddingBottom: 8 }}>
             <div data-board-columns="true" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, width: 'max-content', minWidth: '100%' }}>
               {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} pinned canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} /> : null}
@@ -413,6 +520,109 @@ const statusEditorStyle: React.CSSProperties = { display: 'grid', gap: 8, paddin
 const statusColorOptionButton: React.CSSProperties = { background: 'transparent', border: '1px solid var(--panel-border)', padding: '5px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 12, fontWeight: 700 }
 const addStatusColumnStyle: React.CSSProperties = { border: '1px dashed var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)', padding: 12, flex: `0 0 ${BOARD_COLUMN_WIDTH}px`, width: BOARD_COLUMN_WIDTH, minWidth: BOARD_COLUMN_WIDTH, alignSelf: 'start', boxSizing: 'border-box' }
 const addStatusButton: React.CSSProperties = { background: '#34d399', color: '#052e16', border: 'none', borderRadius: 10, padding: '10px 12px', fontWeight: 800, cursor: 'pointer' }
+
+const filterBarStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  flexWrap: 'wrap',
+  padding: '10px 12px',
+  border: '1px solid var(--panel-border)',
+  borderRadius: 12,
+  background: 'var(--panel-bg)',
+}
+const filterSearchInput: React.CSSProperties = {
+  ...projectInputField,
+  padding: '6px 10px',
+  width: 220,
+  minWidth: 0,
+  fontSize: 13,
+}
+const filterSelect: React.CSSProperties = {
+  ...projectInputField,
+  padding: '6px 10px',
+  fontSize: 13,
+  width: 'auto',
+  minWidth: 140,
+  maxWidth: 220,
+}
+const priorityChipGroup: React.CSSProperties = {
+  display: 'inline-flex',
+  gap: 4,
+  padding: 3,
+  border: '1px solid var(--form-border)',
+  borderRadius: 999,
+  background: 'var(--form-bg)',
+}
+const priorityChip: React.CSSProperties = {
+  background: 'transparent',
+  color: 'var(--text-secondary)',
+  border: 'none',
+  borderRadius: 999,
+  padding: '4px 10px',
+  fontSize: 11,
+  fontWeight: 800,
+  cursor: 'pointer',
+  letterSpacing: 0.4,
+}
+const priorityChipActive: React.CSSProperties = {
+  background: 'rgba(52, 211, 153, 0.18)',
+  color: 'var(--text-primary)',
+  boxShadow: 'inset 0 0 0 1px rgba(52, 211, 153, 0.5)',
+}
+const labelChipGroup: React.CSSProperties = {
+  display: 'inline-flex',
+  gap: 6,
+  flexWrap: 'wrap',
+}
+const labelChip: React.CSSProperties = {
+  background: 'var(--form-bg)',
+  color: 'var(--text-secondary)',
+  border: '1px solid var(--form-border)',
+  borderRadius: 999,
+  padding: '4px 10px',
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: 'pointer',
+}
+const labelChipActive: React.CSSProperties = {
+  background: 'rgba(250, 204, 21, 0.18)',
+  color: 'var(--text-primary)',
+  border: '1px solid rgba(250, 204, 21, 0.5)',
+}
+const counterBadge: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 10px',
+  border: '1px solid var(--form-border)',
+  borderRadius: 999,
+  background: 'var(--form-bg)',
+  fontSize: 12,
+  lineHeight: 1.2,
+}
+const counterNumber: React.CSSProperties = {
+  color: 'var(--text-primary)',
+  fontWeight: 800,
+}
+const counterNumberMuted: React.CSSProperties = {
+  color: 'var(--text-secondary)',
+  fontWeight: 800,
+}
+const counterDivider: React.CSSProperties = {
+  color: 'var(--text-muted)',
+  fontWeight: 600,
+}
+const clearFiltersButton: React.CSSProperties = {
+  background: 'transparent',
+  color: 'var(--text-secondary)',
+  border: '1px solid var(--form-border)',
+  borderRadius: 999,
+  padding: '4px 10px',
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: 'pointer',
+}
 
 function statusGroupTextStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)
