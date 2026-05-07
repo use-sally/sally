@@ -147,6 +147,7 @@ model Workspace {
   memberships              WorkspaceMembership[]
   invites                  AccountInvite[]
   activityLogs             ActivityLog[]
+  auditLogEvents           AuditLogEvent[]
   notifications            Notification[]
   mcpKeys                  AccountMcpKey[]
   agentIdentities          AgentIdentity[]
@@ -190,6 +191,7 @@ model Account {
   agentIdentity           AgentIdentity?
   createdAgentJobs        AgentJob[]               @relation("AgentJobCreator")
   decidedApprovals        ApprovalRequest[]        @relation("ApprovalDecider")
+  auditLogEvents          AuditLogEvent[]          @relation("AuditLogActor")
 
   @@index([archivedAt])
 }
@@ -254,6 +256,38 @@ model ActivityLog {
   task        Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([taskId, createdAt])
+}
+
+
+model AuditLogEvent {
+  id             String         @id @default(cuid())
+  workspaceId    String?
+  actorAccountId String?
+  projectId      String?
+  taskId         String?
+  agentId        String?
+  agentJobId     String?
+  agentRunId     String?
+  action         String
+  targetType     String?
+  targetId       String?
+  summary        String?
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+  workspace      Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor          Account?       @relation("AuditLogActor", fields: [actorAccountId], references: [id], onDelete: SetNull)
+  project        Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task           Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  agent          AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  agentJob       AgentJob?      @relation(fields: [agentJobId], references: [id], onDelete: SetNull)
+  agentRun       AgentRun?      @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([actorAccountId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
   @@index([projectId, createdAt])
   @@index([taskId, createdAt])
 }
@@ -441,6 +475,7 @@ model Project {
   timesheets       TimesheetEntry[]
   memberships      ProjectMembership[]
   activityLogs     ActivityLog[]
+  auditLogEvents   AuditLogEvent[]
   notifications    Notification[]
   dependencies     ProjectDependency[]      @relation("projectDependencies")
   dependedOnBy     ProjectDependency[]      @relation("projectDependedOnBy")
@@ -501,6 +536,7 @@ model Task {
   todos            TaskTodo[]
   timesheets       TimesheetEntry[]
   activityLogs     ActivityLog[]
+  auditLogEvents   AuditLogEvent[]
   notifications    Notification[]
   dependencies     TaskDependency[]   @relation("taskDependencies")
   dependedOnBy     TaskDependency[]   @relation("taskDependedOnBy")
@@ -635,6 +671,7 @@ model AgentIdentity {
   pairingCodes     AgentPairingCode[]
   approvalRequests ApprovalRequest[]  @relation("ApprovalRequester")
   blockers         Blocker[]
+  auditLogEvents   AuditLogEvent[]
 
   @@unique([workspaceId, role, name])
   @@index([workspaceId, role])
@@ -765,6 +802,7 @@ model AgentJob {
   agent         AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
   createdBy     Account?       @relation("AgentJobCreator", fields: [createdById], references: [id], onDelete: SetNull)
   runs          AgentRun[]
+  auditLogEvents AuditLogEvent[]
 
   @@index([workspaceId, status, createdAt])
   @@index([projectId, status, createdAt])
@@ -804,6 +842,7 @@ model AgentRun {
   workItemRef       WorkItemRef?   @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
   job               AgentJob?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
   agent             AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  auditLogEvents    AuditLogEvent[]
 
   @@index([workspaceId, status, createdAt])
   @@index([projectId, status, createdAt])

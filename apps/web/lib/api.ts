@@ -1,4 +1,4 @@
-import type { BoardColumn, Client, ClientDetail, EditionInfo, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
+import type { AuditLogEvent, BoardColumn, Client, ClientDetail, EditionInfo, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
@@ -45,6 +45,14 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<Health> { return getJson('/health') }
 export function getEdition(): Promise<EditionInfo> { return getJson('/edition') }
+export function getAuditLog(filters?: { action?: string; targetType?: string; limit?: number }): Promise<AuditLogEvent[]> {
+  const params = new URLSearchParams()
+  if (filters?.action) params.set('action', filters.action)
+  if (filters?.targetType) params.set('targetType', filters.targetType)
+  if (filters?.limit) params.set('limit', String(filters.limit))
+  const q = params.toString()
+  return getJson<AuditLogEvent[]>(`/audit-log${q ? `?${q}` : ''}`)
+}
 export function getRuntimeConfig(): Promise<{ ok: boolean; appBaseUrl: string | null }> { return getJson('/runtime-config') }
 export function getNotifications(params?: { unreadOnly?: boolean; limit?: number }): Promise<Notification[]> {
   const search = new URLSearchParams()

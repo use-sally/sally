@@ -653,6 +653,31 @@ async function logActivity(input: { workspaceId: string; projectId?: string | nu
   await prisma.activityLog.create({ data: { workspaceId: input.workspaceId, projectId: input.projectId ?? null, taskId: input.taskId ?? null, actorName: input.actorName ?? null, actorEmail: input.actorEmail ?? null, type: input.type, summary: input.summary, payload: payload ?? undefined } })
 }
 
+
+async function writeAuditLog(input: { workspaceId?: string | null; actorAccountId?: string | null; projectId?: string | null; taskId?: string | null; agentId?: string | null; agentJobId?: string | null; agentRunId?: string | null; action: string; targetType?: string | null; targetId?: string | null; summary?: string | null; metadata?: any }) {
+  if (input.metadata !== undefined) assertNoSecretLikeJson(input.metadata, 'auditLog.metadata')
+  await prisma.auditLogEvent.create({ data: { workspaceId: input.workspaceId ?? null, actorAccountId: input.actorAccountId ?? null, projectId: input.projectId ?? null, taskId: input.taskId ?? null, agentId: input.agentId ?? null, agentJobId: input.agentJobId ?? null, agentRunId: input.agentRunId ?? null, action: input.action, targetType: input.targetType ?? null, targetId: input.targetId ?? null, summary: input.summary ?? null, metadata: input.metadata ?? undefined } })
+}
+
+function formatAuditLogEvent(event: any) {
+  return {
+    id: event.id,
+    workspaceId: event.workspaceId ?? null,
+    projectId: event.projectId ?? null,
+    taskId: event.taskId ?? null,
+    agentId: event.agentId ?? null,
+    agentJobId: event.agentJobId ?? null,
+    agentRunId: event.agentRunId ?? null,
+    action: event.action,
+    targetType: event.targetType ?? null,
+    targetId: event.targetId ?? null,
+    summary: event.summary ?? null,
+    metadata: event.metadata ?? null,
+    createdAt: event.createdAt.toISOString(),
+    actor: event.actor ? { id: event.actor.id, email: event.actor.email, name: event.actor.name } : null,
+  }
+}
+
 async function wouldCreateDependencyCycle(taskId: string, dependsOnId: string): Promise<boolean> {
   const visited = new Set<string>()
   const queue = [dependsOnId]
@@ -682,10 +707,10 @@ async function wouldCreateProjectDependencyCycle(projectId: string, dependsOnId:
 }
 
 function actorFromRequest(request: any) {
-  const account = (request as any).account as { name?: string | null; email?: string | null } | undefined
+  const account = (request as any).account as { id?: string | null; name?: string | null; email?: string | null } | undefined
   const apiKey = (request as any).apiKey as { label?: string | null } | undefined
   const mcpKey = (request as any).mcpKey as { label?: string | null } | undefined
-  return { actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null, actorMcpKeyLabel: mcpKey?.label ?? null }
+  return { actorAccountId: account?.id ?? null, actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null, actorMcpKeyLabel: mcpKey?.label ?? null }
 }
 
 async function deleteOrphanPlaceholderAccountByEmail(email?: string | null) {
@@ -2354,6 +2379,7 @@ const start = async () => {
         },
       })
       await logActivity({ workspaceId: workspace.id, projectId, taskId, ...actorFromRequest(request), type: 'agent_job.created', summary: `Queued ${role} agent job`, payload: { jobId: job.id, role } })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: account?.id ?? null, projectId, taskId, agentId: job.agentId, agentJobId: job.id, action: 'audit.agentJob.created', targetType: 'agentJob', targetId: job.id, summary: `Queued ${role} agent job`, metadata: { role, mode: job.mode, triggerType: job.triggerType } })
       if (projectId && job.mode === 'workflow') {
         await prisma.projectAutomationConfig.updateMany({
           where: { workspaceId: workspace.id, projectId, workflowEnabled: true },
@@ -2457,6 +2483,7 @@ const start = async () => {
           metadata: body.metadata === undefined ? undefined : body.metadata as any,
         },
       })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: (request as any).account?.id ?? null, projectId: run.projectId, taskId: run.taskId, agentId: run.agentId, agentRunId: run.id, action: 'audit.agentRun.created', targetType: 'agentRun', targetId: run.id, summary: `Created ${role} agent run`, metadata: { role, status: run.status, triggerType: run.triggerType } })
       return { ok: true, run }
     })
 
@@ -2585,6 +2612,23 @@ const start = async () => {
       }))
     })
 
+
+    app.get('/audit-log', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const query = request.query as { action?: string; targetType?: string; limit?: string }
+      const limit = Math.min(Math.max(Number(query.limit || 100), 1), 250)
+      const events = await prisma.auditLogEvent.findMany({
+        where: {
+          ...(query.action?.trim() ? { action: query.action.trim() } : {}),
+          ...(query.targetType?.trim() ? { targetType: query.targetType.trim() } : {}),
+        },
+        include: { actor: { select: { id: true, email: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      })
+      return events.map(formatAuditLogEvent)
+    })
+
     app.post('/workspaces', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const body = request.body as { name: string; slug?: string }
@@ -2599,6 +2643,7 @@ const start = async () => {
       }
       const account = (request as any).account as { id: string } | undefined
       const workspace = await prisma.workspace.create({ data: { name, slug, ...(account ? { memberships: { create: { accountId: account.id, role: WorkspaceRole.OWNER } } } : {}) } })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: account?.id ?? null, action: 'audit.workspace.created', targetType: 'workspace', targetId: workspace.id, summary: `Created workspace ${workspace.name}` })
       return { ok: true, workspaceId: workspace.id }
     })
 
@@ -2610,6 +2655,7 @@ const start = async () => {
       const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
       if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
       const updated = await prisma.workspace.update({ where: { id: workspaceId }, data: { archivedAt: archived ? new Date() : null } })
+      await writeAuditLog({ workspaceId: updated.id, actorAccountId: (request as any).account?.id ?? null, action: archived ? 'audit.workspace.archived' : 'audit.workspace.restored', targetType: 'workspace', targetId: updated.id, summary: `${archived ? 'Archived' : 'Restored'} workspace ${updated.name}` })
       return { ok: true, workspace: { id: updated.id, archivedAt: updated.archivedAt?.toISOString() ?? null } }
     })
 
@@ -2618,6 +2664,7 @@ const start = async () => {
       const { workspaceId } = request.params as { workspaceId: string }
       const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
       if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: (request as any).account?.id ?? null, action: 'audit.workspace.deleted', targetType: 'workspace', targetId: workspace.id, summary: `Deleted workspace ${workspace.name}` })
       await prisma.workspace.delete({ where: { id: workspaceId } })
       return { ok: true }
     })
@@ -2669,6 +2716,7 @@ const start = async () => {
         return reply.code(403).send({ ok: false, error: 'The configured superadmin cannot be demoted' })
       }
       const updated = await prisma.account.update({ where: { id: accountId }, data: { platformRole: role } })
+      await writeAuditLog({ actorAccountId: requestAccountId ?? null, action: 'audit.platformRole.updated', targetType: 'account', targetId: updated.id, summary: `Updated platform role for ${updated.email}`, metadata: { platformRole: updated.platformRole } })
       return { ok: true, account: { id: updated.id, name: updated.name, email: updated.email, avatarUrl: updated.avatarUrl, platformRole: updated.platformRole } }
     })
 

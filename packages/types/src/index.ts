@@ -104,6 +104,23 @@ export type Notification = {
   actor: NotificationActor | null
 }
 
+export type AuditLogEvent = {
+  id: string
+  workspaceId: string | null
+  projectId: string | null
+  taskId: string | null
+  agentId: string | null
+  agentJobId: string | null
+  agentRunId: string | null
+  action: string
+  targetType: string | null
+  targetId: string | null
+  summary: string | null
+  metadata: unknown
+  createdAt: string
+  actor: { id: string; email: string; name: string | null } | null
+}
+
 export type MentionableUser = {
   accountId: string
   name: string | null
