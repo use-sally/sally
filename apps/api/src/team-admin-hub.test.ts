@@ -37,3 +37,10 @@ test('team hub lets platform admins upload and save avatars for any team account
   assert.match(apiIndexSource, /saveProfileImage\(accountId, \{ fileName: body\.fileName, mimeType: body\.mimeType, base64: body\.base64 \}\)/)
   assert.match(apiIndexSource, /prisma\.account\.update\(\{ where: \{ id: accountId \}, data: \{ avatarUrl: saved\.url \} \}\)/)
 })
+
+test('team hub hides archived workspace clutter while preserving stored memberships', () => {
+  assert.match(apiIndexSource, /prisma\.workspace\.findMany\(\{ where: \{ archivedAt: null \}, orderBy: \{ name: 'asc' \} \}\)/)
+  assert.match(apiIndexSource, /memberships: account\.memberships\.filter\(\(membership\) => !membership\.workspace\.archivedAt\)\.map/)
+  assert.match(apiIndexSource, /projectMemberships: account\.projectMemberships\.filter\(\(membership\) => !membership\.project\.workspace\.archivedAt\)\.map/)
+  assert.match(apiIndexSource, /if \(workspace\.archivedAt\) return reply\.code\(409\)\.send\(\{ ok: false, error: 'Workspace archived' \}\)/)
+})

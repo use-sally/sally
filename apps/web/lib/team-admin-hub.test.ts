@@ -48,3 +48,11 @@ test('Web API client exposes Team hub endpoints', () => {
   assert.match(apiSource, /export function addTeamAccountToWorkspace/)
   assert.match(apiSource, /export function addTeamAccountToProject/)
 })
+
+test('Team page treats archived workspace memberships as hidden server state', () => {
+  assert.match(apiSource, /workspaceArchivedAt\?: string \| null/)
+  assert.match(apiSource, /projectWorkspaceArchivedAt\?: string \| null/)
+  assert.match(teamPageSource, /availableWorkspaces = \(hub\?\.workspaceMemberships \?\? \[\]\)\.filter\(\(workspace\) => !workspace\.archivedAt/)
+  assert.match(teamPageSource, /visibleWorkspaceMemberships = account\.memberships\.filter\(\(membership\) => !membership\.workspaceArchivedAt\)/)
+  assert.match(teamPageSource, /visibleProjectMemberships = account\.projectMemberships\.filter\(\(membership\) => !membership\.projectWorkspaceArchivedAt\)/)
+})

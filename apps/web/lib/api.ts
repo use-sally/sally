@@ -239,8 +239,8 @@ export function cancelWorkspaceInvite(workspaceId: string, inviteId: string): Pr
 
 export type TeamAccountHub = {
   ok: boolean
-  workspaceMemberships: { id: string; name: string; slug?: string }[]
-  projectMemberships: { id: string; name: string; workspaceId: string; workspaceName: string }[]
+  workspaceMemberships: { id: string; name: string; slug?: string; archivedAt?: string | null }[]
+  projectMemberships: { id: string; name: string; workspaceId: string; workspaceName: string; projectWorkspaceArchivedAt?: string | null }[]
   accounts: {
     id: string
     name: string | null
@@ -250,8 +250,8 @@ export type TeamAccountHub = {
     archivedAt: string | null
     createdAt: string
     updatedAt: string
-    memberships: { id: string; workspaceId: string; workspaceName: string; workspaceSlug?: string; role: string }[]
-    projectMemberships: { id: string; projectId: string; projectName: string; workspaceId: string; workspaceName: string; role: string }[]
+    memberships: { id: string; workspaceId: string; workspaceName: string; workspaceSlug?: string; workspaceArchivedAt?: string | null; role: string }[]
+    projectMemberships: { id: string; projectId: string; projectName: string; workspaceId: string; workspaceName: string; projectWorkspaceArchivedAt?: string | null; role: string }[]
   }[]
 }
 

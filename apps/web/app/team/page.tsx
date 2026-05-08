@@ -165,8 +165,10 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
   const [projectRole, setProjectRole] = useState('MEMBER')
   const archived = !!account.archivedAt
   const isCurrentAccount = account.id === currentAccountId
-  const availableWorkspaces = (hub?.workspaceMemberships ?? []).filter((workspace) => !account.memberships.some((membership) => membership.workspaceId === workspace.id))
-  const availableProjects = (hub?.projectMemberships ?? []).filter((project) => !account.projectMemberships.some((membership) => membership.projectId === project.id))
+  const visibleWorkspaceMemberships = account.memberships.filter((membership) => !membership.workspaceArchivedAt)
+  const visibleProjectMemberships = account.projectMemberships.filter((membership) => !membership.projectWorkspaceArchivedAt)
+  const availableWorkspaces = (hub?.workspaceMemberships ?? []).filter((workspace) => !workspace.archivedAt && !account.memberships.some((membership) => membership.workspaceId === workspace.id))
+  const availableProjects = (hub?.projectMemberships ?? []).filter((project) => !project.projectWorkspaceArchivedAt && !account.projectMemberships.some((membership) => membership.projectId === project.id))
   const avatarSrc = account.avatarUrl ? (account.avatarUrl.startsWith('/') ? apiUrl(account.avatarUrl) : account.avatarUrl) : ''
   const avatarInitial = (account.name?.trim()?.[0] || account.email.trim()[0] || '?').toUpperCase()
 
@@ -228,7 +230,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
         <div style={{ display: 'grid', gap: 8 }}>
           <div style={{ color: '#fcd34d', fontSize: 12, fontWeight: 800 }}>Workspaces</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {account.memberships.map((membership) => (
+            {visibleWorkspaceMemberships.map((membership) => (
               <span key={membership.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid var(--panel-border)', borderRadius: 999, padding: '6px 9px', color: 'var(--text-secondary)', fontSize: 12 }}>
                 {membership.workspaceName} · {membership.role.toLowerCase()}
                 <button type="button" onClick={() => void onAction(`rmw:${membership.id}`, () => removeTeamAccountFromWorkspace(account.id, membership.id), 'Workspace access removed.')} style={{ background: 'transparent', border: 0, color: 'var(--danger-text)', cursor: 'pointer', fontWeight: 900 }}>×</button>
@@ -245,7 +247,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
         <div style={{ display: 'grid', gap: 8 }}>
           <div style={{ color: '#fcd34d', fontSize: 12, fontWeight: 800 }}>Projects</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {account.projectMemberships.map((membership) => (
+            {visibleProjectMemberships.map((membership) => (
               <span key={membership.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid var(--panel-border)', borderRadius: 999, padding: '6px 9px', color: 'var(--text-secondary)', fontSize: 12 }}>
                 {membership.projectName} · {membership.role.toLowerCase()}
                 <button type="button" onClick={() => void onAction(`rmp:${membership.id}`, () => removeTeamAccountFromProject(account.id, membership.id), 'Project access removed.')} style={{ background: 'transparent', border: 0, color: 'var(--danger-text)', cursor: 'pointer', fontWeight: 900 }}>×</button>

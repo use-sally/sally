@@ -2753,13 +2753,13 @@ const start = async () => {
             projectMemberships: { include: { project: { include: { workspace: true } } }, orderBy: { createdAt: 'asc' } },
           },
         }),
-        prisma.workspace.findMany({ orderBy: { name: 'asc' } }),
-        prisma.project.findMany({ where: { archivedAt: null }, include: { workspace: true }, orderBy: { name: 'asc' } }),
+        prisma.workspace.findMany({ where: { archivedAt: null }, orderBy: { name: 'asc' } }),
+        prisma.project.findMany({ where: { archivedAt: null, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { name: 'asc' } }),
       ])
       return {
         ok: true,
-        workspaceMemberships: workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug })),
-        projectMemberships: projects.map((project) => ({ id: project.id, name: project.name, workspaceId: project.workspaceId, workspaceName: project.workspace.name })),
+        workspaceMemberships: workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, archivedAt: workspace.archivedAt?.toISOString() ?? null })),
+        projectMemberships: projects.map((project) => ({ id: project.id, name: project.name, workspaceId: project.workspaceId, workspaceName: project.workspace.name, projectWorkspaceArchivedAt: project.workspace.archivedAt?.toISOString() ?? null })),
         accounts: accounts.map((account) => ({
           id: account.id,
           name: account.name,
@@ -2769,8 +2769,8 @@ const start = async () => {
           archivedAt: account.archivedAt?.toISOString() ?? null,
           createdAt: account.createdAt.toISOString(),
           updatedAt: account.updatedAt.toISOString(),
-          memberships: account.memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceName: membership.workspace.name, workspaceSlug: membership.workspace.slug, role: membership.role })),
-          projectMemberships: account.projectMemberships.map((membership) => ({ id: membership.id, projectId: membership.projectId, projectName: membership.project.name, workspaceId: membership.project.workspaceId, workspaceName: membership.project.workspace.name, role: membership.role })),
+          memberships: account.memberships.filter((membership) => !membership.workspace.archivedAt).map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceName: membership.workspace.name, workspaceSlug: membership.workspace.slug, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
+          projectMemberships: account.projectMemberships.filter((membership) => !membership.project.workspace.archivedAt).map((membership) => ({ id: membership.id, projectId: membership.projectId, projectName: membership.project.name, workspaceId: membership.project.workspaceId, workspaceName: membership.project.workspace.name, projectWorkspaceArchivedAt: membership.project.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
         })),
       }
     })
@@ -2825,6 +2825,7 @@ const start = async () => {
       const [account, workspace] = await Promise.all([prisma.account.findUnique({ where: { id: accountId } }), prisma.workspace.findUnique({ where: { id: workspaceId } })])
       if (!account) return reply.code(404).send({ ok: false, error: 'Account not found' })
       if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      if (workspace.archivedAt) return reply.code(409).send({ ok: false, error: 'Workspace archived' })
       const membership = await prisma.workspaceMembership.upsert({
         where: { workspaceId_accountId: { workspaceId: workspace.id, accountId } },
         update: { role },
@@ -2857,6 +2858,8 @@ const start = async () => {
       const [account, project] = await Promise.all([prisma.account.findUnique({ where: { id: accountId } }), prisma.project.findUnique({ where: { id: projectId } })])
       if (!account) return reply.code(404).send({ ok: false, error: 'Account not found' })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      const projectWorkspace = await prisma.workspace.findUnique({ where: { id: project.workspaceId } })
+      if (projectWorkspace?.archivedAt) return reply.code(409).send({ ok: false, error: 'Workspace archived' })
       const workspaceMembership = await prisma.workspaceMembership.findFirst({ where: { accountId, workspaceId: project.workspaceId } })
       if (!workspaceMembership) await prisma.workspaceMembership.create({ data: { accountId, workspaceId: project.workspaceId, role: WorkspaceRole.MEMBER } })
       const membership = await prisma.projectMembership.upsert({
