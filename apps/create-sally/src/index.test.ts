@@ -97,3 +97,15 @@ test('doctor starts postgres and applies pending migrations for managed instance
   assert.ok(source.includes("paint('database migrations', color.brightYellow)"))
   assert.ok(source.includes("paint('applied', color.green)"))
 })
+
+test('generated compose files persist API uploads across image updates', () => {
+  assert.equal((source.match(/- sally-uploads:\/app\/uploads/g) ?? []).length, 2)
+  assert.ok(source.includes('volumes:\n  sally-postgres:\n  sally-uploads:\n  caddy-data:'))
+  assert.ok(source.includes('volumes:\n  sally-postgres:\n  sally-uploads:\n`'))
+})
+
+test('updater backs up the runtime uploads directory used by the API container', () => {
+  assert.ok(source.includes('const runtimeUploadsDir = \'/app/uploads\''))
+  assert.ok(source.includes('`${apiContainerId}:${runtimeUploadsDir}/.`'))
+  assert.ok(!source.includes('`${apiContainerId}:/app/apps/api/uploads/.`'))
+})

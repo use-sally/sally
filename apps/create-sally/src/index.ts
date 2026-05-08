@@ -123,6 +123,8 @@ function composeForManagedSimple() {
     image: ${'${SALLY_API_IMAGE}'}
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - sally-uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,6 +153,7 @@ function composeForManagedSimple() {
 
 volumes:
   sally-postgres:
+  sally-uploads:
   caddy-data:
   caddy-config:
 `
@@ -180,6 +183,8 @@ function composeForExistingInfra() {
     env_file: .env
     ports:
       - "4000:4000"
+    volumes:
+      - sally-uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -195,6 +200,7 @@ function composeForExistingInfra() {
 
 volumes:
   sally-postgres:
+  sally-uploads:
 `
 }
 
@@ -435,6 +441,7 @@ async function backupExistingInstance(targetDir: string, postgresUser: string, p
   })
 
   const uploadsArchive = path.join(backupDir, 'uploads.tgz')
+  const runtimeUploadsDir = '/app/uploads'
   const apiContainerId = (await runCommandCapture('docker', ['compose', 'ps', '-q', 'api'], targetDir).catch(() => '')).trim()
 
   if (!apiContainerId) {
@@ -442,7 +449,7 @@ async function backupExistingInstance(targetDir: string, postgresUser: string, p
   } else {
     await new Promise<void>((resolve, reject) => {
       const out = createWriteStream(uploadsArchive)
-      const child = spawn('docker', ['cp', `${apiContainerId}:/app/apps/api/uploads/.`, '-'], { cwd: targetDir, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+      const child = spawn('docker', ['cp', `${apiContainerId}:${runtimeUploadsDir}/.`, '-'], { cwd: targetDir, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
       let stderr = ''
       let stdoutSeen = false
       child.stdout.on('data', (chunk) => {
