@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { AuditLogEvent } from '@sally/types/src'
+import type { AuditLogEvent, EditionInfo } from '@sally/types/src'
 import { AppShell } from '../../components/app-shell'
-import { getAuditLog } from '../../lib/api'
+import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
+import { getAuditLog, getEdition } from '../../lib/api'
+import { hasFeature } from '../../lib/edition'
 
 function formatDate(value: string) {
   try { return new Date(value).toLocaleString() } catch { return value }
@@ -11,18 +13,27 @@ function formatDate(value: string) {
 
 export default function AuditLogPage() {
   const [events, setEvents] = useState<AuditLogEvent[]>([])
+  const [edition, setEdition] = useState<EditionInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    getAuditLog({ limit: 100 })
-      .then((items) => { if (!cancelled) setEvents(items) })
+    getEdition()
+      .then(async (info) => {
+        if (cancelled) return
+        setEdition(info)
+        if (!hasFeature(info, 'security.auditLog')) return
+        const items = await getAuditLog({ limit: 100 })
+        if (!cancelled) setEvents(items)
+      })
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load audit log') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  const auditLogEnabled = hasFeature(edition, 'security.auditLog')
 
   return (
     <AppShell title="Audit Log" subtitle="Governance record of sensitive admin, workspace, and automation actions.">
@@ -32,7 +43,12 @@ export default function AuditLogPage() {
           <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 }}>Latest platform-level security and automation events.</div>
         </div>
         {error ? <div style={{ color: '#fca5a5', fontSize: 13 }}>{error}</div> : null}
-        {loading ? <div style={{ color: 'var(--text-muted)' }}>Loading audit events…</div> : (
+        {loading ? <div style={{ color: 'var(--text-muted)' }}>Loading audit events…</div> : !auditLogEnabled ? (
+          <EnterpriseLockedCard
+            title="Audit Log"
+            description="Governance event history, sensitive admin action tracking, and compliance exports are available in Sally Enterprise. Community keeps the Admin section visible but locks the audit event feed."
+          />
+        ) : (
           <div style={{ display: 'grid', gap: 10 }}>
             {events.length === 0 ? <div style={{ color: 'var(--text-muted)' }}>No audit events yet.</div> : null}
             {events.map((event) => (

@@ -20,6 +20,9 @@ test('web API client exposes audit log listing helper', () => {
 
 test('Audit Log page lists events with actor action target and timestamp', () => {
   assert.match(auditLogPageSource, /getAuditLog/)
+  assert.match(auditLogPageSource, /getEdition/)
+  assert.match(auditLogPageSource, /hasFeature\(info, 'security\.auditLog'\)/)
+  assert.match(auditLogPageSource, /EnterpriseLockedCard/)
   assert.match(auditLogPageSource, /Audit Log/)
   assert.match(auditLogPageSource, /event\.actor\?\.email/)
   assert.match(auditLogPageSource, /event\.action/)

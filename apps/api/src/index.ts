@@ -23,7 +23,7 @@ import { buildAgentConnectionPatch, buildAgentEventPayload, chooseAgentEventCurs
 import { buildApprovalDecisionPatch, buildApprovalRequestPayload, buildBlockerPayload, buildBlockerResolutionPatch } from './blockers-approvals.js'
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
 import { appBuildTime, appGitSha, appVersion } from './version.js'
-import { getEditionInfo } from './edition.js'
+import { getEditionInfo, requireFeature } from './edition.js'
 
 function loadSimpleEnv(filePath: string) {
   if (!fs.existsSync(filePath)) return
@@ -2636,7 +2636,7 @@ const start = async () => {
     })
 
 
-    app.get('/audit-log', async (request, reply) => {
+    app.get('/audit-log', { preHandler: requireFeature('security.auditLog') }, async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const query = request.query as { action?: string; targetType?: string; limit?: string }
       const limit = Math.min(Math.max(Number(query.limit || 100), 1), 250)
