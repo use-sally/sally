@@ -31,3 +31,9 @@ test('team hub can archive users without deleting the configured superadmin', ()
   assert.match(apiIndexSource, /if \(isConfiguredSuperadminEmail\(target\.email\) && archived\)/)
   assert.match(apiIndexSource, /data: \{ archivedAt: archived \? new Date\(\) : null \}/)
 })
+
+test('team hub lets platform admins upload and save avatars for any team account', () => {
+  assert.match(apiIndexSource, /app\.post\('\/team\/accounts\/:accountId\/avatar'[\s\S]*if \(!isPlatformAdmin\(request\)\)/)
+  assert.match(apiIndexSource, /saveProfileImage\(accountId, \{ fileName: body\.fileName, mimeType: body\.mimeType, base64: body\.base64 \}\)/)
+  assert.match(apiIndexSource, /prisma\.account\.update\(\{ where: \{ id: accountId \}, data: \{ avatarUrl: saved\.url \} \}\)/)
+})

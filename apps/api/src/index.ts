@@ -2802,6 +2802,18 @@ const start = async () => {
       return { ok: true, account: { id: updated.id, archivedAt: updated.archivedAt?.toISOString() ?? null } }
     })
 
+    app.post('/team/accounts/:accountId/avatar', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const { accountId } = request.params as { accountId: string }
+      const body = request.body as { fileName?: string; mimeType?: string; base64?: string }
+      if (!body.base64) return reply.code(400).send({ ok: false, error: 'base64 is required' })
+      const target = await prisma.account.findUnique({ where: { id: accountId } })
+      if (!target) return reply.code(404).send({ ok: false, error: 'Account not found' })
+      const saved = saveProfileImage(accountId, { fileName: body.fileName, mimeType: body.mimeType, base64: body.base64 })
+      const updated = await prisma.account.update({ where: { id: accountId }, data: { avatarUrl: saved.url } })
+      return { ok: true, url: saved.url, account: { id: updated.id, name: updated.name, email: updated.email, avatarUrl: updated.avatarUrl, platformRole: updated.platformRole } }
+    })
+
     app.post('/team/accounts/:accountId/workspaces', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const { accountId } = request.params as { accountId: string }

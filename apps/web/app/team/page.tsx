@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AppShell } from '../../components/app-shell'
-import { addTeamAccountToProject, addTeamAccountToWorkspace, archiveTeamAccount, createTeamAccount, getTeamAccounts, removeTeamAccountFromProject, removeTeamAccountFromWorkspace, type TeamAccountHub, updateAccountPlatformRole } from '../../lib/api'
+import { addTeamAccountToProject, addTeamAccountToWorkspace, apiUrl, archiveTeamAccount, createTeamAccount, getTeamAccounts, removeTeamAccountFromProject, removeTeamAccountFromWorkspace, type TeamAccountHub, updateAccountPlatformRole, uploadTeamAccountAvatar } from '../../lib/api'
 import { loadSession } from '../../lib/auth'
 import { platformRoleLabel } from '../../lib/roles'
 
@@ -10,6 +10,40 @@ const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, '
 const panelStyle = { border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
 const inputStyle = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontFamily: monoFont, fontSize: 12 }
 const smallButtonStyle = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '8px 10px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer', fontFamily: monoFont, fontSize: 12 }
+
+async function compressTeamAvatar(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
+  const imageUrl = URL.createObjectURL(file)
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = imageUrl
+    })
+    const maxLongSide = 1600
+    const longSide = Math.max(image.width, image.height)
+    const scale = longSide > maxLongSide ? maxLongSide / longSide : 1
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas unavailable')
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(image, 0, 0, width, height)
+    const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+    const quality = mimeType === 'image/png' ? undefined : 0.82
+    const dataUrl = canvas.toDataURL(mimeType, quality)
+    const base64 = dataUrl.split(',')[1] || ''
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'team-avatar'
+    const ext = mimeType === 'image/png' ? 'png' : 'jpg'
+    return { mimeType, base64, fileName: `${baseName}.${ext}` }
+  } finally {
+    URL.revokeObjectURL(imageUrl)
+  }
+}
 
 type TeamAccount = TeamAccountHub['accounts'][number]
 
@@ -133,10 +167,34 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
   const isCurrentAccount = account.id === currentAccountId
   const availableWorkspaces = (hub?.workspaceMemberships ?? []).filter((workspace) => !account.memberships.some((membership) => membership.workspaceId === workspace.id))
   const availableProjects = (hub?.projectMemberships ?? []).filter((project) => !account.projectMemberships.some((membership) => membership.projectId === project.id))
+  const avatarSrc = account.avatarUrl ? (account.avatarUrl.startsWith('/') ? apiUrl(account.avatarUrl) : account.avatarUrl) : ''
+  const avatarInitial = (account.name?.trim()?.[0] || account.email.trim()[0] || '?').toUpperCase()
 
   return (
     <article style={{ ...panelStyle, padding: 16, opacity: archived ? 0.62 : 1, display: 'grid', gap: 14 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) 180px 160px auto', gap: 12, alignItems: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '56px minmax(220px, 1fr) 180px 160px auto', gap: 12, alignItems: 'center' }}>
+        <label
+          title="Click to upload or replace team member avatar"
+          aria-label={`Upload avatar for ${account.name || account.email}`}
+          style={{ width: 48, height: 48, borderRadius: 999, border: '1px solid var(--form-border)', background: 'color-mix(in srgb, var(--form-border-focus) 18%, transparent)', color: 'var(--text-primary)', display: 'grid', placeItems: 'center', overflow: 'hidden', fontWeight: 800, cursor: saving === `avatar:${account.id}` ? 'progress' : 'pointer' }}
+        >
+          {avatarSrc ? <span aria-hidden="true" style={{ width: '100%', height: '100%', backgroundImage: `url(${avatarSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }} /> : avatarInitial}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            disabled={saving === `avatar:${account.id}`}
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (!file) return
+              void onAction(`avatar:${account.id}`, async () => {
+                const compressed = await compressTeamAvatar(file)
+                await uploadTeamAccountAvatar(account.id, compressed)
+              }, 'Team member avatar updated.')
+            }}
+            style={{ display: 'none' }}
+          />
+        </label>
         <div style={{ minWidth: 0 }}>
           <div style={{ color: 'var(--text-primary)', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name || account.email}</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email}</div>
