@@ -22,6 +22,16 @@ test('platform admin nav uses a dedicated Admin mode instead of cramming admin l
   assert.doesNotMatch(appNavBlock, /Security|System|Team/)
 })
 
+test('admin entry lives in the sidebar footer and profile is avatar-only in top actions', () => {
+  assert.match(appShellSource, /const sidebarFooterActions = \(/)
+  assert.match(appShellSource, /sidebarFooterActions[\s\S]*href="\/team"[\s\S]*>Admin<\//)
+  assert.match(appShellSource, /headerProfileLink/)
+  assert.match(appShellSource, /aria-label="Profile"/)
+  const profileLinkStart = appShellSource.indexOf('headerProfileLink')
+  const profileLinkBlock = appShellSource.slice(profileLinkStart, profileLinkStart + 1400)
+  assert.doesNotMatch(profileLinkBlock, />Profile<|accountName \? <div/)
+})
+
 test('web has reusable Enterprise locked card and edition client', () => {
   assert.match(lockedCardSource, /EnterpriseLockedCard/)
   assert.match(lockedCardSource, /Enterprise feature/)

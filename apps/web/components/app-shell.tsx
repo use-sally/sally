@@ -210,6 +210,52 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     }
   }
 
+  const headerProfileLink = (
+    <Link
+      href="/profile"
+      aria-label="Profile"
+      title={accountName ? `Profile · ${accountName}` : 'Profile'}
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        overflow: 'hidden',
+        background: pathname.startsWith('/profile') ? '#fcd34d' : 'var(--form-bg)',
+        border: pathname.startsWith('/profile') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--form-border)',
+        color: pathname.startsWith('/profile') ? '#052e16' : '#6ee7b7',
+        display: 'grid',
+        placeItems: 'center',
+        textDecoration: 'none',
+        fontWeight: 750,
+        fontSize: 13,
+        flex: '0 0 auto',
+      }}
+    >
+      {accountAvatarUrl ? <img src={accountAvatarUrl} alt="" aria-hidden="true" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (accountName?.trim()?.[0] || '?').toUpperCase()}
+    </Link>
+  )
+
+  const sidebarFooterActions = (
+    <>
+      {isPlatformAdminSession ? (
+        <Link
+          href="/team"
+          style={{
+            display: 'block',
+            padding: '10px 12px',
+            borderRadius: 14,
+            color: isAdminArea ? '#052e16' : 'var(--text-primary)',
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: 'none',
+            background: isAdminArea ? '#fcd34d' : 'var(--panel-bg)',
+            border: isAdminArea ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--panel-border)',
+          }}
+        >Admin</Link>
+      ) : null}
+    </>
+  )
+
   return (
     <main
       style={{
@@ -404,23 +450,6 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                       </Link>
                     )
                   })}
-                  {isPlatformAdminSession ? (
-                    <Link
-                      href="/team"
-                      style={{
-                        display: 'block',
-                        padding: '10px 12px',
-                        borderRadius: 12,
-                        color: 'var(--text-secondary)',
-                        fontWeight: 700,
-                        fontSize: 13,
-                        lineHeight: 1.2,
-                        textDecoration: 'none',
-                        background: 'transparent',
-                        border: '1px solid transparent',
-                      }}
-                    >Admin</Link>
-                  ) : null}
                 </>
               )}
             </nav>
@@ -559,30 +588,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
               </div>
             </div>
 
-            <Link
-              href="/profile"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 12px',
-                borderRadius: 14,
-                color: pathname.startsWith('/profile') ? '#052e16' : 'var(--text-primary)',
-                fontWeight: 700,
-                fontSize: 13,
-                textDecoration: 'none',
-                background: pathname.startsWith('/profile') ? '#fcd34d' : 'var(--panel-bg)',
-                border: pathname.startsWith('/profile') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--panel-border)',
-              }}
-            >
-              <div style={{ width: 32, height: 32, borderRadius: 999, overflow: 'hidden', background: pathname.startsWith('/profile') ? 'rgba(5, 46, 22, 0.14)' : 'rgba(16, 185, 129, 0.08)', display: 'grid', placeItems: 'center', color: pathname.startsWith('/profile') ? '#052e16' : '#6ee7b7', flex: '0 0 auto' }}>
-                {accountAvatarUrl ? <img src={accountAvatarUrl} alt={accountName || 'Profile'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (accountName?.trim()?.[0] || '?').toUpperCase()}
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div>Profile</div>
-                {accountName ? <div style={{ fontSize: 11, fontWeight: 600, opacity: pathname.startsWith('/profile') ? 0.8 : 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{accountName}</div> : null}
-              </div>
-            </Link>
+            {sidebarFooterActions}
           </div>
         </aside>
 
@@ -667,6 +673,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   </div>
                 ) : null}
               </div>
+              {headerProfileLink}
               {actions ?? null}
             </div>
           </header>
