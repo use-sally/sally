@@ -8,6 +8,8 @@ import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
 import { TwoFactorAccountPanel } from '../../components/two-factor-account-panel'
 import { apiUrl, getNotificationPreferences, getProfile, logout, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
 import { labelText, projectInputField, sectionLabelText } from '../../lib/theme'
+import { FONT_SCALE_DEFAULT, applyFontScale, clampFontScale, readStoredFontScale, writeStoredFontScale } from '../../lib/appearance'
+import { DesignAppearancePanel } from '../../components/design-appearance-panel'
 
 async function compressProfileImage(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
   const imageUrl = URL.createObjectURL(file)
@@ -47,7 +49,7 @@ async function compressProfileImage(file: File): Promise<{ mimeType: string; bas
 }
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<{ id: string; name: string | null; email: string; avatarUrl: string | null; pendingEmail: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN'; emailLocked?: boolean } | null>(null)
+  const [profile, setProfile] = useState<{ id: string; name: string | null; email: string; avatarUrl: string | null; pendingEmail: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN'; emailLocked?: boolean; appearanceFontScale?: number; appearanceTheme?: 'dark' | 'light' } | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
@@ -60,6 +62,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [notificationPreferences, setNotificationPreferences] = useState<{ eventType: string; inAppEnabled: boolean; emailEnabled: boolean }[]>([])
+  const [fontScale, setFontScale] = useState<number>(FONT_SCALE_DEFAULT)
 
   const load = async () => {
     setLoading(true)
@@ -70,11 +73,25 @@ export default function ProfilePage() {
       setEmail(response.profile.email)
       setAvatarUrl(response.profile.avatarUrl || '')
       setNotificationPreferences(prefs)
+      const apiScale = typeof response.profile.appearanceFontScale === 'number'
+        ? clampFontScale(response.profile.appearanceFontScale)
+        : readStoredFontScale()
+      setFontScale(apiScale)
+      writeStoredFontScale(apiScale)
+      applyFontScale(apiScale)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profile')
     } finally {
       setLoading(false)
     }
+  }
+
+  const persistFontScale = (next: number) => {
+    const clamped = clampFontScale(next)
+    setFontScale(clamped)
+    writeStoredFontScale(clamped)
+    applyFontScale(clamped)
+    void updateProfile({ appearanceFontScale: clamped }).catch(() => {})
   }
 
   useEffect(() => {
@@ -238,6 +255,8 @@ export default function ProfilePage() {
             {profile?.pendingEmail ? <div style={{ ...labelText, fontSize: 13 }}>Pending email change: {profile.pendingEmail}</div> : null}
           </div>
         </div>
+
+        <DesignAppearancePanel fontScale={fontScale} onChange={persistFontScale} />
 
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

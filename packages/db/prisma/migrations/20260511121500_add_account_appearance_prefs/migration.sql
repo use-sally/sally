@@ -1,0 +1,3 @@
+ALTER TABLE "Account"
+ADD COLUMN "appearanceFontScale" DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+ADD COLUMN "appearanceTheme" TEXT NOT NULL DEFAULT 'dark';

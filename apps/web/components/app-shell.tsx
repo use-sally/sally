@@ -5,10 +5,19 @@ import { usePathname, useRouter } from 'next/navigation'
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import type { Notification } from '@sally/types/src'
 import { getWorkspaceId, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId } from '../lib/auth'
-import { apiUrl, createWorkspace, getMe, getNotifications, logout, readAllNotifications, readNotification } from '../lib/api'
+import { apiUrl, createWorkspace, getMe, getNotifications, getProfile, logout, readAllNotifications, readNotification, updateProfile } from '../lib/api'
 import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
-import type { ThemeMode } from '../lib/theme'
+import {
+  applyFontScale,
+  applyTheme,
+  clampFontScale,
+  readStoredFontScale,
+  readStoredTheme,
+  writeStoredFontScale,
+  writeStoredTheme,
+  type ThemeMode,
+} from '../lib/appearance'
 import { appBuildTime, appVersionLabel } from '../lib/version'
 
 const appNavItems = [
@@ -98,10 +107,10 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   }, [applySessionMemberships])
 
   useEffect(() => {
-    const storedTheme = (typeof window !== 'undefined' ? window.localStorage.getItem('theme-mode') : null) as ThemeMode | null
-    const nextTheme: ThemeMode = storedTheme === 'light' ? 'light' : 'dark'
+    const nextTheme = readStoredTheme()
     setThemeMode(nextTheme)
-    document.documentElement.setAttribute('data-theme', nextTheme)
+    applyTheme(nextTheme)
+    applyFontScale(readStoredFontScale())
 
     const session = loadSession()
     if (session?.account?.name) setAccountName(session.account.name)
@@ -110,6 +119,21 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
 
     applySessionMemberships(session?.memberships ?? [])
     void refreshSessionMemberships()
+    void (async () => {
+      try {
+        const { profile } = await getProfile()
+        if (typeof profile.appearanceFontScale === 'number') {
+          const scale = clampFontScale(profile.appearanceFontScale)
+          writeStoredFontScale(scale)
+          applyFontScale(scale)
+        }
+        if (profile.appearanceTheme === 'dark' || profile.appearanceTheme === 'light') {
+          writeStoredTheme(profile.appearanceTheme)
+          applyTheme(profile.appearanceTheme)
+          setThemeMode(profile.appearanceTheme)
+        }
+      } catch {}
+    })()
   }, [applySessionMemberships, refreshSessionMemberships])
 
   const handleWorkspaceChange = (nextWorkspaceId: string) => {
@@ -165,8 +189,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
 
   const handleThemeChange = (nextTheme: ThemeMode) => {
     setThemeMode(nextTheme)
-    document.documentElement.setAttribute('data-theme', nextTheme)
-    window.localStorage.setItem('theme-mode', nextTheme)
+    applyTheme(nextTheme)
+    writeStoredTheme(nextTheme)
+    void updateProfile({ appearanceTheme: nextTheme }).catch(() => {})
   }
 
   const loadNotifications = async (options?: { unreadOnly?: boolean }) => {
