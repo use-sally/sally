@@ -6,8 +6,19 @@ import { COMMUNITY_FEATURES, ENTERPRISE_FEATURES, type EditionInfo, type Feature
 export const ENTERPRISE_UPGRADE_URL = process.env.SALLY_ENTERPRISE_UPGRADE_URL || 'https://usesally.app/enterprise'
 
 const ACTIVE_LICENSE_STATUSES = new Set(['active', 'trialing', 'past_due'])
-function getLicensePublicKey(): string | null {
-  return process.env.SALLY_LICENSE_PUBLIC_KEY?.replace(/\\n/g, '\n') || null
+
+export type InstalledLicenseInput = {
+  certificate: string
+  publicKey: string
+  licenseServerUrl?: string | null
+  activationId?: string | null
+  licenseId?: string | null
+  instanceId?: string | null
+  lastRefreshAt?: Date | string | null
+} | null
+
+function getLicensePublicKey(overridePublicKey?: string | null): string | null {
+  return overridePublicKey?.replace(/\\n/g, '\n') || process.env.SALLY_LICENSE_PUBLIC_KEY?.replace(/\\n/g, '\n') || null
 }
 
 function readEnvOrFile(valueName: string, fileName: string): string | null {
@@ -26,8 +37,21 @@ function decodeBase64Url(value: string): Buffer {
   return Buffer.from(value, 'base64url')
 }
 
+function splitCompactCertificate(raw: string): { certificateText: string; signature: string | null } | null {
+  const trimmed = raw.trim()
+  const parts = trimmed.split('.')
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null
+  try {
+    return { certificateText: decodeBase64Url(parts[0]).toString('utf8'), signature: parts[1] }
+  } catch {
+    return null
+  }
+}
+
 function normalizeCertificateText(raw: string): string {
   const trimmed = raw.trim()
+  const compact = splitCompactCertificate(trimmed)
+  if (compact) return compact.certificateText
   if (trimmed.startsWith('{')) return trimmed
   try {
     return decodeBase64Url(trimmed).toString('utf8')
@@ -49,9 +73,14 @@ function parseCertificate(raw: string): LicenseCertificate {
   return parsed
 }
 
-function verifyCertificateSignature(certificateText: string, signature: string): boolean {
-  const publicKeyPem = getLicensePublicKey()
-  if (!publicKeyPem) return false
+function resolveSignature(certificateText: string, signature?: string | null): string | null {
+  const compact = splitCompactCertificate(certificateText)
+  return signature?.trim() || compact?.signature || null
+}
+
+function verifyCertificateSignature(certificateText: string, signature: string | null, publicKeyOverride?: string | null): boolean {
+  const publicKeyPem = getLicensePublicKey(publicKeyOverride)
+  if (!publicKeyPem || !signature) return false
   try {
     const publicKey = crypto.createPublicKey(publicKeyPem)
     return crypto.verify(null, Buffer.from(normalizeCertificateText(certificateText), 'utf8'), publicKey, decodeBase64Url(signature))
@@ -66,9 +95,9 @@ function certificateIsUsable(certificate: LicenseCertificate, now = new Date()):
   return Date.parse(graceOrValidUntil) >= now.getTime()
 }
 
-function licenseInfoFromCertificate(certificate: LicenseCertificate): LicenseInfo {
+function licenseInfoFromCertificate(certificate: LicenseCertificate, source: LicenseInfo['source'] = 'certificate'): LicenseInfo {
   return {
-    source: 'certificate',
+    source,
     status: certificate.status,
     licenseId: certificate.licenseId,
     customerEmail: certificate.customer?.email ?? null,
@@ -79,7 +108,20 @@ function licenseInfoFromCertificate(certificate: LicenseCertificate): LicenseInf
   }
 }
 
-export function getLicenseContext(now = new Date()): { edition: SallyEdition; features: FeatureKey[]; license: LicenseInfo } {
+function contextFromCertificate(input: { certificateRaw: string; signature?: string | null; publicKey?: string | null; source: LicenseInfo['source']; now: Date }) {
+  const certificate = parseCertificate(input.certificateRaw)
+  const signature = resolveSignature(input.certificateRaw, input.signature)
+  if (!verifyCertificateSignature(input.certificateRaw, signature, input.publicKey)) throw new Error('License certificate signature verification failed')
+  if (!certificateIsUsable(certificate, input.now)) throw new Error('License certificate is expired, canceled, or disabled')
+  return {
+    edition: certificate.edition,
+    features: certificate.edition === 'ENTERPRISE' ? [...new Set([...ENTERPRISE_FEATURES, ...certificate.features])] : [...certificate.features],
+    license: licenseInfoFromCertificate(certificate, input.source),
+  }
+}
+
+export function getLicenseContext(options: { now?: Date; installedLicense?: InstalledLicenseInput } = {}): { edition: SallyEdition; features: FeatureKey[]; license: LicenseInfo } {
+  const now = options.now ?? new Date()
   if (process.env.SALLY_EDITION?.toLowerCase() === 'enterprise') {
     return {
       edition: 'ENTERPRISE',
@@ -90,26 +132,31 @@ export function getLicenseContext(now = new Date()): { edition: SallyEdition; fe
 
   const certificateRaw = readEnvOrFile('SALLY_LICENSE_CERTIFICATE', 'SALLY_LICENSE_CERTIFICATE_FILE')
   const signature = readEnvOrFile('SALLY_LICENSE_SIGNATURE', 'SALLY_LICENSE_SIGNATURE_FILE')
-  if (!certificateRaw || !signature) {
-    return { edition: 'COMMUNITY', features: [...COMMUNITY_FEATURES], license: { source: 'community', status: 'missing' } }
+  if (certificateRaw) {
+    try {
+      return contextFromCertificate({ certificateRaw, signature, source: 'certificate', now })
+    } catch (error) {
+      return {
+        edition: 'COMMUNITY',
+        features: [...COMMUNITY_FEATURES],
+        license: { source: 'community', status: 'invalid', error: error instanceof Error ? error.message : 'Invalid license certificate' },
+      }
+    }
   }
 
-  try {
-    const certificate = parseCertificate(certificateRaw)
-    if (!verifyCertificateSignature(certificateRaw, signature)) throw new Error('License certificate signature verification failed')
-    if (!certificateIsUsable(certificate, now)) throw new Error('License certificate is expired, canceled, or disabled')
-    return {
-      edition: certificate.edition,
-      features: certificate.edition === 'ENTERPRISE' ? [...new Set([...ENTERPRISE_FEATURES, ...certificate.features])] : [...certificate.features],
-      license: licenseInfoFromCertificate(certificate),
-    }
-  } catch (error) {
-    return {
-      edition: 'COMMUNITY',
-      features: [...COMMUNITY_FEATURES],
-      license: { source: 'community', status: 'invalid', error: error instanceof Error ? error.message : 'Invalid license certificate' },
+  if (options.installedLicense?.certificate && options.installedLicense.publicKey) {
+    try {
+      return contextFromCertificate({ certificateRaw: options.installedLicense.certificate, publicKey: options.installedLicense.publicKey, source: 'installed_certificate', now })
+    } catch (error) {
+      return {
+        edition: 'COMMUNITY',
+        features: [...COMMUNITY_FEATURES],
+        license: { source: 'community', status: 'invalid', error: error instanceof Error ? error.message : 'Invalid installed license certificate' },
+      }
     }
   }
+
+  return { edition: 'COMMUNITY', features: [...COMMUNITY_FEATURES], license: { source: 'community', status: 'missing' } }
 }
 
 export function getSallyEdition(): SallyEdition {
@@ -125,8 +172,8 @@ export function hasFeature(feature: FeatureKey, edition?: SallyEdition): boolean
   return getAvailableFeatures(edition).includes(feature)
 }
 
-export function getEditionInfo(): EditionInfo {
-  const context = getLicenseContext()
+export function getEditionInfo(options: { installedLicense?: InstalledLicenseInput } = {}): EditionInfo {
+  const context = getLicenseContext(options)
   return {
     ok: true,
     edition: context.edition,
@@ -136,9 +183,10 @@ export function getEditionInfo(): EditionInfo {
   }
 }
 
-export function requireFeature(feature: FeatureKey) {
+export function requireFeature(feature: FeatureKey, readInstalledLicense?: () => Promise<InstalledLicenseInput>) {
   return async (_request: FastifyRequest, reply: FastifyReply) => {
-    if (hasFeature(feature)) return
+    const installedLicense = readInstalledLicense ? await readInstalledLicense() : null
+    if (getLicenseContext({ installedLicense }).features.includes(feature)) return
     return reply.code(402).send({
       ok: false,
       error: 'Enterprise feature',

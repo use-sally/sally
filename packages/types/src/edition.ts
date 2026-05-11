@@ -32,7 +32,7 @@ export type LicenseCertificate = {
 }
 
 export type LicenseInfo = {
-  source: 'community' | 'env_override' | 'certificate'
+  source: 'community' | 'env_override' | 'certificate' | 'installed_certificate'
   status?: LicenseStatus | 'invalid' | 'missing'
   licenseId?: string | null
   customerEmail?: string | null

@@ -19,7 +19,7 @@ test('audit log has a durable Prisma model linked to actor workspace project tas
 test('API writes audit events for sensitive admin and automation actions and exposes admin listing', () => {
   assert.match(apiIndexSource, /async function writeAuditLog\(/)
   assert.match(apiIndexSource, /prisma\.auditLogEvent\.create/)
-  assert.match(apiIndexSource, /app\.get\('\/audit-log', \{ preHandler: requireFeature\('security\.auditLog'\) \}/)
+  assert.match(apiIndexSource, /app\.get\('\/audit-log', \{ preHandler: requireFeature\('security\.auditLog'(?:, [^)]*readInstalledLicense[\s\S]*?)?\) \}/)
   assert.match(apiIndexSource, /app\.get\('\/audit-log'[\s\S]*if \(!isPlatformAdmin\(request\)\)/)
   assert.match(apiIndexSource, /audit\.platformRole\.updated/)
   assert.match(apiIndexSource, /audit\.workspace\.archived/)

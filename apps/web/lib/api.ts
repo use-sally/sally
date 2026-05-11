@@ -45,6 +45,26 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<Health> { return getJson('/health') }
 export function getEdition(): Promise<EditionInfo> { return getJson('/edition') }
+export type InstalledLicenseSummary = EditionInfo & {
+  installed: null | {
+    licenseServerUrl: string
+    activationId: string | null
+    licenseId: string | null
+    instanceId: string | null
+    status: string | null
+    validUntil: string | null
+    graceUntil: string | null
+    lastRefreshAt: string | null
+    installedAt: string
+    updatedAt: string
+  }
+}
+export function getLicense(): Promise<InstalledLicenseSummary> { return getJson('/license') }
+export function activateLicense(payload: { licenseKey: string; licenseServerUrl?: string; instanceId?: string; instanceName?: string; fingerprint?: string }): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> {
+  return getJson('/license/activate', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function refreshLicense(): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> { return getJson('/license/refresh', { method: 'POST', body: JSON.stringify({}) }) }
+export function removeLicense(): Promise<{ ok: boolean; edition: EditionInfo }> { return getJson('/license', { method: 'DELETE' }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)

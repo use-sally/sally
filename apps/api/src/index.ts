@@ -24,6 +24,7 @@ import { buildApprovalDecisionPatch, buildApprovalRequestPayload, buildBlockerPa
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
 import { appBuildTime, appGitSha, appVersion } from './version.js'
 import { getEditionInfo, requireFeature } from './edition.js'
+import { activateInstalledLicense, readInstalledLicense, refreshInstalledLicense, removeInstalledLicense } from './license-management.js'
 
 function loadSimpleEnv(filePath: string) {
   if (!fs.existsSync(filePath)) return
@@ -1569,7 +1570,7 @@ const start = async () => {
       if ((url.startsWith('/projects') || url.startsWith('/tasks')) && (await ensureWorkerAuth(request, reply))) return
       if (url.startsWith('/auth/login') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
-      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth') || url.startsWith('/edition')) return
+      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth') || url.startsWith('/edition') || url.startsWith('/license')) return
       const workspace = await resolveWorkspace(request, reply)
       if (!workspace) return
       ;(request as any).workspace = workspace
@@ -1577,8 +1578,62 @@ const start = async () => {
 
     app.get('/health', async () => ({ ok: true, service: 'api', timestamp: new Date().toISOString() }))
     app.get('/edition', async () => {
-      const edition = getEditionInfo()
+      const installedLicense = await readInstalledLicense(prisma)
+      const edition = getEditionInfo({ installedLicense })
       return { ...edition, availableFeatures: edition.availableFeatures }
+    })
+
+    app.get('/license', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const installedLicense = await readInstalledLicense(prisma)
+      const edition = getEditionInfo({ installedLicense })
+      const record = await prisma.installedLicense.findUnique({ where: { id: 'instance' } })
+      return {
+        ...edition,
+        installed: record ? {
+          licenseServerUrl: record.licenseServerUrl,
+          activationId: record.activationId,
+          licenseId: record.licenseId,
+          instanceId: record.instanceId,
+          status: record.status,
+          validUntil: record.validUntil?.toISOString() ?? null,
+          graceUntil: record.graceUntil?.toISOString() ?? null,
+          lastRefreshAt: record.lastRefreshAt?.toISOString() ?? null,
+          installedAt: record.installedAt.toISOString(),
+          updatedAt: record.updatedAt.toISOString(),
+        } : null,
+      }
+    })
+
+    app.post('/license/activate', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const body = request.body as { licenseKey?: string; instanceId?: string; instanceName?: string; appVersion?: string; fingerprint?: string; licenseServerUrl?: string }
+      try {
+        const result = await activateInstalledLicense(prisma, body as any)
+        const installedLicense = await readInstalledLicense(prisma)
+        const edition = getEditionInfo({ installedLicense })
+        return { ok: true, edition, installed: result.license }
+      } catch (error) {
+        return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'License activation failed' })
+      }
+    })
+
+    app.post('/license/refresh', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      try {
+        const result = await refreshInstalledLicense(prisma)
+        const installedLicense = await readInstalledLicense(prisma)
+        const edition = getEditionInfo({ installedLicense })
+        return { ok: true, edition, installed: result.license }
+      } catch (error) {
+        return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'License refresh failed' })
+      }
+    })
+
+    app.delete('/license', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      await removeInstalledLicense(prisma)
+      return { ok: true, edition: getEditionInfo({ installedLicense: null }) }
     })
 
     app.get('/runtime-config', async () => ({
@@ -2635,8 +2690,9 @@ const start = async () => {
       }))
     })
 
+    const readInstalledLicenseForFeature = () => readInstalledLicense(prisma)
 
-    app.get('/audit-log', { preHandler: requireFeature('security.auditLog') }, async (request, reply) => {
+    app.get('/audit-log', { preHandler: requireFeature('security.auditLog', readInstalledLicenseForFeature) }, async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const query = request.query as { action?: string; targetType?: string; limit?: string }
       const limit = Math.min(Math.max(Number(query.limit || 100), 1), 250)
