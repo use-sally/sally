@@ -75,15 +75,37 @@ export function DesignAppearancePanel({
               onLeave={() => setHoverScale(null)}
             />
           ))}
-          <FontScalePresetTile
-            label="Custom"
-            previewScale={customSelected ? fontScale : 1.0}
-            selected={customSelected}
-            tooltip={customSelected ? `Custom · ${Math.round(fontScale * 100)}%` : 'Custom'}
+          <div
+            role="radio"
+            aria-checked={customSelected}
+            tabIndex={0}
             onClick={enterCustom}
-            onHover={() => setHoverScale(fontScale)}
-            onLeave={() => setHoverScale(null)}
-          />
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                enterCustom()
+              }
+            }}
+            onMouseEnter={() => setHoverScale(fontScale)}
+            onMouseLeave={() => setHoverScale(null)}
+            onFocus={() => setHoverScale(fontScale)}
+            onBlur={() => setHoverScale(null)}
+            className={`font-scale-preset-tile font-scale-custom-tile${customSelected ? ' is-selected' : ''}`}
+            title={customSelected ? `Custom · ${Math.round(fontScale * 100)}%` : 'Custom'}
+          >
+            <FontScaleStepper fontScale={fontScale} onChange={onChange} />
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: customSelected ? 700 : 500,
+                color: customSelected ? 'var(--text-primary)' : 'var(--text-muted)',
+                textAlign: 'center',
+                minHeight: 14,
+              }}
+            >
+              Custom
+            </div>
+          </div>
         </div>
 
         {effectiveWidth !== null && effectiveHeight !== null ? (
@@ -91,17 +113,6 @@ export function DesignAppearancePanel({
             {effectiveWidth} × {effectiveHeight}
           </div>
         ) : null}
-
-        <input
-          type="range"
-          min={FONT_SCALE_MIN}
-          max={FONT_SCALE_MAX}
-          step={FONT_SCALE_STEP}
-          value={roundFontScale(fontScale)}
-          onChange={(event) => onChange(Number.parseFloat(event.target.value))}
-          aria-label={`Font scale, ${Math.round(fontScale * 100)} percent`}
-          style={{ width: '100%', maxWidth: 560 }}
-        />
       </div>
     </div>
   )
@@ -186,3 +197,51 @@ function FontScalePreview({ scale, active }: { scale: number; active: boolean })
 }
 
 const presetRowStyle = { display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 } as const
+
+function stepCustomScale(current: number, direction: 1 | -1): number {
+  let next = roundFontScale(current + direction * FONT_SCALE_STEP)
+  while (
+    matchPreset(next) !== 'custom' &&
+    next > FONT_SCALE_MIN &&
+    next < FONT_SCALE_MAX
+  ) {
+    next = roundFontScale(next + direction * FONT_SCALE_STEP)
+  }
+  return Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, next))
+}
+
+function FontScaleStepper({ fontScale, onChange }: { fontScale: number; onChange: (next: number) => void }) {
+  const atMin = roundFontScale(fontScale) <= FONT_SCALE_MIN
+  const atMax = roundFontScale(fontScale) >= FONT_SCALE_MAX
+  return (
+    <div
+      className="font-scale-stepper"
+      role="group"
+      aria-label="Font size"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="font-scale-stepper-btn"
+        onClick={() => onChange(stepCustomScale(fontScale, -1))}
+        disabled={atMin}
+        aria-label="Decrease font size"
+      >
+        −
+      </button>
+      <div className="font-scale-stepper-value" aria-live="polite">
+        {Math.round(fontScale * 100)}%
+      </div>
+      <button
+        type="button"
+        className="font-scale-stepper-btn"
+        onClick={() => onChange(stepCustomScale(fontScale, 1))}
+        disabled={atMax}
+        aria-label="Increase font size"
+      >
+        +
+      </button>
+    </div>
+  )
+}
