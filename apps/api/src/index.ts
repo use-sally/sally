@@ -1489,18 +1489,24 @@ const start = async () => {
       const profile = await prisma.account.findUnique({ where: { id: account.id } })
       if (!profile) return reply.code(404).send({ ok: false, error: 'Account not found' })
       const pendingEmail = await prisma.emailChangeToken.findFirst({ where: { accountId: profile.id, usedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } })
-      return { ok: true, profile: { id: profile.id, name: profile.name, email: profile.email, avatarUrl: profile.avatarUrl, pendingEmail: pendingEmail?.newEmail ?? null, platformRole: profile.platformRole, emailLocked: isConfiguredSuperadminEmail(profile.email) } }
+      return { ok: true, profile: { id: profile.id, name: profile.name, email: profile.email, avatarUrl: profile.avatarUrl, pendingEmail: pendingEmail?.newEmail ?? null, platformRole: profile.platformRole, emailLocked: isConfiguredSuperadminEmail(profile.email), appearanceFontScale: profile.appearanceFontScale, appearanceTheme: profile.appearanceTheme } }
     })
 
     app.patch('/auth/profile', async (request, reply) => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
-      const body = request.body as { name?: string; email?: string; avatarUrl?: string | null }
+      const body = request.body as { name?: string; email?: string; avatarUrl?: string | null; appearanceFontScale?: number; appearanceTheme?: 'dark' | 'light' }
       const current = await prisma.account.findUnique({ where: { id: account.id } })
       if (!current) return reply.code(404).send({ ok: false, error: 'Account not found' })
       const name = body.name !== undefined ? body.name?.trim() || null : current.name
       const avatarUrl = body.avatarUrl !== undefined ? (body.avatarUrl?.trim() || null) : current.avatarUrl
-      await prisma.account.update({ where: { id: current.id }, data: { name, avatarUrl } })
+      const appearanceFontScale = body.appearanceFontScale !== undefined
+        ? Math.min(1.5, Math.max(0.75, Number(body.appearanceFontScale) || 1.0))
+        : current.appearanceFontScale
+      const appearanceTheme = body.appearanceTheme === 'light' || body.appearanceTheme === 'dark'
+        ? body.appearanceTheme
+        : current.appearanceTheme
+      await prisma.account.update({ where: { id: current.id }, data: { name, avatarUrl, appearanceFontScale, appearanceTheme } })
       let emailChange = null as null | { pendingEmail: string; emailed: boolean; reason?: string }
       const nextEmail = body.email?.trim().toLowerCase()
       if (isConfiguredSuperadminEmail(current.email) && nextEmail && nextEmail !== current.email) {
@@ -1516,7 +1522,7 @@ const start = async () => {
         emailChange = { pendingEmail: nextEmail, emailed: mailResult.ok, ...(mailResult.ok ? {} : { reason: mailResult.reason }) }
       }
       const updated = await prisma.account.findUnique({ where: { id: current.id } })
-      return { ok: true, profile: { id: updated!.id, name: updated!.name, email: updated!.email, avatarUrl: updated!.avatarUrl, platformRole: updated!.platformRole, emailLocked: isConfiguredSuperadminEmail(updated!.email) }, emailChange }
+      return { ok: true, profile: { id: updated!.id, name: updated!.name, email: updated!.email, avatarUrl: updated!.avatarUrl, platformRole: updated!.platformRole, emailLocked: isConfiguredSuperadminEmail(updated!.email), appearanceFontScale: updated!.appearanceFontScale, appearanceTheme: updated!.appearanceTheme }, emailChange }
     })
 
     app.post('/auth/confirm-email-change', async (request, reply) => {

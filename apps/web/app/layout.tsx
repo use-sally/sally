@@ -11,9 +11,14 @@ export const metadata: Metadata = {
   },
 }
 
+const appearanceInitScript = `(function(){try{var t=localStorage.getItem('theme-mode');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark');var s=parseFloat(localStorage.getItem('appearance-font-scale'));if(isFinite(s)){s=Math.min(1.5,Math.max(0.75,s));document.documentElement.style.zoom=String(s);}}catch(e){}})();`
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: appearanceInitScript }} />
+      </head>
       <body style={{ margin: 0, background: 'var(--app-bg)', color: 'var(--text-primary)' }}>
         <style>{`
           *, *::before, *::after { box-sizing: border-box; }

@@ -439,4 +439,36 @@ html[data-theme='light'] .status-theme-surface {
   pointer-events: none;
   white-space: pre-wrap;
 }
+
+:root { --accent: #34d399; }
+html[data-theme='light'] { --accent: #0ea5e9; }
+
+.font-scale-preset-tile {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+  color: inherit;
+  font: inherit;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.font-scale-preset-tile:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.font-scale-preset-tile:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.font-scale-preset-tile.is-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+}
 `;

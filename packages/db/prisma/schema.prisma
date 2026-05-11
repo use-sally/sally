@@ -67,6 +67,8 @@ model Account {
   avatarUrl   String?
   passwordHash String?
   platformRole PlatformRole          @default(NONE)
+  appearanceFontScale Float          @default(1.0)
+  appearanceTheme String             @default("dark")
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   memberships WorkspaceMembership[]
