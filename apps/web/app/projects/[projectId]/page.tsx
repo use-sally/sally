@@ -293,7 +293,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
     }
   }, [projectId])
 
-  const { data: project, error } = useProjectQuery(projectId, { archived: archivedParam })
+  const { data: project, error, isLoading: projectLoading } = useProjectQuery(projectId, { archived: archivedParam })
   const { data: clients = [] } = useClientsQuery()
   const { data: automationOverview } = useProjectAutomationQuery(projectId)
   const { data: boardColumns = [], error: boardError, isLoading: boardLoading } = useBoardQuery(projectId)
@@ -708,7 +708,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
           <ProjectTabs projectId={projectId} current={currentView} />
         </div>
       ) : null}
-      {error ? <div style={{ color: 'var(--danger-text)', marginBottom: 16 }}>{error instanceof Error ? error.message : 'Failed to load project'}</div> : null}
       {archivedParam ? <div style={{ ...panel, border: '1px dashed var(--panel-border)', color: 'var(--text-secondary)', marginBottom: 18 }}>This project is archived. Restore it from the Projects list to resume work.</div> : null}
 
       {project ? (
@@ -796,7 +795,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
             )}
           </div>
         </>
-      ) : <div style={{ color: 'var(--text-muted)' }}>Loading project…</div>}
+      ) : error ? (
+        <div style={{ ...panel, border: '1px solid var(--panel-border)', color: 'var(--danger-text)', display: 'grid', gap: 8 }}>
+          <div style={{ fontWeight: 700 }}>{"This project doesn't exist or you don't have access to it."}</div>
+          {error instanceof Error && error.message && error.message !== 'Project not found' ? (
+            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{error.message}</div>
+          ) : null}
+        </div>
+      ) : projectLoading ? (
+        <div style={{ color: 'var(--text-muted)' }}>Loading project…</div>
+      ) : (
+        <div style={{ color: 'var(--text-muted)' }}>Select a project from the sidebar.</div>
+      )}
       {taskId && projectId ? <BottomTaskDrawer taskId={taskId} projectId={projectId} /> : null}
 
     </AppShell>

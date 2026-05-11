@@ -18,6 +18,14 @@ const navItems = [
   { href: '/timesheets', label: 'Timesheets' },
 ]
 
+function resolveWorkspaceScopedTarget(pathname: string | null) {
+  if (!pathname) return null
+  if (/^\/projects\/[^/]+/.test(pathname)) return '/projects'
+  if (/^\/clients\/[^/]+/.test(pathname)) return '/clients'
+  if (/^\/tasks\/[^/]+/.test(pathname)) return '/'
+  return null
+}
+
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
 const bgGrid = `
   radial-gradient(circle at 20% 0%, rgba(16,185,129,0.12), transparent 28%),
@@ -77,7 +85,12 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     if (!nextWorkspaceId || nextWorkspaceId === activeWorkspaceId) return
     setWorkspaceId(nextWorkspaceId)
     setActiveWorkspaceId(nextWorkspaceId)
-    window.location.reload()
+    const scopedTarget = resolveWorkspaceScopedTarget(pathname)
+    if (scopedTarget) {
+      window.location.href = scopedTarget
+    } else {
+      window.location.reload()
+    }
   }
 
   const handleLogout = async () => {
