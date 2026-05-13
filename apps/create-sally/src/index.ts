@@ -31,6 +31,10 @@ type SchemaDriftState = {
   missingTaskDependencyTable: boolean
 }
 
+type EditionLicenseSchemaState = {
+  missingInstalledLicenseTable: boolean
+}
+
 type CliOptions = {
   command: CommandMode
   dir?: string
@@ -123,6 +127,8 @@ function composeForManagedSimple() {
     image: ${'${SALLY_API_IMAGE}'}
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - sally-uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,6 +157,7 @@ function composeForManagedSimple() {
 
 volumes:
   sally-postgres:
+  sally-uploads:
   caddy-data:
   caddy-config:
 `
@@ -180,6 +187,8 @@ function composeForExistingInfra() {
     env_file: .env
     ports:
       - "4000:4000"
+    volumes:
+      - sally-uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -195,6 +204,7 @@ function composeForExistingInfra() {
 
 volumes:
   sally-postgres:
+  sally-uploads:
 `
 }
 
@@ -435,6 +445,7 @@ async function backupExistingInstance(targetDir: string, postgresUser: string, p
   })
 
   const uploadsArchive = path.join(backupDir, 'uploads.tgz')
+  const runtimeUploadsDir = '/app/uploads'
   const apiContainerId = (await runCommandCapture('docker', ['compose', 'ps', '-q', 'api'], targetDir).catch(() => '')).trim()
 
   if (!apiContainerId) {
@@ -442,7 +453,7 @@ async function backupExistingInstance(targetDir: string, postgresUser: string, p
   } else {
     await new Promise<void>((resolve, reject) => {
       const out = createWriteStream(uploadsArchive)
-      const child = spawn('docker', ['cp', `${apiContainerId}:/app/apps/api/uploads/.`, '-'], { cwd: targetDir, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
+      const child = spawn('docker', ['cp', `${apiContainerId}:${runtimeUploadsDir}/.`, '-'], { cwd: targetDir, stdio: ['ignore', 'pipe', 'pipe'], shell: false })
       let stderr = ''
       let stdoutSeen = false
       child.stdout.on('data', (chunk) => {
@@ -893,6 +904,23 @@ async function maybeRepairInitSchemaDrift(targetDir: string, postgresUser: strin
   )
 }
 
+async function inspectEditionLicenseSchemaState(targetDir: string, postgresUser: string, postgresDb: string) {
+  const sql = [
+    'SELECT json_build_object(',
+    "  'missingInstalledLicenseTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'InstalledLicense')",
+    ');',
+  ].join(' ')
+
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    targetDir,
+  )
+  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
+  if (!jsonLine) throw new Error(`Could not inspect edition/license schema state. Output was:\n${raw}`)
+  return JSON.parse(jsonLine) as EditionLicenseSchemaState
+}
+
 type TaskPeopleMigrationState = {
   taskTableExists: boolean
   missingTaskOwnerColumn: boolean
@@ -1197,6 +1225,7 @@ async function doctorFlow(options: CliOptions) {
     try {
       const drift = await inspectSchemaDriftState(targetDir, current.postgresUser, current.postgresDb)
       const taskPeopleDrift = await inspectTaskPeopleMigrationState(targetDir, current.postgresUser, current.postgresDb)
+      const editionLicense = await inspectEditionLicenseSchemaState(targetDir, current.postgresUser, current.postgresDb)
       const problems = [
         drift.missingProjectTaskCounter ? 'Project.taskCounter missing' : null,
         drift.missingTaskNumber ? 'Task.number missing' : null,
@@ -1206,6 +1235,7 @@ async function doctorFlow(options: CliOptions) {
         taskPeopleDrift.missingTaskOwnerColumn ? 'Task.owner missing' : null,
         taskPeopleDrift.missingTaskParticipantTable ? 'TaskParticipant table missing' : null,
         taskPeopleDrift.taskParticipantBackfillIncomplete ? 'TaskParticipant backfill incomplete' : null,
+        editionLicense.missingInstalledLicenseTable ? 'InstalledLicense table missing' : null,
       ].filter(Boolean)
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {

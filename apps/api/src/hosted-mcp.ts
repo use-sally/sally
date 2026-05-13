@@ -26,6 +26,16 @@ export type HostedMcpTaskUpdateArgs = {
   dueDate?: string | null
 }
 
+export type WorkItemRefInput = {
+  provider: 'sally' | 'linear' | 'jira' | 'github' | 'SALLY' | 'LINEAR' | 'JIRA' | 'GITHUB'
+  externalId?: string | null
+  externalUrl?: string | null
+  title?: string | null
+  description?: string | null
+  sallyTaskId?: string | null
+  metadata?: unknown
+}
+
 export type HostedMcpAgentJobCreateArgs = {
   projectId?: string | null
   taskId?: string | null
@@ -36,6 +46,8 @@ export type HostedMcpAgentJobCreateArgs = {
   workflowRunId?: string | null
   workflowStep?: number | null
   maxSteps?: number | null
+  workItemRefId?: string | null
+  workItemRef?: WorkItemRefInput | null
   payload?: unknown
 }
 
@@ -57,6 +69,8 @@ export type HostedMcpAgentRunCreateArgs = {
   model?: string | null
   workflowRunId?: string | null
   workflowStep?: number | null
+  workItemRefId?: string | null
+  workItemRef?: WorkItemRefInput | null
   summary?: string | null
   logUrl?: string | null
   evidenceUrl?: string | null
@@ -115,6 +129,8 @@ export function buildHostedMcpAgentJobCreatePayload(args: HostedMcpAgentJobCreat
     ...(args.workflowRunId !== undefined ? { workflowRunId: args.workflowRunId } : {}),
     ...(args.workflowStep !== undefined ? { workflowStep: args.workflowStep } : {}),
     ...(args.maxSteps !== undefined ? { maxSteps: args.maxSteps } : {}),
+    ...(args.workItemRefId !== undefined ? { workItemRefId: args.workItemRefId } : {}),
+    ...(args.workItemRef !== undefined ? { workItemRef: args.workItemRef } : {}),
     ...(args.payload !== undefined ? { payload: args.payload } : {}),
   }
 }
@@ -140,6 +156,8 @@ export function buildHostedMcpAgentRunCreatePayload(args: HostedMcpAgentRunCreat
     ...(args.model !== undefined ? { model: args.model } : {}),
     ...(args.workflowRunId !== undefined ? { workflowRunId: args.workflowRunId } : {}),
     ...(args.workflowStep !== undefined ? { workflowStep: args.workflowStep } : {}),
+    ...(args.workItemRefId !== undefined ? { workItemRefId: args.workItemRefId } : {}),
+    ...(args.workItemRef !== undefined ? { workItemRef: args.workItemRef } : {}),
     ...(args.summary !== undefined ? { summary: args.summary } : {}),
     ...(args.logUrl !== undefined ? { logUrl: args.logUrl } : {}),
     ...(args.evidenceUrl !== undefined ? { evidenceUrl: args.evidenceUrl } : {}),

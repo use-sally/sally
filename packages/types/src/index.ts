@@ -1,3 +1,5 @@
+export * from './edition.js'
+
 export type Health = {
   ok: boolean
   service: 'api'
@@ -100,6 +102,23 @@ export type Notification = {
   projectId?: string | null
   taskId?: string | null
   actor: NotificationActor | null
+}
+
+export type AuditLogEvent = {
+  id: string
+  workspaceId: string | null
+  projectId: string | null
+  taskId: string | null
+  agentId: string | null
+  agentJobId: string | null
+  agentRunId: string | null
+  action: string
+  targetType: string | null
+  targetId: string | null
+  summary: string | null
+  metadata: unknown
+  createdAt: string
+  actor: { id: string; email: string; name: string | null } | null
 }
 
 export type MentionableUser = {
@@ -314,6 +333,7 @@ export type WorkspaceInfo = {
   name: string
   slug: string
   createdAt: string
+  archivedAt: string | null
 }
 
 export type AccountSummary = {

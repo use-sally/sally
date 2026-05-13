@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ReactNode, useEffect, useRef, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import type { Notification } from '@sally/types/src'
 import { getWorkspaceId, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId } from '../lib/auth'
 import { apiUrl, createWorkspace, getMe, getNotifications, logout, readAllNotifications, readNotification } from '../lib/api'
@@ -11,11 +11,20 @@ import { workspaceRoleLabel } from '../lib/roles'
 import type { ThemeMode } from '../lib/theme'
 import { appBuildTime, appVersionLabel } from '../lib/version'
 
-const navItems = [
+const appNavItems = [
   { href: '/', label: 'Overview' },
   { href: '/projects', label: 'Projects' },
   { href: '/clients', label: 'Clients' },
   { href: '/timesheets', label: 'Timesheets' },
+]
+
+const adminNavItems = [
+  { href: '/team', label: 'Team' },
+  { href: '/workspaces', label: 'Workspaces' },
+  { href: '/audit-log', label: 'Audit Log' },
+  { href: '/edition-license', label: 'Edition/License' },
+  { href: '/security', label: 'Security' },
+  { href: '/system', label: 'System' },
 ]
 
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
@@ -46,6 +55,40 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
 
+  const applySessionMemberships = useCallback((memberships: NonNullable<ReturnType<typeof loadSession>>['memberships'] = [], refreshOptions?: { reloadOnWorkspaceChange?: boolean }) => {
+    const workspaceMemberships = memberships ?? []
+    const options = workspaceMemberships.map((membership) => ({
+      id: membership.workspaceId,
+      name: membership.workspaceName,
+      role: membership.role,
+    }))
+    setWorkspaceOptions(options)
+
+    const storedWorkspace = getWorkspaceId()
+    const nextWorkspace = pickPreferredWorkspaceId(workspaceMemberships, { storedWorkspaceId: storedWorkspace }) || ''
+    setActiveWorkspaceId(nextWorkspace)
+    if (nextWorkspace) {
+      if (nextWorkspace !== storedWorkspace) {
+        setWorkspaceId(nextWorkspace)
+        if (refreshOptions?.reloadOnWorkspaceChange) window.location.reload()
+      }
+    } else if (storedWorkspace) {
+      setWorkspaceId(null)
+      if (refreshOptions?.reloadOnWorkspaceChange) window.location.reload()
+    }
+  }, [])
+
+  const refreshSessionMemberships = useCallback(async () => {
+    const current = loadSession()
+    if (!current?.token) return
+    const me = await getMe()
+    saveSession({ token: current.token, expiresAt: current.expiresAt, account: me.account, memberships: me.memberships })
+    if (me.account?.name) setAccountName(me.account.name)
+    else if (me.account?.email) setAccountName(me.account.email)
+    if (me.account?.avatarUrl) setAccountAvatarUrl(me.account.avatarUrl.startsWith('/') ? apiUrl(me.account.avatarUrl) : me.account.avatarUrl)
+    applySessionMemberships(me.memberships, { reloadOnWorkspaceChange: true })
+  }, [applySessionMemberships])
+
   useEffect(() => {
     const storedTheme = (typeof window !== 'undefined' ? window.localStorage.getItem('theme-mode') : null) as ThemeMode | null
     const nextTheme: ThemeMode = storedTheme === 'light' ? 'light' : 'dark'
@@ -57,21 +100,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     else if (session?.account?.email) setAccountName(session.account.email)
     if (session?.account?.avatarUrl) setAccountAvatarUrl(session.account.avatarUrl.startsWith('/') ? apiUrl(session.account.avatarUrl) : session.account.avatarUrl)
 
-    const memberships = session?.memberships ?? []
-    const options = memberships.map((membership) => ({
-      id: membership.workspaceId,
-      name: membership.workspaceName,
-      role: membership.role,
-    }))
-    setWorkspaceOptions(options)
-
-    const storedWorkspace = getWorkspaceId()
-    const nextWorkspace = pickPreferredWorkspaceId(memberships, { storedWorkspaceId: storedWorkspace }) || ''
-    if (nextWorkspace) {
-      setActiveWorkspaceId(nextWorkspace)
-      if (nextWorkspace !== storedWorkspace) setWorkspaceId(nextWorkspace)
-    }
-  }, [])
+    applySessionMemberships(session?.memberships ?? [])
+    void refreshSessionMemberships()
+  }, [applySessionMemberships, refreshSessionMemberships])
 
   const handleWorkspaceChange = (nextWorkspaceId: string) => {
     if (!nextWorkspaceId || nextWorkspaceId === activeWorkspaceId) return
@@ -164,6 +195,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const activeWorkspace = workspaceOptions.find((option) => option.id === activeWorkspaceId)
   const platformRole = loadSession()?.account?.platformRole
   const isPlatformAdminSession = platformRole === 'SUPERADMIN' || platformRole === 'ADMIN'
+  const isAdminArea = pathname.startsWith('/team') || pathname.startsWith('/workspaces') || pathname.startsWith('/audit-log') || pathname.startsWith('/edition-license') || pathname.startsWith('/security') || pathname.startsWith('/system')
 
   const handleNotificationClick = async (notification: Notification) => {
     await readNotification(notification.id)
@@ -178,6 +210,52 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
       router.push(`/projects/${notification.projectId}${workspaceQuery}`)
     }
   }
+
+  const headerProfileLink = (
+    <Link
+      href="/profile"
+      aria-label="Profile"
+      title={accountName ? `Profile · ${accountName}` : 'Profile'}
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 999,
+        overflow: 'hidden',
+        background: pathname.startsWith('/profile') ? '#fcd34d' : 'var(--form-bg)',
+        border: pathname.startsWith('/profile') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--form-border)',
+        color: pathname.startsWith('/profile') ? '#052e16' : '#6ee7b7',
+        display: 'grid',
+        placeItems: 'center',
+        textDecoration: 'none',
+        fontWeight: 750,
+        fontSize: 13,
+        flex: '0 0 auto',
+      }}
+    >
+      {accountAvatarUrl ? <img src={accountAvatarUrl} alt="" aria-hidden="true" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (accountName?.trim()?.[0] || '?').toUpperCase()}
+    </Link>
+  )
+
+  const sidebarFooterActions = (
+    <>
+      {isPlatformAdminSession ? (
+        <Link
+          href="/team"
+          style={{
+            display: 'block',
+            padding: '10px 12px',
+            borderRadius: 14,
+            color: isAdminArea ? '#052e16' : 'var(--text-primary)',
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: 'none',
+            background: isAdminArea ? '#fcd34d' : 'var(--panel-bg)',
+            border: isAdminArea ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--panel-border)',
+          }}
+        >Admin</Link>
+      ) : null}
+    </>
+  )
 
   return (
     <main
@@ -222,7 +300,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
-            {workspaceOptions.length ? (
+            {!isAdminArea && workspaceOptions.length ? (
               <div ref={workspaceMenuRef} style={{ display: 'grid', gap: 6, position: 'relative' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Workspace</div>
                 <button
@@ -315,51 +393,70 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
             ) : null}
 
             <nav style={{ display: 'grid', gap: 8 }}>
-              {navItems.filter((item) => item.href !== '/projects').map((item) => {
-                const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
-                return (
+              {isAdminArea ? (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Admin</div>
                   <Link
-                    key={item.href}
-                    href={item.href}
-                    style={{
-                      display: 'block',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      color: active ? '#052e16' : 'var(--text-secondary)',
-                      fontWeight: 700,
-                      fontSize: 13,
-                      lineHeight: 1.2,
-                      textDecoration: 'none',
-                      background: active ? '#fcd34d' : 'transparent',
-                      border: active ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
-                    }}
+                    href="/projects"
+                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, lineHeight: 1.2, textDecoration: 'none', background: 'transparent', border: '1px solid var(--panel-border)' }}
                   >
-                    {item.label}
+                    Back to app
                   </Link>
-                )
-              })}
-              {isPlatformAdminSession ? (
-                <Link
-                  href="/team"
-                  style={{
-                    display: 'block',
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    color: pathname.startsWith('/team') ? '#052e16' : 'var(--text-secondary)',
-                    fontWeight: 700,
-                    fontSize: 13,
-                    lineHeight: 1.2,
-                    textDecoration: 'none',
-                    background: pathname.startsWith('/team') ? '#fcd34d' : 'transparent',
-                    border: pathname.startsWith('/team') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
-                  }}
-                >
-                  Team
-                </Link>
-              ) : null}
+                  {adminNavItems.map((item) => {
+                    const active = pathname.startsWith(item.href)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        style={{
+                          display: 'block',
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          color: active ? '#052e16' : 'var(--text-secondary)',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          lineHeight: 1.2,
+                          textDecoration: 'none',
+                          background: active ? '#fcd34d' : 'transparent',
+                          border: active ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                        }}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  })}
+                </>
+              ) : (
+                <>
+                  {appNavItems.filter((item) => item.href !== '/projects').map((item) => {
+                    const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        style={{
+                          display: 'block',
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          color: active ? '#052e16' : 'var(--text-secondary)',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          lineHeight: 1.2,
+                          textDecoration: 'none',
+                          background: active ? '#fcd34d' : 'transparent',
+                          border: active ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                        }}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  })}
+                </>
+              )}
             </nav>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, flex: 1 }}>
+            {!isAdminArea ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, flex: 1 }}>
               <Link
                 href="/projects"
                 style={{
@@ -405,7 +502,8 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   )
                 })}
               </div>
-            </div>
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: 'grid', gap: 12, marginTop: 'auto' }}>
@@ -491,30 +589,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
               </div>
             </div>
 
-            <Link
-              href="/profile"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 12px',
-                borderRadius: 14,
-                color: pathname.startsWith('/profile') ? '#052e16' : 'var(--text-primary)',
-                fontWeight: 700,
-                fontSize: 13,
-                textDecoration: 'none',
-                background: pathname.startsWith('/profile') ? '#fcd34d' : 'var(--panel-bg)',
-                border: pathname.startsWith('/profile') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--panel-border)',
-              }}
-            >
-              <div style={{ width: 32, height: 32, borderRadius: 999, overflow: 'hidden', background: pathname.startsWith('/profile') ? 'rgba(5, 46, 22, 0.14)' : 'rgba(16, 185, 129, 0.08)', display: 'grid', placeItems: 'center', color: pathname.startsWith('/profile') ? '#052e16' : '#6ee7b7', flex: '0 0 auto' }}>
-                {accountAvatarUrl ? <img src={accountAvatarUrl} alt={accountName || 'Profile'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (accountName?.trim()?.[0] || '?').toUpperCase()}
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div>Profile</div>
-                {accountName ? <div style={{ fontSize: 11, fontWeight: 600, opacity: pathname.startsWith('/profile') ? 0.8 : 0.7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{accountName}</div> : null}
-              </div>
-            </Link>
+            {sidebarFooterActions}
           </div>
         </aside>
 
@@ -599,6 +674,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   </div>
                 ) : null}
               </div>
+              {headerProfileLink}
               {actions ?? null}
             </div>
           </header>

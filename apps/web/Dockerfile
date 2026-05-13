@@ -42,6 +42,7 @@ RUN pnpm install --prod=false --frozen-lockfile
 COPY --from=build /app/apps/web/.next apps/web/.next
 COPY --from=build /app/apps/web/public apps/web/public
 COPY --from=build /app/apps/web/package.json apps/web/package.json
+COPY --from=build /app/packages/types packages/types
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/web/node_modules apps/web/node_modules
 

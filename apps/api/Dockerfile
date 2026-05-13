@@ -41,6 +41,7 @@ RUN pnpm install --prod=false --frozen-lockfile
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/apps/api/src/bootstrap.ts apps/api/src/bootstrap.ts
 COPY --from=build /app/packages/db packages/db
+COPY --from=build /app/packages/types packages/types
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/api/node_modules apps/api/node_modules
 COPY --from=build /app/packages/db/node_modules packages/db/node_modules

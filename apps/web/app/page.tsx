@@ -67,11 +67,14 @@ export default function Home() {
   const latestVersion = updateManifest?.latestVersion ?? null
   const updateAvailable = latestVersion ? compareVersions(latestVersion, appVersion) > 0 : false
 
-  const activeWorkspaceId = getWorkspaceId() || loadSession()?.memberships?.[0]?.workspaceId || ''
+  const session = loadSession()
+  const activeMembership = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId()) ?? session?.memberships?.[0]
+  const activeWorkspaceArchived = Boolean(activeMembership?.workspaceArchivedAt)
+  const activeWorkspaceId = getWorkspaceId() || activeMembership?.workspaceId || ''
 
   const saveWorkspaceName = async () => {
     const nextName = workspaceNameDraft.trim()
-    if (!activeWorkspaceId || !nextName || nextName === workspaceName || workspaceNameSaving) {
+    if (!activeWorkspaceId || activeWorkspaceArchived || !nextName || nextName === workspaceName || workspaceNameSaving) {
       setEditingWorkspaceName(false)
       setWorkspaceNameDraft(workspaceName)
       return
@@ -108,13 +111,13 @@ export default function Home() {
                 setEditingWorkspaceName(false)
               }
             }}
-            disabled={workspaceNameSaving}
+            disabled={workspaceNameSaving || activeWorkspaceArchived}
             style={workspaceHeaderNameInput}
           />
         ) : (
-          <button type="button" onClick={() => setEditingWorkspaceName(true)} style={workspaceHeaderNameButton}>{workspaceName}</button>
+          <button type="button" disabled={activeWorkspaceArchived} onClick={activeWorkspaceArchived ? undefined : () => setEditingWorkspaceName(true)} style={{ ...workspaceHeaderNameButton, cursor: activeWorkspaceArchived ? 'default' : workspaceHeaderNameButton.cursor }}>{workspaceName}</button>
         )}
-        <div style={workspaceHeaderMetaText}>{workspaceMeta}</div>
+        <div style={workspaceHeaderMetaText}>{activeWorkspaceArchived ? `${workspaceMeta} / archived` : workspaceMeta}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
         <div style={panel}>

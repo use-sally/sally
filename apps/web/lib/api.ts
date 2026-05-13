@@ -1,4 +1,4 @@
-import type { BoardColumn, Client, ClientDetail, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
+import type { AuditLogEvent, BoardColumn, Client, ClientDetail, EditionInfo, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
@@ -44,6 +44,35 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function getHealth(): Promise<Health> { return getJson('/health') }
+export function getEdition(): Promise<EditionInfo> { return getJson('/edition') }
+export type InstalledLicenseSummary = EditionInfo & {
+  installed: null | {
+    licenseServerUrl: string
+    activationId: string | null
+    licenseId: string | null
+    instanceId: string | null
+    status: string | null
+    validUntil: string | null
+    graceUntil: string | null
+    lastRefreshAt: string | null
+    installedAt: string
+    updatedAt: string
+  }
+}
+export function getLicense(): Promise<InstalledLicenseSummary> { return getJson('/license') }
+export function activateLicense(payload: { licenseKey: string; licenseServerUrl?: string; instanceId?: string; instanceName?: string; fingerprint?: string }): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> {
+  return getJson('/license/activate', { method: 'POST', body: JSON.stringify(payload) })
+}
+export function refreshLicense(): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> { return getJson('/license/refresh', { method: 'POST', body: JSON.stringify({}) }) }
+export function removeLicense(): Promise<{ ok: boolean; edition: EditionInfo }> { return getJson('/license', { method: 'DELETE' }) }
+export function getAuditLog(filters?: { action?: string; targetType?: string; limit?: number }): Promise<AuditLogEvent[]> {
+  const params = new URLSearchParams()
+  if (filters?.action) params.set('action', filters.action)
+  if (filters?.targetType) params.set('targetType', filters.targetType)
+  if (filters?.limit) params.set('limit', String(filters.limit))
+  const q = params.toString()
+  return getJson<AuditLogEvent[]>(`/audit-log${q ? `?${q}` : ''}`)
+}
 export function getRuntimeConfig(): Promise<{ ok: boolean; appBaseUrl: string | null }> { return getJson('/runtime-config') }
 export function getNotifications(params?: { unreadOnly?: boolean; limit?: number }): Promise<Notification[]> {
   const search = new URLSearchParams()
@@ -198,8 +227,15 @@ export function getMe(): Promise<{ ok: boolean; account: { id: string; name: str
   return getJson('/auth/me')
 }
 
-export function getWorkspaces(): Promise<WorkspaceInfo[]> { return getJson('/workspaces') }
+export function getWorkspaces(filters?: { archived?: boolean }): Promise<WorkspaceInfo[]> {
+  const params = new URLSearchParams()
+  if (filters?.archived) params.set('archived', 'true')
+  const q = params.toString()
+  return getJson(`/workspaces${q ? `?${q}` : ''}`)
+}
 export function createWorkspace(payload: { name: string; slug?: string }): Promise<{ ok: boolean; workspaceId: string }> { return getJson('/workspaces', { method: 'POST', body: JSON.stringify(payload) }) }
+export function archiveWorkspace(workspaceId: string, archived = true): Promise<{ ok: boolean; workspace: { id: string; archivedAt: string | null } }> { return getJson(`/workspaces/${workspaceId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
+export function deleteWorkspace(workspaceId: string): Promise<{ ok: boolean }> { return getJson(`/workspaces/${workspaceId}`, { method: 'DELETE' }) }
 export function updateWorkspace(workspaceId: string, payload: { name: string }): Promise<{ ok: boolean }> { return getJson(`/workspaces/${workspaceId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> { return getJson(`/workspaces/${workspaceId}/members`) }
 export function addWorkspaceMember(workspaceId: string, payload: { email?: string; name?: string; role?: string; accountId?: string }): Promise<{ ok: boolean; membershipId: string; existing?: boolean }> {
@@ -223,8 +259,8 @@ export function cancelWorkspaceInvite(workspaceId: string, inviteId: string): Pr
 
 export type TeamAccountHub = {
   ok: boolean
-  workspaceMemberships: { id: string; name: string; slug?: string }[]
-  projectMemberships: { id: string; name: string; workspaceId: string; workspaceName: string }[]
+  workspaceMemberships: { id: string; name: string; slug?: string; archivedAt?: string | null }[]
+  projectMemberships: { id: string; name: string; workspaceId: string; workspaceName: string; projectWorkspaceArchivedAt?: string | null }[]
   accounts: {
     id: string
     name: string | null
@@ -234,14 +270,15 @@ export type TeamAccountHub = {
     archivedAt: string | null
     createdAt: string
     updatedAt: string
-    memberships: { id: string; workspaceId: string; workspaceName: string; workspaceSlug?: string; role: string }[]
-    projectMemberships: { id: string; projectId: string; projectName: string; workspaceId: string; workspaceName: string; role: string }[]
+    memberships: { id: string; workspaceId: string; workspaceName: string; workspaceSlug?: string; workspaceArchivedAt?: string | null; role: string }[]
+    projectMemberships: { id: string; projectId: string; projectName: string; workspaceId: string; workspaceName: string; projectWorkspaceArchivedAt?: string | null; role: string }[]
   }[]
 }
 
 export function getTeamAccounts(): Promise<TeamAccountHub> { return getJson('/team/accounts') }
 export function createTeamAccount(payload: { name?: string; email: string }): Promise<{ ok: boolean; accountId: string; existing?: boolean }> { return getJson('/team/accounts', { method: 'POST', body: JSON.stringify(payload) }) }
 export function archiveTeamAccount(accountId: string, archived = true): Promise<{ ok: boolean; account: { id: string; archivedAt: string | null } }> { return getJson(`/team/accounts/${accountId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
+export function uploadTeamAccountAvatar(accountId: string, payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string; account: { id: string; name: string | null; email: string; avatarUrl: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' } }> { return getJson(`/team/accounts/${accountId}/avatar`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function addTeamAccountToWorkspace(accountId: string, payload: { workspaceId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/workspaces`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function removeTeamAccountFromWorkspace(accountId: string, membershipId: string): Promise<{ ok: boolean }> { return getJson(`/team/accounts/${accountId}/workspaces/${membershipId}`, { method: 'DELETE' }) }
 export function addTeamAccountToProject(accountId: string, payload: { projectId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/projects`, { method: 'POST', body: JSON.stringify(payload) }) }

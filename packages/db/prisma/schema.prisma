@@ -84,6 +84,13 @@ enum AgentRunStatus {
   TIMED_OUT
 }
 
+enum WorkItemProvider {
+  SALLY
+  LINEAR
+  JIRA
+  GITHUB
+}
+
 enum AgentConnectionStatus {
   ONLINE
   OFFLINE
@@ -133,12 +140,14 @@ model Workspace {
   slug                     String                    @unique
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
+  archivedAt               DateTime?
   projects                 Project[]
   clients                  Client[]
   users                    User[]
   memberships              WorkspaceMembership[]
   invites                  AccountInvite[]
   activityLogs             ActivityLog[]
+  auditLogEvents           AuditLogEvent[]
   notifications            Notification[]
   mcpKeys                  AccountMcpKey[]
   agentIdentities          AgentIdentity[]
@@ -148,9 +157,12 @@ model Workspace {
   agentEventAcks           AgentEventAck[]
   agentJobs                AgentJob[]
   agentRuns                AgentRun[]
+  workItemRefs             WorkItemRef[]
   approvalRequests         ApprovalRequest[]
   blockers                 Blocker[]
   projectAutomationConfigs ProjectAutomationConfig[]
+
+  @@index([archivedAt])
 }
 
 model Account {
@@ -179,6 +191,7 @@ model Account {
   agentIdentity           AgentIdentity?
   createdAgentJobs        AgentJob[]               @relation("AgentJobCreator")
   decidedApprovals        ApprovalRequest[]        @relation("ApprovalDecider")
+  auditLogEvents          AuditLogEvent[]          @relation("AuditLogActor")
 
   @@index([archivedAt])
 }
@@ -243,6 +256,54 @@ model ActivityLog {
   task        Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([taskId, createdAt])
+}
+
+
+model InstalledLicense {
+  id               String   @id @default("instance")
+  licenseServerUrl String
+  certificate      String
+  publicKey        String
+  activationId     String?
+  licenseId        String?
+  instanceId       String?
+  status           String?
+  validUntil       DateTime?
+  graceUntil       DateTime?
+  lastRefreshAt    DateTime?
+  installedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model AuditLogEvent {
+  id             String         @id @default(cuid())
+  workspaceId    String?
+  actorAccountId String?
+  projectId      String?
+  taskId         String?
+  agentId        String?
+  agentJobId     String?
+  agentRunId     String?
+  action         String
+  targetType     String?
+  targetId       String?
+  summary        String?
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+  workspace      Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor          Account?       @relation("AuditLogActor", fields: [actorAccountId], references: [id], onDelete: SetNull)
+  project        Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task           Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  agent          AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  agentJob       AgentJob?      @relation(fields: [agentJobId], references: [id], onDelete: SetNull)
+  agentRun       AgentRun?      @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([actorAccountId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
   @@index([projectId, createdAt])
   @@index([taskId, createdAt])
 }
@@ -430,12 +491,14 @@ model Project {
   timesheets       TimesheetEntry[]
   memberships      ProjectMembership[]
   activityLogs     ActivityLog[]
+  auditLogEvents   AuditLogEvent[]
   notifications    Notification[]
   dependencies     ProjectDependency[]      @relation("projectDependencies")
   dependedOnBy     ProjectDependency[]      @relation("projectDependedOnBy")
   automationConfig ProjectAutomationConfig?
   agentJobs        AgentJob[]
   agentRuns        AgentRun[]
+  workItemRefs     WorkItemRef[]
   approvalRequests ApprovalRequest[]
   blockers         Blocker[]
 
@@ -489,15 +552,43 @@ model Task {
   todos            TaskTodo[]
   timesheets       TimesheetEntry[]
   activityLogs     ActivityLog[]
+  auditLogEvents   AuditLogEvent[]
   notifications    Notification[]
   dependencies     TaskDependency[]   @relation("taskDependencies")
   dependedOnBy     TaskDependency[]   @relation("taskDependedOnBy")
   agentJobs        AgentJob[]
   agentRuns        AgentRun[]
+  workItemRefs     WorkItemRef[]
   approvalRequests ApprovalRequest[]
   blockers         Blocker[]
 
   @@unique([projectId, number])
+}
+
+model WorkItemRef {
+  id                  String           @id @default(cuid())
+  workspaceId         String
+  projectId           String?
+  provider            WorkItemProvider
+  externalId          String?
+  externalUrl         String?
+  titleSnapshot       String?
+  descriptionSnapshot String?
+  sallyTaskId         String?
+  metadata            Json?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project             Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sallyTask           Task?            @relation(fields: [sallyTaskId], references: [id], onDelete: Cascade)
+  agentJobs           AgentJob[]
+  agentRuns           AgentRun[]
+
+  @@unique([workspaceId, provider, externalId])
+  @@unique([workspaceId, provider, sallyTaskId])
+  @@index([workspaceId, provider, createdAt])
+  @@index([projectId, provider, createdAt])
+  @@index([sallyTaskId])
 }
 
 model TaskParticipant {
@@ -596,6 +687,7 @@ model AgentIdentity {
   pairingCodes     AgentPairingCode[]
   approvalRequests ApprovalRequest[]  @relation("ApprovalRequester")
   blockers         Blocker[]
+  auditLogEvents   AuditLogEvent[]
 
   @@unique([workspaceId, role, name])
   @@index([workspaceId, role])
@@ -711,6 +803,7 @@ model AgentJob {
   workflowRunId String?
   workflowStep  Int?
   maxSteps      Int?
+  workItemRefId String?
   payload       Json?
   lockedAt      DateTime?
   startedAt     DateTime?
@@ -721,13 +814,16 @@ model AgentJob {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task          Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workItemRef   WorkItemRef?   @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
   agent         AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
   createdBy     Account?       @relation("AgentJobCreator", fields: [createdById], references: [id], onDelete: SetNull)
   runs          AgentRun[]
+  auditLogEvents AuditLogEvent[]
 
   @@index([workspaceId, status, createdAt])
   @@index([projectId, status, createdAt])
   @@index([taskId, createdAt])
+  @@index([workItemRefId, createdAt])
   @@index([workflowRunId, workflowStep])
 }
 
@@ -745,6 +841,7 @@ model AgentRun {
   model             String?
   workflowRunId     String?
   workflowStep      Int?
+  workItemRefId     String?
   startedAt         DateTime?
   finishedAt        DateTime?
   latestHeartbeatAt DateTime?
@@ -758,12 +855,15 @@ model AgentRun {
   workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project           Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task              Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workItemRef       WorkItemRef?   @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
   job               AgentJob?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
   agent             AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  auditLogEvents    AuditLogEvent[]
 
   @@index([workspaceId, status, createdAt])
   @@index([projectId, status, createdAt])
   @@index([taskId, createdAt])
+  @@index([workItemRefId, createdAt])
   @@index([jobId])
   @@index([workflowRunId, workflowStep])
 }

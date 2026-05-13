@@ -78,6 +78,13 @@ test('updater refuses ambiguous task owner/participants drift states', () => {
   assert.ok(source.includes('Refusing automatic reconciliation because the database is only partially through the owner/participants rollout.'))
 })
 
+test('doctor reports missing Enterprise installed-license schema after migration checks', () => {
+  assert.ok(source.includes('inspectEditionLicenseSchemaState'))
+  assert.ok(source.includes("'missingInstalledLicenseTable'"))
+  assert.ok(source.includes("table_name = 'InstalledLicense'"))
+  assert.ok(source.includes('InstalledLicense table missing'))
+})
+
 test('install and update run one ordered migration pipeline before starting services', () => {
   assert.ok(source.includes('async function applyDatabaseMigrations(targetDir: string, postgresUser: string, postgresDb: string)'))
   assert.ok(source.includes('await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)'))
@@ -96,4 +103,16 @@ test('doctor starts postgres and applies pending migrations for managed instance
   assert.ok(source.includes('await applyDatabaseMigrations(targetDir, current.postgresUser, current.postgresDb)'))
   assert.ok(source.includes("paint('database migrations', color.brightYellow)"))
   assert.ok(source.includes("paint('applied', color.green)"))
+})
+
+test('generated compose files persist API uploads across image updates', () => {
+  assert.equal((source.match(/- sally-uploads:\/app\/uploads/g) ?? []).length, 2)
+  assert.ok(source.includes('volumes:\n  sally-postgres:\n  sally-uploads:\n  caddy-data:'))
+  assert.ok(source.includes('volumes:\n  sally-postgres:\n  sally-uploads:\n`'))
+})
+
+test('updater backs up the runtime uploads directory used by the API container', () => {
+  assert.ok(source.includes('const runtimeUploadsDir = \'/app/uploads\''))
+  assert.ok(source.includes('`${apiContainerId}:${runtimeUploadsDir}/.`'))
+  assert.ok(!source.includes('`${apiContainerId}:/app/apps/api/uploads/.`'))
 })

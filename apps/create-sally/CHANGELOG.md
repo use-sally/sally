@@ -1,5 +1,11 @@
 # create-sally changelog
 
+## 0.1.25
+
+- keep install/update running the committed Prisma migration pipeline before Sally services start, including the InstalledLicense migration for Enterprise activation
+- extend doctor schema checks so Enterprise installed-license storage is reported if missing after migrations
+- prepare installer/updater for Sally v0.3.0 images with Admin > Edition/License support
+
 ## 0.1.23
 
 - fix updater owner/participants preflight so it also avoids parse-time references to `TaskParticipant` before that table exists

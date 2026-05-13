@@ -1,6 +1,6 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
-import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus } from '@prisma/client'
+import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -23,6 +23,8 @@ import { buildAgentConnectionPatch, buildAgentEventPayload, chooseAgentEventCurs
 import { buildApprovalDecisionPatch, buildApprovalRequestPayload, buildBlockerPayload, buildBlockerResolutionPatch } from './blockers-approvals.js'
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
 import { appBuildTime, appGitSha, appVersion } from './version.js'
+import { getEditionInfo, requireFeature } from './edition.js'
+import { activateInstalledLicense, readInstalledLicense, refreshInstalledLicense, removeInstalledLicense } from './license-management.js'
 
 function loadSimpleEnv(filePath: string) {
   if (!fs.existsSync(filePath)) return
@@ -96,6 +98,7 @@ async function ensureWorkerAuth(request: any, reply: any) {
   const hash = hashAgentWorkerToken(token)
   const connection = await prisma.agentConnection.findFirst({ where: { tokenHash: hash, revokedAt: null }, include: { workspace: true } })
   if (!connection || !verifyAgentWorkerToken(token, connection.tokenHash)) return false
+  if (connection.workspace.archivedAt) return false
   await prisma.agentConnection.update({ where: { id: connection.id }, data: { status: AgentConnectionStatus.ONLINE, lastSeenAt: new Date() } })
   ;(request as any).agentConnection = connection
   ;(request as any).workspace = connection.workspace
@@ -105,6 +108,85 @@ async function ensureWorkerAuth(request: any, reply: any) {
 async function emitAgentEvent(input: { workspaceId: string; agentId?: string | null; type: string; payload: unknown }) {
   const event = buildAgentEventPayload(input.type, input.payload)
   return prisma.agentEvent.create({ data: { workspaceId: input.workspaceId, agentId: input.agentId ?? null, type: event.type, payload: event.payload as any } })
+}
+
+type WorkItemRefBody = {
+  provider?: string | null
+  externalId?: string | null
+  externalUrl?: string | null
+  title?: string | null
+  description?: string | null
+  sallyTaskId?: string | null
+  metadata?: unknown
+}
+
+function normalizeWorkItemProvider(provider?: string | null): WorkItemProvider {
+  const normalized = provider?.trim().toUpperCase()
+  if (!normalized || !(normalized in WorkItemProvider)) throw new Error('invalid work item provider')
+  return WorkItemProvider[normalized as keyof typeof WorkItemProvider]
+}
+
+async function resolveWorkItemRef(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null }) {
+  const explicitId = input.workItemRefId?.trim()
+  if (explicitId) {
+    const existing = await prisma.workItemRef.findFirst({ where: { id: explicitId, workspaceId: input.workspaceId } })
+    if (!existing) throw new Error('Work item ref not found')
+    return existing.id
+  }
+
+  const taskId = input.taskId?.trim() || input.workItemRef?.sallyTaskId?.trim() || null
+  if (taskId) {
+    const task = await prisma.task.findFirst({ where: { id: taskId, project: { workspaceId: input.workspaceId } } })
+    if (!task) throw new Error('Task not found')
+    const existing = await prisma.workItemRef.findFirst({ where: { workspaceId: input.workspaceId, provider: WorkItemProvider.SALLY, sallyTaskId: task.id } })
+    if (existing) return existing.id
+    const created = await prisma.workItemRef.create({
+      data: {
+        workspaceId: input.workspaceId,
+        projectId: task.projectId,
+        provider: WorkItemProvider.SALLY,
+        sallyTaskId: task.id,
+        titleSnapshot: task.title,
+        descriptionSnapshot: task.description,
+      },
+    })
+    return created.id
+  }
+
+  const workItemRef = input.workItemRef
+  if (!workItemRef?.provider) return null
+  const provider = normalizeWorkItemProvider(workItemRef.provider)
+  const externalId = workItemRef.externalId?.trim() || workItemRef.externalUrl?.trim() || null
+  if (!externalId) throw new Error('external work item refs require externalId or externalUrl')
+  if (workItemRef.metadata !== undefined) assertNoSecretLikeJson(workItemRef.metadata, 'workItemRef.metadata')
+  const projectId = input.projectId?.trim() || null
+  const existing = await prisma.workItemRef.findFirst({ where: { workspaceId: input.workspaceId, provider, externalId } })
+  if (existing) {
+    const updated = await prisma.workItemRef.update({
+      where: { id: existing.id },
+      data: {
+        projectId,
+        externalUrl: workItemRef.externalUrl?.trim() || existing.externalUrl,
+        titleSnapshot: workItemRef.title?.trim() || existing.titleSnapshot,
+        descriptionSnapshot: workItemRef.description?.trim() || existing.descriptionSnapshot,
+        metadata: workItemRef.metadata === undefined ? undefined : workItemRef.metadata as any,
+      },
+    })
+    return updated.id
+  }
+  const created = await prisma.workItemRef.create({
+    data: {
+      workspaceId: input.workspaceId,
+      projectId,
+      provider: normalizeWorkItemProvider(workItemRef.provider),
+      externalId,
+      externalUrl: workItemRef.externalUrl?.trim() || null,
+      titleSnapshot: workItemRef.title?.trim() || null,
+      descriptionSnapshot: workItemRef.description?.trim() || null,
+      metadata: workItemRef.metadata === undefined ? undefined : workItemRef.metadata as any,
+    },
+  })
+  return created.id
 }
 
 async function moveTaskForWorkflow(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; targetType: TaskStatusType; reason: string; actor?: ReturnType<typeof actorFromRequest> }) {
@@ -269,6 +351,7 @@ async function resolveWorkspace(request: any, reply: any) {
       reply.code(403).send({ ok: false, error: 'Restricted workspace not found' })
       return null
     }
+    if (!ensureWorkspaceIsActive(restrictedWorkspace, reply)) return null
     if ((workspaceId && String(workspaceId) !== mcpKey.workspaceId) || (workspaceSlug && String(workspaceSlug) !== restrictedWorkspace.slug)) {
       reply.code(403).send({ ok: false, error: 'Workspace access denied by MCP key restriction' })
       return null
@@ -282,8 +365,8 @@ async function resolveWorkspace(request: any, reply: any) {
       if (workspaceId) workspace = await prisma.workspace.findUnique({ where: { id: String(workspaceId) } })
       else if (workspaceSlug) workspace = await prisma.workspace.findUnique({ where: { slug: String(workspaceSlug) } })
       else {
-        const count = await prisma.workspace.count()
-        if (count === 1) workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: 'asc' } })
+        const count = await prisma.workspace.count({ where: { archivedAt: null } })
+        if (count === 1) workspace = await prisma.workspace.findFirst({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } })
         else {
           reply.code(400).send({ ok: false, error: 'workspace selector required' })
           return null
@@ -293,6 +376,7 @@ async function resolveWorkspace(request: any, reply: any) {
         reply.code(404).send({ ok: false, error: 'Workspace not found' })
         return null
       }
+      if (!ensureWorkspaceIsActive(workspace, reply)) return null
       return workspace
     }
     const memberships = await prisma.workspaceMembership.findMany({
@@ -319,6 +403,7 @@ async function resolveWorkspace(request: any, reply: any) {
       reply.code(403).send({ ok: false, error: 'Workspace access denied' })
       return null
     }
+    if (!ensureWorkspaceIsActive(membership.workspace, reply)) return null
     ;(request as any).membership = membership
     return membership.workspace
   }
@@ -328,9 +413,9 @@ async function resolveWorkspace(request: any, reply: any) {
   } else if (workspaceSlug) {
     workspace = await prisma.workspace.findUnique({ where: { slug: String(workspaceSlug) } })
   } else {
-    const count = await prisma.workspace.count()
+    const count = await prisma.workspace.count({ where: { archivedAt: null } })
     if (count === 1) {
-      workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: 'asc' } })
+      workspace = await prisma.workspace.findFirst({ where: { archivedAt: null }, orderBy: { createdAt: 'asc' } })
     } else {
       reply.code(400).send({ ok: false, error: 'workspace selector required' })
       return null
@@ -340,6 +425,7 @@ async function resolveWorkspace(request: any, reply: any) {
     reply.code(404).send({ ok: false, error: 'Workspace not found' })
     return null
   }
+  if (!ensureWorkspaceIsActive(workspace, reply)) return null
   return workspace
 }
 function toIsoOrNull(input?: string | null) { if (!input) return null; const v = input.trim(); if (!v) return null; return new Date(v).toISOString() }
@@ -371,6 +457,14 @@ function isPlatformAdmin(request: any) {
   return account?.platformRole === PlatformRole.SUPERADMIN || account?.platformRole === PlatformRole.ADMIN
 }
 
+function ensureWorkspaceIsActive(workspace: { archivedAt?: Date | null } | null | undefined, reply: any) {
+  if (workspace?.archivedAt) {
+    reply.code(409).send({ ok: false, error: 'Workspace archived' })
+    return false
+  }
+  return true
+}
+
 function normalizePlatformRole(input?: string | null) {
   const value = input?.trim().toUpperCase()
   if (value === 'SUPERADMIN') return PlatformRole.SUPERADMIN
@@ -381,6 +475,8 @@ function normalizePlatformRole(input?: string | null) {
 
 async function requireWorkspaceRole(request: any, reply: any, roles: WorkspaceRole[]) {
   const account = (request as any).account as { id: string } | undefined
+  const workspace = (request as any).workspace as { archivedAt?: Date | null } | undefined
+  if (!ensureWorkspaceIsActive(workspace, reply)) return false
   if (!account) return true
   if (isPlatformAdmin(request)) return true
   const membership = (request as any).membership as { role: WorkspaceRole } | undefined
@@ -398,6 +494,13 @@ async function requireWorkspaceRole(request: any, reply: any, roles: WorkspaceRo
 
 async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, workspaceId: string, roles: WorkspaceRole[]) {
   const account = (request as any).account as { id: string } | undefined
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  if (!workspace) {
+    reply.code(404).send({ ok: false, error: 'Workspace not found' })
+    return false
+  }
+  if (!ensureWorkspaceIsActive(workspace, reply)) return false
+  ;(request as any).workspace = workspace
   if (!account) return true
   if (isPlatformAdmin(request)) return true
   const membership = await prisma.workspaceMembership.findFirst({ where: { workspaceId, accountId: account.id }, include: { workspace: true } })
@@ -405,6 +508,7 @@ async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, work
     reply.code(403).send({ ok: false, error: 'Workspace access denied' })
     return false
   }
+  if (!ensureWorkspaceIsActive(membership.workspace, reply)) return false
   ;(request as any).membership = membership
   ;(request as any).workspace = membership.workspace
   const effectiveRole = membership.role === WorkspaceRole.VIEWER ? WorkspaceRole.MEMBER : membership.role
@@ -573,6 +677,31 @@ async function logActivity(input: { workspaceId: string; projectId?: string | nu
   await prisma.activityLog.create({ data: { workspaceId: input.workspaceId, projectId: input.projectId ?? null, taskId: input.taskId ?? null, actorName: input.actorName ?? null, actorEmail: input.actorEmail ?? null, type: input.type, summary: input.summary, payload: payload ?? undefined } })
 }
 
+
+async function writeAuditLog(input: { workspaceId?: string | null; actorAccountId?: string | null; projectId?: string | null; taskId?: string | null; agentId?: string | null; agentJobId?: string | null; agentRunId?: string | null; action: string; targetType?: string | null; targetId?: string | null; summary?: string | null; metadata?: any }) {
+  if (input.metadata !== undefined) assertNoSecretLikeJson(input.metadata, 'auditLog.metadata')
+  await prisma.auditLogEvent.create({ data: { workspaceId: input.workspaceId ?? null, actorAccountId: input.actorAccountId ?? null, projectId: input.projectId ?? null, taskId: input.taskId ?? null, agentId: input.agentId ?? null, agentJobId: input.agentJobId ?? null, agentRunId: input.agentRunId ?? null, action: input.action, targetType: input.targetType ?? null, targetId: input.targetId ?? null, summary: input.summary ?? null, metadata: input.metadata ?? undefined } })
+}
+
+function formatAuditLogEvent(event: any) {
+  return {
+    id: event.id,
+    workspaceId: event.workspaceId ?? null,
+    projectId: event.projectId ?? null,
+    taskId: event.taskId ?? null,
+    agentId: event.agentId ?? null,
+    agentJobId: event.agentJobId ?? null,
+    agentRunId: event.agentRunId ?? null,
+    action: event.action,
+    targetType: event.targetType ?? null,
+    targetId: event.targetId ?? null,
+    summary: event.summary ?? null,
+    metadata: event.metadata ?? null,
+    createdAt: event.createdAt.toISOString(),
+    actor: event.actor ? { id: event.actor.id, email: event.actor.email, name: event.actor.name } : null,
+  }
+}
+
 async function wouldCreateDependencyCycle(taskId: string, dependsOnId: string): Promise<boolean> {
   const visited = new Set<string>()
   const queue = [dependsOnId]
@@ -602,10 +731,10 @@ async function wouldCreateProjectDependencyCycle(projectId: string, dependsOnId:
 }
 
 function actorFromRequest(request: any) {
-  const account = (request as any).account as { name?: string | null; email?: string | null } | undefined
+  const account = (request as any).account as { id?: string | null; name?: string | null; email?: string | null } | undefined
   const apiKey = (request as any).apiKey as { label?: string | null } | undefined
   const mcpKey = (request as any).mcpKey as { label?: string | null } | undefined
-  return { actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null, actorMcpKeyLabel: mcpKey?.label ?? null }
+  return { actorAccountId: account?.id ?? null, actorName: account?.name ?? null, actorEmail: account?.email ?? null, actorApiKeyLabel: apiKey?.label ?? null, actorMcpKeyLabel: mcpKey?.label ?? null }
 }
 
 async function deleteOrphanPlaceholderAccountByEmail(email?: string | null) {
@@ -1178,11 +1307,11 @@ const hostedMcpTools: McpTool[] = [
   { name: 'timesheet.update', description: 'Update a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' }, minutes: { type: 'number' }, description: { type: ['string', 'null'] }, date: { type: 'string' }, billable: { type: 'boolean' }, validated: { type: 'boolean' }, taskId: { type: ['string', 'null'] }, userId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
   { name: 'timesheet.delete', description: 'Delete a timesheet entry.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, timesheetId: { type: 'string' } }, required: ['timesheetId'], additionalProperties: false } },
   { name: 'agent.list', description: 'List Sally agent identities in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, role: { type: 'string' }, enabled: { type: 'boolean' } }, additionalProperties: false } },
-  { name: 'agent_job.create', description: 'Queue a Sally-native agent job for Hermes or remote Hermes to claim.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, mode: { type: 'string' }, triggerType: { type: 'string' }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, maxSteps: { type: ['number','null'] }, payload: { type: 'object' } }, required: ['role'], additionalProperties: false } },
+  { name: 'agent_job.create', description: 'Queue a Sally-native or external-work-item agent job for Hermes or remote Hermes to claim.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, mode: { type: 'string' }, triggerType: { type: 'string' }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, maxSteps: { type: ['number','null'] }, workItemRefId: { type: ['string','null'] }, workItemRef: { type: ['object','null'] }, payload: { type: 'object' } }, required: ['role'], additionalProperties: false } },
   { name: 'agent_job.list', description: 'List Sally-native agent jobs in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, status: { type: 'string' }, projectId: { type: 'string' }, taskId: { type: 'string' }, role: { type: 'string' } }, additionalProperties: false } },
   { name: 'agent_job.claim', description: 'Atomically claim a queued Sally-native agent job.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, jobId: { type: 'string' }, agentId: { type: ['string','null'] } }, required: ['jobId'], additionalProperties: false } },
   { name: 'agent_job.update', description: 'Update Sally-native agent job status, error, or safe payload metadata.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, jobId: { type: 'string' }, status: { type: 'string' }, error: { type: ['string','null'] }, payload: { type: 'object' } }, required: ['jobId'], additionalProperties: false } },
-  { name: 'agent_run.create', description: 'Create a visible Sally agent run record for Hermes execution.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, jobId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, status: { type: 'string' }, triggerType: { type: 'string' }, provider: { type: ['string','null'] }, model: { type: ['string','null'] }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, summary: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['role'], additionalProperties: false } },
+  { name: 'agent_run.create', description: 'Create a visible Sally agent run record for Hermes execution.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, jobId: { type: ['string','null'] }, agentId: { type: ['string','null'] }, role: { type: 'string' }, status: { type: 'string' }, triggerType: { type: 'string' }, provider: { type: ['string','null'] }, model: { type: ['string','null'] }, workflowRunId: { type: ['string','null'] }, workflowStep: { type: ['number','null'] }, workItemRefId: { type: ['string','null'] }, workItemRef: { type: ['object','null'] }, summary: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['role'], additionalProperties: false } },
   { name: 'agent_run.update', description: 'Update a Sally agent run status and safe execution metadata.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, runId: { type: 'string' }, status: { type: 'string' }, summary: { type: ['string','null'] }, error: { type: ['string','null'] }, logUrl: { type: ['string','null'] }, evidenceUrl: { type: ['string','null'] }, metadata: { type: 'object' } }, required: ['runId'], additionalProperties: false } },
   { name: 'agent_run.heartbeat', description: 'Update the latest heartbeat timestamp for a Sally agent run.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, runId: { type: 'string' } }, required: ['runId'], additionalProperties: false } },
 ]
@@ -1232,7 +1361,7 @@ async function injectJson(request: any, options: { method: 'GET' | 'POST' | 'PAT
 async function callHostedMcpTool(request: any, name: string, args: Record<string, any>) {
   switch (name) {
     case 'workspace.list': {
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       const items = memberships
         .filter((membership) => !request.mcpKey?.workspaceId || membership.workspaceId === request.mcpKey.workspaceId)
         .map((membership) => ({ id: membership.workspace.id, name: membership.workspace.name, slug: membership.workspace.slug, role: membership.role }))
@@ -1357,13 +1486,13 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       return { items: await injectJson(request, { method: 'GET', url: `/agent-jobs${q ? `?${q}` : ''}`, args }) }
     }
     case 'agent_job.create':
-      return await injectJson(request, { method: 'POST', url: '/agent-jobs', args, payload: buildHostedMcpAgentJobCreatePayload({ projectId: args.projectId, taskId: args.taskId, agentId: args.agentId, role: args.role, mode: args.mode, triggerType: args.triggerType, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, maxSteps: args.maxSteps, payload: args.payload }) })
+      return await injectJson(request, { method: 'POST', url: '/agent-jobs', args, payload: buildHostedMcpAgentJobCreatePayload({ projectId: args.projectId, taskId: args.taskId, agentId: args.agentId, role: args.role, mode: args.mode, triggerType: args.triggerType, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, maxSteps: args.maxSteps, workItemRefId: args.workItemRefId, workItemRef: args.workItemRef, payload: args.payload }) })
     case 'agent_job.claim':
       return await injectJson(request, { method: 'POST', url: `/agent-jobs/${args.jobId}/claim`, args, payload: { agentId: args.agentId } })
     case 'agent_job.update':
       return await injectJson(request, { method: 'PATCH', url: `/agent-jobs/${args.jobId}`, args, payload: buildHostedMcpAgentJobUpdatePayload({ status: args.status, error: args.error, payload: args.payload }) })
     case 'agent_run.create':
-      return await injectJson(request, { method: 'POST', url: '/agent-runs', args, payload: buildHostedMcpAgentRunCreatePayload({ projectId: args.projectId, taskId: args.taskId, jobId: args.jobId, agentId: args.agentId, role: args.role, status: args.status, triggerType: args.triggerType, provider: args.provider, model: args.model, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, summary: args.summary, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
+      return await injectJson(request, { method: 'POST', url: '/agent-runs', args, payload: buildHostedMcpAgentRunCreatePayload({ projectId: args.projectId, taskId: args.taskId, jobId: args.jobId, agentId: args.agentId, role: args.role, status: args.status, triggerType: args.triggerType, provider: args.provider, model: args.model, workflowRunId: args.workflowRunId, workflowStep: args.workflowStep, workItemRefId: args.workItemRefId, workItemRef: args.workItemRef, summary: args.summary, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
     case 'agent_run.update':
       return await injectJson(request, { method: 'PATCH', url: `/agent-runs/${args.runId}`, args, payload: buildHostedMcpAgentRunUpdatePayload({ status: args.status, summary: args.summary, error: args.error, logUrl: args.logUrl, evidenceUrl: args.evidenceUrl, metadata: args.metadata }) })
     case 'agent_run.heartbeat':
@@ -1431,7 +1560,7 @@ const start = async () => {
 
     app.addHook('preHandler', async (request, reply) => {
       const url = request.raw.url || ''
-      if (url.startsWith('/health') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/project-images/') || url.startsWith('/uploads/profile-images/')) return
+      if (url.startsWith('/health') || url.startsWith('/edition') || url.startsWith('/mcp') || url.startsWith('/uploads/task-images/') || url.startsWith('/uploads/project-images/') || url.startsWith('/uploads/profile-images/')) return
       if (url.startsWith('/agent-connections/complete-pairing')) return
       if (url.startsWith('/agent-worker/')) {
         if (!(await ensureWorkerAuth(request, reply))) return reply.code(401).send({ ok: false, error: 'Unauthorized worker' })
@@ -1441,13 +1570,71 @@ const start = async () => {
       if ((url.startsWith('/projects') || url.startsWith('/tasks')) && (await ensureWorkerAuth(request, reply))) return
       if (url.startsWith('/auth/login') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
-      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth')) return
+      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth') || url.startsWith('/edition') || url.startsWith('/license')) return
       const workspace = await resolveWorkspace(request, reply)
       if (!workspace) return
       ;(request as any).workspace = workspace
     })
 
     app.get('/health', async () => ({ ok: true, service: 'api', timestamp: new Date().toISOString() }))
+    app.get('/edition', async () => {
+      const installedLicense = await readInstalledLicense(prisma)
+      const edition = getEditionInfo({ installedLicense })
+      return { ...edition, availableFeatures: edition.availableFeatures }
+    })
+
+    app.get('/license', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const installedLicense = await readInstalledLicense(prisma)
+      const edition = getEditionInfo({ installedLicense })
+      const record = await prisma.installedLicense.findUnique({ where: { id: 'instance' } })
+      return {
+        ...edition,
+        installed: record ? {
+          licenseServerUrl: record.licenseServerUrl,
+          activationId: record.activationId,
+          licenseId: record.licenseId,
+          instanceId: record.instanceId,
+          status: record.status,
+          validUntil: record.validUntil?.toISOString() ?? null,
+          graceUntil: record.graceUntil?.toISOString() ?? null,
+          lastRefreshAt: record.lastRefreshAt?.toISOString() ?? null,
+          installedAt: record.installedAt.toISOString(),
+          updatedAt: record.updatedAt.toISOString(),
+        } : null,
+      }
+    })
+
+    app.post('/license/activate', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const body = request.body as { licenseKey?: string; instanceId?: string; instanceName?: string; appVersion?: string; fingerprint?: string; licenseServerUrl?: string }
+      try {
+        const result = await activateInstalledLicense(prisma, body as any)
+        const installedLicense = await readInstalledLicense(prisma)
+        const edition = getEditionInfo({ installedLicense })
+        return { ok: true, edition, installed: result.license }
+      } catch (error) {
+        return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'License activation failed' })
+      }
+    })
+
+    app.post('/license/refresh', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      try {
+        const result = await refreshInstalledLicense(prisma)
+        const installedLicense = await readInstalledLicense(prisma)
+        const edition = getEditionInfo({ installedLicense })
+        return { ok: true, edition, installed: result.license }
+      } catch (error) {
+        return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'License refresh failed' })
+      }
+    })
+
+    app.delete('/license', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      await removeInstalledLicense(prisma)
+      return { ok: true, edition: getEditionInfo({ installedLicense: null }) }
+    })
 
     app.get('/runtime-config', async () => ({
       ok: true,
@@ -1493,13 +1680,13 @@ const start = async () => {
       if (!valid) return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         sessionToken,
         expiresAt: session.expiresAt.toISOString(),
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -1513,11 +1700,11 @@ const start = async () => {
     app.get('/auth/me', async (request, reply) => {
       const account = (request as any).account as { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: PlatformRole | null } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -1874,13 +2061,13 @@ const start = async () => {
       await prisma.accountInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date(), accountId: account.id } })
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         sessionToken,
         expiresAt: session.expiresAt.toISOString(),
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -1929,13 +2116,13 @@ const start = async () => {
       }
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
-      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
         sessionToken,
         expiresAt: session.expiresAt.toISOString(),
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
-        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, role: membership.role })),
+        memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
     })
 
@@ -2228,7 +2415,7 @@ const start = async () => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const account = (request as any).account as { id: string } | undefined
-      const body = request.body as { projectId?: string | null; taskId?: string | null; agentId?: string | null; role?: string; mode?: string; triggerType?: string; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null; payload?: unknown }
+      const body = request.body as { projectId?: string | null; taskId?: string | null; agentId?: string | null; role?: string; mode?: string; triggerType?: string; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null; payload?: unknown }
       let role: string
       try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
       if (body.payload !== undefined) assertNoSecretLikeJson(body.payload, 'payload')
@@ -2246,6 +2433,12 @@ const start = async () => {
         const agent = await prisma.agentIdentity.findFirst({ where: { id: body.agentId, workspaceId: workspace.id, enabled: true } })
         if (!agent) return reply.code(404).send({ ok: false, error: 'Agent not found or disabled' })
       }
+      let resolvedWorkItemRefId: string | null = null
+      try {
+        resolvedWorkItemRefId = await resolveWorkItemRef({ workspaceId: workspace.id, projectId, taskId, workItemRefId: body.workItemRefId, workItemRef: body.workItemRef })
+      } catch (err: any) {
+        return reply.code(err.message === 'Work item ref not found' || err.message === 'Task not found' ? 404 : 400).send({ ok: false, error: err.message })
+      }
       const job = await prisma.agentJob.create({
         data: {
           workspaceId: workspace.id,
@@ -2259,10 +2452,12 @@ const start = async () => {
           workflowRunId: body.workflowRunId?.trim() || null,
           workflowStep: body.workflowStep ?? null,
           maxSteps: body.maxSteps ?? null,
+          workItemRefId: resolvedWorkItemRefId,
           payload: body.payload === undefined ? undefined : body.payload as any,
         },
       })
       await logActivity({ workspaceId: workspace.id, projectId, taskId, ...actorFromRequest(request), type: 'agent_job.created', summary: `Queued ${role} agent job`, payload: { jobId: job.id, role } })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: account?.id ?? null, projectId, taskId, agentId: job.agentId, agentJobId: job.id, action: 'audit.agentJob.created', targetType: 'agentJob', targetId: job.id, summary: `Queued ${role} agent job`, metadata: { role, mode: job.mode, triggerType: job.triggerType } })
       if (projectId && job.mode === 'workflow') {
         await prisma.projectAutomationConfig.updateMany({
           where: { workspaceId: workspace.id, projectId, workflowEnabled: true },
@@ -2332,12 +2527,18 @@ const start = async () => {
     app.post('/agent-runs', async (request, reply) => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
-      const body = request.body as { projectId?: string | null; taskId?: string | null; jobId?: string | null; agentId?: string | null; role?: string; status?: string; triggerType?: string; provider?: string | null; model?: string | null; workflowRunId?: string | null; workflowStep?: number | null; summary?: string | null; logUrl?: string | null; evidenceUrl?: string | null; metadata?: unknown }
+      const body = request.body as { projectId?: string | null; taskId?: string | null; jobId?: string | null; agentId?: string | null; role?: string; status?: string; triggerType?: string; provider?: string | null; model?: string | null; workflowRunId?: string | null; workflowStep?: number | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null; summary?: string | null; logUrl?: string | null; evidenceUrl?: string | null; metadata?: unknown }
       let role: string
       try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
       if (body.metadata !== undefined) assertNoSecretLikeJson(body.metadata, 'metadata')
       const status = body.status ? body.status.trim().toUpperCase() as AgentRunStatus : AgentRunStatus.QUEUED
       if (!Object.values(AgentRunStatus).includes(status)) return reply.code(400).send({ ok: false, error: 'invalid run status' })
+      let resolvedWorkItemRefId: string | null = null
+      try {
+        resolvedWorkItemRefId = await resolveWorkItemRef({ workspaceId: workspace.id, projectId: body.projectId, taskId: body.taskId, workItemRefId: body.workItemRefId, workItemRef: body.workItemRef })
+      } catch (err: any) {
+        return reply.code(err.message === 'Work item ref not found' || err.message === 'Task not found' ? 404 : 400).send({ ok: false, error: err.message })
+      }
       const run = await prisma.agentRun.create({
         data: {
           workspaceId: workspace.id,
@@ -2352,6 +2553,7 @@ const start = async () => {
           model: body.model?.trim() || null,
           workflowRunId: body.workflowRunId?.trim() || null,
           workflowStep: body.workflowStep ?? null,
+          workItemRefId: resolvedWorkItemRefId,
           startedAt: status === AgentRunStatus.RUNNING ? new Date() : null,
           summary: body.summary?.trim() || null,
           logUrl: body.logUrl?.trim() || null,
@@ -2359,6 +2561,7 @@ const start = async () => {
           metadata: body.metadata === undefined ? undefined : body.metadata as any,
         },
       })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: (request as any).account?.id ?? null, projectId: run.projectId, taskId: run.taskId, agentId: run.agentId, agentRunId: run.id, action: 'audit.agentRun.created', targetType: 'agentRun', targetId: run.id, summary: `Created ${role} agent run`, metadata: { role, status: run.status, triggerType: run.triggerType } })
       return { ok: true, run }
     })
 
@@ -2473,15 +2676,36 @@ const start = async () => {
 
     app.get('/workspaces', async (request) => {
       const account = (request as any).account as { id: string } | undefined
+      const includeArchived = String((request.query as { archived?: string } | undefined)?.archived || '').toLowerCase() === 'true'
+      const archiveFilter = includeArchived ? {} : { archivedAt: null }
       const workspaces = isPlatformAdmin(request)
-        ? await prisma.workspace.findMany({ orderBy: { createdAt: 'asc' } })
-        : await prisma.workspace.findMany({ where: account ? { memberships: { some: { accountId: account.id } } } : undefined, orderBy: { createdAt: 'asc' } })
+        ? await prisma.workspace.findMany({ where: archiveFilter, orderBy: { createdAt: 'asc' } })
+        : await prisma.workspace.findMany({ where: account ? { ...archiveFilter, memberships: { some: { accountId: account.id } } } : archiveFilter, orderBy: { createdAt: 'asc' } })
       return workspaces.map((workspace) => ({
         id: workspace.id,
         name: workspace.name,
         slug: workspace.slug,
         createdAt: workspace.createdAt.toISOString(),
+        archivedAt: workspace.archivedAt?.toISOString() ?? null,
       }))
+    })
+
+    const readInstalledLicenseForFeature = () => readInstalledLicense(prisma)
+
+    app.get('/audit-log', { preHandler: requireFeature('security.auditLog', readInstalledLicenseForFeature) }, async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const query = request.query as { action?: string; targetType?: string; limit?: string }
+      const limit = Math.min(Math.max(Number(query.limit || 100), 1), 250)
+      const events = await prisma.auditLogEvent.findMany({
+        where: {
+          ...(query.action?.trim() ? { action: query.action.trim() } : {}),
+          ...(query.targetType?.trim() ? { targetType: query.targetType.trim() } : {}),
+        },
+        include: { actor: { select: { id: true, email: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      })
+      return events.map(formatAuditLogEvent)
     })
 
     app.post('/workspaces', async (request, reply) => {
@@ -2498,7 +2722,30 @@ const start = async () => {
       }
       const account = (request as any).account as { id: string } | undefined
       const workspace = await prisma.workspace.create({ data: { name, slug, ...(account ? { memberships: { create: { accountId: account.id, role: WorkspaceRole.OWNER } } } : {}) } })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: account?.id ?? null, action: 'audit.workspace.created', targetType: 'workspace', targetId: workspace.id, summary: `Created workspace ${workspace.name}` })
       return { ok: true, workspaceId: workspace.id }
+    })
+
+    app.post('/workspaces/:workspaceId/archive', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const { workspaceId } = request.params as { workspaceId: string }
+      const body = request.body as { archived?: boolean }
+      const archived = body.archived !== false
+      const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+      if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      const updated = await prisma.workspace.update({ where: { id: workspaceId }, data: { archivedAt: archived ? new Date() : null } })
+      await writeAuditLog({ workspaceId: updated.id, actorAccountId: (request as any).account?.id ?? null, action: archived ? 'audit.workspace.archived' : 'audit.workspace.restored', targetType: 'workspace', targetId: updated.id, summary: `${archived ? 'Archived' : 'Restored'} workspace ${updated.name}` })
+      return { ok: true, workspace: { id: updated.id, archivedAt: updated.archivedAt?.toISOString() ?? null } }
+    })
+
+    app.delete('/workspaces/:workspaceId', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const { workspaceId } = request.params as { workspaceId: string }
+      const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+      if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      await writeAuditLog({ workspaceId: workspace.id, actorAccountId: (request as any).account?.id ?? null, action: 'audit.workspace.deleted', targetType: 'workspace', targetId: workspace.id, summary: `Deleted workspace ${workspace.name}` })
+      await prisma.workspace.delete({ where: { id: workspaceId } })
+      return { ok: true }
     })
 
     app.get('/accounts', async (request, reply) => {
@@ -2548,6 +2795,7 @@ const start = async () => {
         return reply.code(403).send({ ok: false, error: 'The configured superadmin cannot be demoted' })
       }
       const updated = await prisma.account.update({ where: { id: accountId }, data: { platformRole: role } })
+      await writeAuditLog({ actorAccountId: requestAccountId ?? null, action: 'audit.platformRole.updated', targetType: 'account', targetId: updated.id, summary: `Updated platform role for ${updated.email}`, metadata: { platformRole: updated.platformRole } })
       return { ok: true, account: { id: updated.id, name: updated.name, email: updated.email, avatarUrl: updated.avatarUrl, platformRole: updated.platformRole } }
     })
 
@@ -2561,13 +2809,13 @@ const start = async () => {
             projectMemberships: { include: { project: { include: { workspace: true } } }, orderBy: { createdAt: 'asc' } },
           },
         }),
-        prisma.workspace.findMany({ orderBy: { name: 'asc' } }),
-        prisma.project.findMany({ where: { archivedAt: null }, include: { workspace: true }, orderBy: { name: 'asc' } }),
+        prisma.workspace.findMany({ where: { archivedAt: null }, orderBy: { name: 'asc' } }),
+        prisma.project.findMany({ where: { archivedAt: null, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { name: 'asc' } }),
       ])
       return {
         ok: true,
-        workspaceMemberships: workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug })),
-        projectMemberships: projects.map((project) => ({ id: project.id, name: project.name, workspaceId: project.workspaceId, workspaceName: project.workspace.name })),
+        workspaceMemberships: workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, slug: workspace.slug, archivedAt: workspace.archivedAt?.toISOString() ?? null })),
+        projectMemberships: projects.map((project) => ({ id: project.id, name: project.name, workspaceId: project.workspaceId, workspaceName: project.workspace.name, projectWorkspaceArchivedAt: project.workspace.archivedAt?.toISOString() ?? null })),
         accounts: accounts.map((account) => ({
           id: account.id,
           name: account.name,
@@ -2577,8 +2825,8 @@ const start = async () => {
           archivedAt: account.archivedAt?.toISOString() ?? null,
           createdAt: account.createdAt.toISOString(),
           updatedAt: account.updatedAt.toISOString(),
-          memberships: account.memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceName: membership.workspace.name, workspaceSlug: membership.workspace.slug, role: membership.role })),
-          projectMemberships: account.projectMemberships.map((membership) => ({ id: membership.id, projectId: membership.projectId, projectName: membership.project.name, workspaceId: membership.project.workspaceId, workspaceName: membership.project.workspace.name, role: membership.role })),
+          memberships: account.memberships.filter((membership) => !membership.workspace.archivedAt).map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceName: membership.workspace.name, workspaceSlug: membership.workspace.slug, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
+          projectMemberships: account.projectMemberships.filter((membership) => !membership.project.workspace.archivedAt).map((membership) => ({ id: membership.id, projectId: membership.projectId, projectName: membership.project.name, workspaceId: membership.project.workspaceId, workspaceName: membership.project.workspace.name, projectWorkspaceArchivedAt: membership.project.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
         })),
       }
     })
@@ -2610,6 +2858,18 @@ const start = async () => {
       return { ok: true, account: { id: updated.id, archivedAt: updated.archivedAt?.toISOString() ?? null } }
     })
 
+    app.post('/team/accounts/:accountId/avatar', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const { accountId } = request.params as { accountId: string }
+      const body = request.body as { fileName?: string; mimeType?: string; base64?: string }
+      if (!body.base64) return reply.code(400).send({ ok: false, error: 'base64 is required' })
+      const target = await prisma.account.findUnique({ where: { id: accountId } })
+      if (!target) return reply.code(404).send({ ok: false, error: 'Account not found' })
+      const saved = saveProfileImage(accountId, { fileName: body.fileName, mimeType: body.mimeType, base64: body.base64 })
+      const updated = await prisma.account.update({ where: { id: accountId }, data: { avatarUrl: saved.url } })
+      return { ok: true, url: saved.url, account: { id: updated.id, name: updated.name, email: updated.email, avatarUrl: updated.avatarUrl, platformRole: updated.platformRole } }
+    })
+
     app.post('/team/accounts/:accountId/workspaces', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const { accountId } = request.params as { accountId: string }
@@ -2621,6 +2881,7 @@ const start = async () => {
       const [account, workspace] = await Promise.all([prisma.account.findUnique({ where: { id: accountId } }), prisma.workspace.findUnique({ where: { id: workspaceId } })])
       if (!account) return reply.code(404).send({ ok: false, error: 'Account not found' })
       if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      if (workspace.archivedAt) return reply.code(409).send({ ok: false, error: 'Workspace archived' })
       const membership = await prisma.workspaceMembership.upsert({
         where: { workspaceId_accountId: { workspaceId: workspace.id, accountId } },
         update: { role },
@@ -2653,6 +2914,8 @@ const start = async () => {
       const [account, project] = await Promise.all([prisma.account.findUnique({ where: { id: accountId } }), prisma.project.findUnique({ where: { id: projectId } })])
       if (!account) return reply.code(404).send({ ok: false, error: 'Account not found' })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      const projectWorkspace = await prisma.workspace.findUnique({ where: { id: project.workspaceId } })
+      if (projectWorkspace?.archivedAt) return reply.code(409).send({ ok: false, error: 'Workspace archived' })
       const workspaceMembership = await prisma.workspaceMembership.findFirst({ where: { accountId, workspaceId: project.workspaceId } })
       if (!workspaceMembership) await prisma.workspaceMembership.create({ data: { accountId, workspaceId: project.workspaceId, role: WorkspaceRole.MEMBER } })
       const membership = await prisma.projectMembership.upsert({
@@ -2682,6 +2945,7 @@ const start = async () => {
       const body = request.body as { name?: string }
       const workspace = await prisma.workspace.findFirst({ where: { id: workspaceId } })
       if (!workspace) return reply.code(404).send({ ok: false, error: 'Workspace not found' })
+      if (!ensureWorkspaceIsActive(workspace, reply)) return
       const nextName = body.name?.trim()
       if (!nextName) return reply.code(400).send({ ok: false, error: 'name is required' })
       await prisma.workspace.update({ where: { id: workspaceId }, data: { name: nextName } })
