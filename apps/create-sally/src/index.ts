@@ -31,6 +31,10 @@ type SchemaDriftState = {
   missingTaskDependencyTable: boolean
 }
 
+type EditionLicenseSchemaState = {
+  missingInstalledLicenseTable: boolean
+}
+
 type CliOptions = {
   command: CommandMode
   dir?: string
@@ -900,6 +904,23 @@ async function maybeRepairInitSchemaDrift(targetDir: string, postgresUser: strin
   )
 }
 
+async function inspectEditionLicenseSchemaState(targetDir: string, postgresUser: string, postgresDb: string) {
+  const sql = [
+    'SELECT json_build_object(',
+    "  'missingInstalledLicenseTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'InstalledLicense')",
+    ');',
+  ].join(' ')
+
+  const raw = await runCommandCapture(
+    'docker',
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', postgresUser, '-d', postgresDb, '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', sql],
+    targetDir,
+  )
+  const jsonLine = raw.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).find((line) => line.startsWith('{') && line.endsWith('}'))
+  if (!jsonLine) throw new Error(`Could not inspect edition/license schema state. Output was:\n${raw}`)
+  return JSON.parse(jsonLine) as EditionLicenseSchemaState
+}
+
 type TaskPeopleMigrationState = {
   taskTableExists: boolean
   missingTaskOwnerColumn: boolean
@@ -1204,6 +1225,7 @@ async function doctorFlow(options: CliOptions) {
     try {
       const drift = await inspectSchemaDriftState(targetDir, current.postgresUser, current.postgresDb)
       const taskPeopleDrift = await inspectTaskPeopleMigrationState(targetDir, current.postgresUser, current.postgresDb)
+      const editionLicense = await inspectEditionLicenseSchemaState(targetDir, current.postgresUser, current.postgresDb)
       const problems = [
         drift.missingProjectTaskCounter ? 'Project.taskCounter missing' : null,
         drift.missingTaskNumber ? 'Task.number missing' : null,
@@ -1213,6 +1235,7 @@ async function doctorFlow(options: CliOptions) {
         taskPeopleDrift.missingTaskOwnerColumn ? 'Task.owner missing' : null,
         taskPeopleDrift.missingTaskParticipantTable ? 'TaskParticipant table missing' : null,
         taskPeopleDrift.taskParticipantBackfillIncomplete ? 'TaskParticipant backfill incomplete' : null,
+        editionLicense.missingInstalledLicenseTable ? 'InstalledLicense table missing' : null,
       ].filter(Boolean)
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {

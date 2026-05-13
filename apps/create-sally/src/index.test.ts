@@ -78,6 +78,13 @@ test('updater refuses ambiguous task owner/participants drift states', () => {
   assert.ok(source.includes('Refusing automatic reconciliation because the database is only partially through the owner/participants rollout.'))
 })
 
+test('doctor reports missing Enterprise installed-license schema after migration checks', () => {
+  assert.ok(source.includes('inspectEditionLicenseSchemaState'))
+  assert.ok(source.includes("'missingInstalledLicenseTable'"))
+  assert.ok(source.includes("table_name = 'InstalledLicense'"))
+  assert.ok(source.includes('InstalledLicense table missing'))
+})
+
 test('install and update run one ordered migration pipeline before starting services', () => {
   assert.ok(source.includes('async function applyDatabaseMigrations(targetDir: string, postgresUser: string, postgresDb: string)'))
   assert.ok(source.includes('await maybeResolveBaselineMigration(targetDir, postgresUser, postgresDb)'))
