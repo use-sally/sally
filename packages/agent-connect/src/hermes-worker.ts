@@ -2,8 +2,9 @@ import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { AgentConnectArgs } from './cli-options.js'
+import { getRuntimeDefinition } from './runtime-registry.js'
 
-export type HermesRuntimeConfig = {
+export type AgentRuntimeConfig = {
   command: string
   capabilities: string[]
   timeoutMs: number
@@ -93,10 +94,11 @@ function classifyRuntimeResult(input: { exitCode: number; summary: string }) {
   return { status: 'FAILED' as const, needsApproval: false }
 }
 
-function buildHermesPrompt(job: QueuedAgentJob) {
+function buildAgentPrompt(args: AgentConnectArgs, job: QueuedAgentJob) {
+  const runtime = getRuntimeDefinition(args.runtime)
   return `Sally assigned you an automation job.
 
-You are running as a local Hermes runtime connected through the Sally agent connector.
+You are running as a local ${runtime.label} runtime connected through the Sally agent connector.
 Use live Sally state as authoritative. If Sally MCP points to a different instance, use the local Sally REST API from SALLY_API_BASE_URL and SALLY_API_KEY. Do not print or expose SALLY_API_KEY.
 
 Job context:
@@ -152,9 +154,9 @@ async function completePairing(args: AgentConnectArgs, capabilities: string[]) {
     body: JSON.stringify({
       code: args.pairingCode,
       name: args.workerName,
-      runtimeType: 'hermes',
-      runtimeVersion: 'hermes-local',
-      profileRef: args.runtimeProfile || 'local-hermes',
+      runtimeType: args.runtime,
+      runtimeVersion: getRuntimeDefinition(args.runtime).defaultVersion,
+      profileRef: args.runtimeProfile || getRuntimeDefinition(args.runtime).defaultProfileRef,
       capabilities,
     }),
   })
@@ -165,9 +167,10 @@ async function completePairing(args: AgentConnectArgs, capabilities: string[]) {
   return { token: String(data.token), connectionId: data.connection?.id ?? null }
 }
 
-function assertHermesAvailable(command: string) {
-  const result = spawnSync(command, ['--version'], { encoding: 'utf8' })
-  if (result.error) throw new Error(`Hermes command not found: ${command}`)
+function assertRuntimeAvailable(args: AgentConnectArgs) {
+  const runtime = getRuntimeDefinition(args.runtime)
+  const result = spawnSync(args.runtimeCommand, runtime.availabilityArgs, { encoding: 'utf8' })
+  if (result.error) throw new Error(`${runtime.label} command not found: ${args.runtimeCommand}`)
 }
 
 function firstJob(value: unknown): QueuedAgentJob | null {
@@ -182,17 +185,12 @@ function firstJobCreatedEvent(value: unknown): WorkerEvent | null {
 }
 
 function runtimeArgv(args: AgentConnectArgs, prompt: string) {
-  return [
-    ...(args.runtimeProfile ? ['--profile', args.runtimeProfile] : []),
-    'chat',
-    '--quiet',
-    '-q',
-    prompt,
-  ]
+  return getRuntimeDefinition(args.runtime).buildArgv({ profile: args.runtimeProfile, prompt })
 }
 
-function executeHermes(args: AgentConnectArgs, job: QueuedAgentJob, workerToken: string) {
-  const prompt = buildHermesPrompt(job)
+function executeAgentRuntime(args: AgentConnectArgs, job: QueuedAgentJob, workerToken: string) {
+  const runtime = getRuntimeDefinition(args.runtime)
+  const prompt = buildAgentPrompt(args, job)
   const env = {
     ...process.env,
     SALLY_API_BASE_URL: args.apiBaseUrl,
@@ -213,12 +211,12 @@ function executeHermes(args: AgentConnectArgs, job: QueuedAgentJob, workerToken:
     }
     const timer = setTimeout(() => {
       child.kill('SIGTERM')
-      finish(124, `Hermes timed out after ${Math.round(timeoutMs / 1000)} seconds.\n${output}`)
+      finish(124, `${runtime.label} timed out after ${Math.round(timeoutMs / 1000)} seconds.\n${output}`)
     }, timeoutMs)
     child.stdout.on('data', (chunk) => { output += chunk.toString() })
     child.stderr.on('data', (chunk) => { output += chunk.toString() })
-    child.on('error', (err) => finish(127, `Hermes failed to start: ${err.message}`))
-    child.on('close', (code) => finish(code ?? 1, output || `Hermes exited with code ${code ?? 1}`))
+    child.on('error', (err) => finish(127, `${runtime.label} failed to start: ${err.message}`))
+    child.on('close', (code) => finish(code ?? 1, output || `${runtime.label} exited with code ${code ?? 1}`))
   })
 }
 
@@ -244,22 +242,22 @@ async function runOneWorkerIteration(input: { args: AgentConnectArgs; client: Sa
       triggerType: input.args.workerName,
       workflowRunId: claimedJob.workflowRunId ?? null,
       workflowStep: claimedJob.workflowStep ?? null,
-      summary: `Hermes runtime started job ${claimedJob.id}.`,
-      metadata: { mode: 'runtime', workerName: input.args.workerName, runtimeType: 'hermes' },
+      summary: `${getRuntimeDefinition(input.args.runtime).label} runtime started job ${claimedJob.id}.`,
+      metadata: { mode: 'runtime', workerName: input.args.workerName, runtimeType: input.args.runtime },
     })
     const runId = runCreated?.run?.id
     if (!runId) throw new Error('Sally did not return an AgentRun id')
     await input.client.request('POST', `/agent-runs/${runId}/heartbeat`)
-    const runtimeResult = await executeHermes(input.args, claimedJob, input.workerToken)
+    const runtimeResult = await executeAgentRuntime(input.args, claimedJob, input.workerToken)
     const classification = classifyRuntimeResult(runtimeResult)
     await input.client.request('PATCH', `/agent-runs/${runId}`, {
       status: classification.status,
       summary: runtimeResult.summary,
-      metadata: { mode: 'runtime', workerName: input.args.workerName, runtimeType: 'hermes', exitCode: runtimeResult.exitCode, needsApproval: classification.needsApproval, blockerType: classification.blockerType ?? null },
+      metadata: { mode: 'runtime', workerName: input.args.workerName, runtimeType: input.args.runtime, exitCode: runtimeResult.exitCode, needsApproval: classification.needsApproval, blockerType: classification.blockerType ?? null },
     })
     await input.client.request('PATCH', `/agent-jobs/${claimedJob.id}`, {
       status: classification.status,
-      payload: { source: input.args.workerName, result: runtimeResult.summary, runId, mode: 'runtime', runtimeType: 'hermes' },
+      payload: { source: input.args.workerName, result: runtimeResult.summary, runId, mode: 'runtime', runtimeType: input.args.runtime },
     })
     if (event?.id) {
       await input.client.request('POST', '/agent-worker/events/ack', { eventId: event.id })
@@ -281,7 +279,7 @@ async function runOneWorkerIteration(input: { args: AgentConnectArgs; client: Sa
 
 export async function runHermesConnector(args: AgentConnectArgs) {
   const capabilities = splitCapabilities(args.capabilities)
-  assertHermesAvailable(args.runtimeCommand)
+  assertRuntimeAvailable(args)
 
   const selectedToken = selectInitialWorkerToken({ envToken: process.env.SALLY_API_KEY, fileToken: readTokenFile(args.tokenFile), pairingCode: args.pairingCode })
   let workerToken = selectedToken.workerToken
@@ -298,7 +296,7 @@ export async function runHermesConnector(args: AgentConnectArgs) {
   console.log(JSON.stringify({
     ok: true,
     mode: args.once ? 'once' : 'loop',
-    runtime: 'hermes',
+    runtime: args.runtime,
     apiBaseUrl: args.apiBaseUrl,
     tokenFile: args.tokenFile,
     cursorFile: args.cursorFile,

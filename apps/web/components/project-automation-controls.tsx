@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createAgentPairingCode, revokeAgentConnection, startProjectWorkflow, updateProjectAutomation } from '../lib/api'
-import { buildHermesNpxConnectCommand, copyHermesConnectCommandToClipboard } from '../lib/project-automation-display'
+import { AGENT_RUNTIME_OPTIONS, getAgentRuntimeOption, type AgentRuntimeId } from '../lib/agent-runtimes'
+import { buildAgentNpxConnectCommand, copyAgentConnectCommandToClipboard } from '../lib/project-automation-display'
 import { qk, useProjectAutomationQuery } from '../lib/query'
 import { pill } from './app-shell'
 
 type AutomationToast = { kind: 'message'; text: string }
-type AgentConnectorModalState = { pairingCode: string; pairingCommand: string; copied: boolean; expiresAt: string }
+type AgentConnectorModalState = { pairingCode: string; pairingCommand: string; copied: boolean; expiresAt: string; runtime: AgentRuntimeId }
 
 type WorkflowControlState = { label: string; active: boolean }
 
@@ -63,6 +64,7 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   const [disconnectModalOpen, setDisconnectModalOpen] = useState(false)
   const [agentPrerequisiteHighlight, setAgentPrerequisiteHighlight] = useState(false)
   const [pairingCode, setPairingCode] = useState<{ code: string; expiresAt: string } | null>(null)
+  const [selectedRuntime, setSelectedRuntime] = useState<AgentRuntimeId>('hermes')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const config = data?.config ?? null
@@ -127,20 +129,23 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
     setPairingCode(null)
     setErrorMessage(null)
     try {
-      const result = await createAgentPairingCode({ name: 'Connected local worker', runtimeType: 'hermes', ttlMinutes: 10 })
-      const command = buildHermesNpxConnectCommand({
+      const runtime = getAgentRuntimeOption(selectedRuntime)
+      const result = await createAgentPairingCode({ name: `${runtime.label} local worker`, runtimeType: runtime.id, ttlMinutes: 10 })
+      const command = buildAgentNpxConnectCommand({
+        runtime: runtime.id,
         pairingCode: result.pairingCode,
         apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || undefined,
         workspaceId: process.env.NEXT_PUBLIC_WORKSPACE_ID || undefined,
         workspaceSlug: process.env.NEXT_PUBLIC_WORKSPACE_SLUG || undefined,
       })
-      const copied = await copyHermesConnectCommandToClipboard(command, typeof navigator === 'undefined' ? null : navigator.clipboard)
+      const copied = await copyAgentConnectCommandToClipboard(command, typeof navigator === 'undefined' ? null : navigator.clipboard)
       setPairingCode({ code: result.pairingCode, expiresAt: result.expiresAt })
       setConnectorModal({
         pairingCode: result.pairingCode,
         pairingCommand: command,
         copied,
         expiresAt: result.expiresAt,
+        runtime: runtime.id,
       })
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to create pairing code')
@@ -191,14 +196,23 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
       {connectorModal ? <AgentConnectorModal modal={connectorModal} onClose={() => setConnectorModal(null)} /> : null}
       {disconnectModalOpen && activeConnection ? <AgentDisconnectModal hasActiveWorkflowWork={hasActiveWorkflowWork} saving={saving} onCancel={() => setDisconnectModalOpen(false)} onConfirm={() => void handleDisconnectConfirmed()} /> : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: compact ? 'flex-end' : 'flex-start', alignItems: 'center' }}>
+        {!activeConnection && !pairingCode ? <AgentRuntimePicker value={selectedRuntime} disabled={!canManage || saving} onChange={setSelectedRuntime} /> : null}
         <button type="button" role="switch" aria-checked={connectionToggleOn} disabled={!canManage || saving} onClick={() => void handleRevokeConnection()} style={automationIslandControlStyle(connectionToggleOn, agentPrerequisiteHighlight)}>
-          {connectionToggleOn ? 'Agent connected' : 'Agent disconnected'}
+          {connectionToggleOn ? `${activeConnection ? getAgentRuntimeOption(activeConnection.runtimeType).label : getAgentRuntimeOption(selectedRuntime).label} connected` : `Connect ${getAgentRuntimeOption(selectedRuntime).label}`}
         </button>
         <button type="button" disabled={!canManage || starting || saving} onClick={() => void handleStartWorkflow()} style={automationIslandControlStyle(workflowControl.active)}>{workflowControl.label}</button>
       </div>
       {errorMessage ? <div style={{ color: 'var(--danger-text)', fontSize: 12, textAlign: compact ? 'right' : 'left' }}>{errorMessage}</div> : null}
       {!canManage ? <div style={{ justifySelf: compact ? 'end' : 'start' }}><span style={pill('var(--form-bg)', 'var(--text-secondary)')}>read-only</span></div> : null}
     </div>
+  )
+}
+
+function AgentRuntimePicker({ value, disabled, onChange }: { value: AgentRuntimeId; disabled: boolean; onChange: (runtime: AgentRuntimeId) => void }) {
+  return (
+    <select aria-label="Agent runtime" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as AgentRuntimeId)} style={runtimePickerStyle}>
+      {AGENT_RUNTIME_OPTIONS.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.label}</option>)}
+    </select>
   )
 }
 
@@ -212,12 +226,12 @@ function AgentConnectorModal({ modal, onClose }: { modal: AgentConnectorModalSta
       <div role="dialog" aria-modal="true" aria-labelledby="agent-connector-title" style={modalPanel}>
         <button type="button" aria-label="Close agent connector modal" onClick={onClose} style={modalCloseButton}>×</button>
         <div style={{ display: 'grid', gap: 10 }}>
-          <div id="agent-connector-title" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>Agent connection instructions</div>
+          <div id="agent-connector-title" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{getAgentRuntimeOption(modal.runtime).label} connection instructions</div>
           <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            {modal.copied ? 'Connector command copied to clipboard.' : 'Copy this connector command and run it where Hermes is installed.'}
+            {modal.copied ? 'Connector command copied to clipboard.' : `Copy this connector command and run it where ${getAgentRuntimeOption(modal.runtime).label} is installed.`}
           </div>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Pairing code: <code>{modal.pairingCode}</code></div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Expires {formatTime(modal.expiresAt)}. Run this where Hermes is installed.</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Expires {formatTime(modal.expiresAt)}. Run this where {getAgentRuntimeOption(modal.runtime).label} is installed.</div>
           <pre style={modalCommandBlock}><code>{modal.pairingCommand}</code></pre>
         </div>
       </div>
@@ -261,6 +275,17 @@ function automationIslandControlStyle(active: boolean, danger = false): CSSPrope
     boxShadow: danger ? '0 0 0 3px rgba(239, 68, 68, 0.18), 0 10px 24px rgba(239, 68, 68, 0.18)' : undefined,
     cursor: 'pointer',
   }
+}
+
+
+const runtimePickerStyle: CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 12,
+  border: '1px solid var(--form-border)',
+  background: 'var(--form-bg)',
+  color: 'var(--text-secondary)',
+  fontSize: 14,
+  fontWeight: 400,
 }
 
 const toastStyle: CSSProperties = { position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, border: '1px solid rgba(34,197,94,0.35)', borderRadius: 999, padding: '10px 14px', background: '#dcfce7', color: '#166534', fontWeight: 800, boxShadow: '0 12px 30px rgba(15,23,42,0.18)' }

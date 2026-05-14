@@ -4,7 +4,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { shouldShowAgentIdentityControls, AGENT_IDENTITY_EMPTY_STATE, buildHermesNpxConnectCommand, copyHermesConnectCommandToClipboard } from './project-automation-display'
+import { AGENT_RUNTIME_OPTIONS } from './agent-runtimes'
+import { shouldShowAgentIdentityControls, AGENT_IDENTITY_EMPTY_STATE, buildAgentNpxConnectCommand, copyAgentConnectCommandToClipboard } from './project-automation-display'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const automationPanelSource = fs.readFileSync(path.join(__dirname, '..', 'components', 'project-automation-panel.tsx'), 'utf8')
@@ -18,8 +19,9 @@ test('project automation keeps named-agent routing hidden for the MVP', () => {
   assert.match(AGENT_IDENTITY_EMPTY_STATE, /internal workflow modes/i)
 })
 
-test('project automation builds public npx Hermes connector command for first-time users', () => {
-  const command = buildHermesNpxConnectCommand({
+test('project automation builds public npx connector commands for supported agents', () => {
+  const command = buildAgentNpxConnectCommand({
+    runtime: 'hermes',
     pairingCode: 'ABCD-EFGH',
     apiBaseUrl: 'https://api.sally.example',
     workspaceId: 'ws_123',
@@ -27,6 +29,10 @@ test('project automation builds public npx Hermes connector command for first-ti
   })
 
   assert.equal(command, 'npx sally-agent-connect hermes --pairing-code ABCD-EFGH --base-url https://api.sally.example --workspace-id ws_123 --workspace-slug acme')
+  assert.equal(buildAgentNpxConnectCommand({ runtime: 'codex', pairingCode: 'CODEX' }), 'npx sally-agent-connect codex --pairing-code CODEX')
+  assert.equal(buildAgentNpxConnectCommand({ runtime: 'pi', pairingCode: 'PI' }), 'npx sally-agent-connect pi --pairing-code PI')
+  assert.equal(buildAgentNpxConnectCommand({ runtime: 'openclaw', pairingCode: 'CLAW' }), 'npx sally-agent-connect openclaw --pairing-code CLAW')
+  assert.equal(buildAgentNpxConnectCommand({ runtime: 'claude-code', pairingCode: 'CLAUDE' }), 'npx sally-agent-connect claude-code --pairing-code CLAUDE')
 })
 
 test('project automation panel avoids fixed-width grids that cause horizontal overflow', () => {
@@ -76,8 +82,10 @@ test('project automation rows use compact state datetime role comment layout', (
 test('project automation controls present one-agent workflow instead of role-agent routing', () => {
   assert.match(automationPanelSource, /one connected local agent/i)
   assert.match(automationControlsSource, /role="switch"/)
-  assert.match(automationControlsSource, /Agent disconnected/)
-  assert.match(automationControlsSource, /Agent connected/)
+  assert.match(automationControlsSource, /AgentRuntimePicker/)
+  assert.match(automationControlsSource, /Connect \$\{getAgentRuntimeOption\(selectedRuntime\)\.label\}/)
+  assert.match(automationControlsSource, /getAgentRuntimeOption\(activeConnection\.runtimeType\)\.label/)
+  assert.deepEqual(AGENT_RUNTIME_OPTIONS.map((runtime) => runtime.id), ['hermes', 'codex', 'pi', 'openclaw', 'claude-code'])
   assert.match(automationControlsSource, /workflowControl\.label/)
   assert.ok(automationControlsSource.indexOf('role="switch"') < automationControlsSource.indexOf('workflowControl.label'))
   assert.doesNotMatch(automationPanelSource, /Role mapping/)
@@ -128,7 +136,7 @@ test('agent connector instructions render in a focus modal instead of a toast', 
   assert.match(automationControlsSource, /function AgentConnectorModal/)
   assert.match(automationControlsSource, /role="dialog" aria-modal="true"/)
   assert.match(automationControlsSource, /data-agent-connector-modal="true"/)
-  assert.match(automationControlsSource, /Agent connection instructions/)
+  assert.match(automationControlsSource, /\{getAgentRuntimeOption\(modal\.runtime\)\.label\} connection instructions/)
   assert.match(automationControlsSource, /<pre style=\{modalCommandBlock\}><code>\{modal\.pairingCommand\}<\/code><\/pre>/)
   assert.doesNotMatch(automationControlsSource, /kind: 'connector'/)
   assert.doesNotMatch(automationControlsSource, /connectorToastStyle/)
@@ -174,14 +182,14 @@ test('project automation toggles use island switcher styling instead of toggle p
   assert.doesNotMatch(automationControlStyle, /fontWeight:\s*800/)
 })
 
-test('project automation copies the generated Hermes connector command to clipboard', async () => {
+test('project automation copies the generated agent connector command to clipboard', async () => {
   const writes: string[] = []
-  const copied = await copyHermesConnectCommandToClipboard(
-    'npx sally-agent-connect hermes --pairing-code ABCD-EFGH',
+  const copied = await copyAgentConnectCommandToClipboard(
+    'npx sally-agent-connect codex --pairing-code ABCD-EFGH',
     { writeText: async (text: string) => { writes.push(text) } },
   )
 
   assert.equal(copied, true)
-  assert.deepEqual(writes, ['npx sally-agent-connect hermes --pairing-code ABCD-EFGH'])
+  assert.deepEqual(writes, ['npx sally-agent-connect codex --pairing-code ABCD-EFGH'])
 })
 

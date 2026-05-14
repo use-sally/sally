@@ -1,9 +1,9 @@
 {
   "name": "sally-agent-connect",
   "private": false,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
-  "description": "Sally agent connector CLI for pairing local runtimes such as Hermes.",
+  "description": "Sally agent connector CLI for pairing local runtimes such as Hermes, Codex, Pi, OpenClaw, and Claude Code.",
   "bin": {
     "sally-agent-connect": "./dist/cli.js",
     "sally-agent": "./dist/cli.js"
