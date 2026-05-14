@@ -1,6 +1,6 @@
 {
   "name": "create-sally",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Interactive installer for sally_",
   "type": "module",
   "bin": {

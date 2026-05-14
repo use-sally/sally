@@ -1,5 +1,11 @@
 # create-sally changelog
 
+## 0.1.26
+
+- let doctor and update repair legacy runtime config for image uploads: persist `/app/uploads` with a named Docker volume and allow `blob:` image previews in managed Caddy CSP
+- generate new managed and existing-infra installs with persistent API uploads by default
+- back up the runtime uploads directory instead of the old source-tree uploads path
+
 ## 0.1.25
 
 - keep install/update running the committed Prisma migration pipeline before Sally services start, including the InstalledLicense migration for Enterprise activation
