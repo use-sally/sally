@@ -106,7 +106,8 @@ test('doctor starts postgres and applies pending migrations for managed instance
 })
 
 test('generated compose files persist API uploads across image updates', () => {
-  assert.equal((source.match(/- sally-uploads:\/app\/uploads/g) ?? []).length, 2)
+  assert.match(source, /function composeForManagedSimple\(\)[\s\S]*- sally-uploads:\/app\/uploads/)
+  assert.match(source, /function composeForExistingInfra\(\)[\s\S]*- sally-uploads:\/app\/uploads/)
   assert.ok(source.includes('volumes:\n  sally-postgres:\n  sally-uploads:\n  caddy-data:'))
   assert.ok(source.includes('volumes:\n  sally-postgres:\n  sally-uploads:\n`'))
 })
@@ -115,4 +116,20 @@ test('updater backs up the runtime uploads directory used by the API container',
   assert.ok(source.includes('const runtimeUploadsDir = \'/app/uploads\''))
   assert.ok(source.includes('`${apiContainerId}:${runtimeUploadsDir}/.`'))
   assert.ok(!source.includes('`${apiContainerId}:/app/apps/api/uploads/.`'))
+})
+
+test('generated and repaired managed Caddy CSP allows local blob image previews', () => {
+  assert.match(source, /img-src 'self' data: blob:/)
+  assert.match(source, /function contentSecurityPolicy\(domain: string\)/)
+  assert.match(source, /Content-Security-Policy "\$\{contentSecurityPolicy\(domain\)\}"/)
+  assert.match(source, /Updated Caddyfile CSP to allow blob: image previews\./)
+})
+
+test('doctor reports and repairs runtime config needed for image uploads', () => {
+  assert.match(source, /section\('Runtime config checks'\)/)
+  assert.match(source, /inspectRuntimeConfigState\(targetDir, current\.mode\)/)
+  assert.match(source, /'API uploads volume missing'/)
+  assert.match(source, /'CSP blocks blob: image previews'/)
+  assert.match(source, /await ensureRuntimeConfig\(targetDir, current\.mode, current\.appUrl\)/)
+  assert.match(source, /await runCommand\('docker', \['compose', 'up', '-d', 'api', 'caddy'\], targetDir\)/)
 })

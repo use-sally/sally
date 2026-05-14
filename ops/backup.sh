@@ -7,7 +7,7 @@ BACKUP_ROOT=${BACKUP_ROOT:-/var/backups/sally}
 RETENTION_DAYS=${RETENTION_DAYS:-14}
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 TARGET_DIR="$BACKUP_ROOT/$STAMP"
-UPLOADS_DIR="$APP_DIR/apps/api/uploads"
+UPLOADS_DIR="$APP_DIR/uploads"
 
 if [ ! -f "$API_ENV_FILE" ]; then
   echo "Missing API env file: $API_ENV_FILE" >&2

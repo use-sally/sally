@@ -208,6 +208,11 @@ volumes:
 `
 }
 
+function contentSecurityPolicy(domain: string) {
+  const host = normalizeDomain(domain)
+  return `default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' wss://${host}; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests`
+}
+
 function caddyfile(domain: string) {
   return `{
   email {$CADDY_ACME_EMAIL}
@@ -215,6 +220,12 @@ function caddyfile(domain: string) {
 
 ${normalizeDomain(domain)} {
   encode gzip zstd
+
+  header {
+    Content-Security-Policy "${contentSecurityPolicy(domain)}"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
 
   handle_path /api/* {
     reverse_proxy api:4000
@@ -1136,6 +1147,71 @@ async function updateEnvImageTag(targetDir: string, imageTag: string) {
   await fs.writeFile(envPath, envText)
 }
 
+async function ensureRuntimeUploadsVolume(targetDir: string) {
+  const composePath = path.join(targetDir, 'docker-compose.yml')
+  let composeText = await fs.readFile(composePath, 'utf8')
+  let changed = false
+
+  if (!composeText.includes('- sally-uploads:/app/uploads')) {
+    composeText = composeText.replace(/(\n  api:\n(?:    [^\n]*\n)*?    env_file: \.env\n)/, `$1    volumes:\n      - sally-uploads:/app/uploads\n`)
+    changed = true
+  }
+
+  if (!/\n  sally-uploads:\s*(?:\n|$)/.test(composeText)) {
+    composeText = composeText.replace(/\nvolumes:\n/, '\nvolumes:\n  sally-uploads:\n')
+    changed = true
+  }
+
+  if (changed) {
+    await fs.writeFile(composePath, composeText)
+    console.log(paint('Updated docker-compose.yml to persist API uploads at /app/uploads.', color.green))
+  }
+  return changed
+}
+
+async function ensureManagedCaddySecurityHeaders(targetDir: string, mode: InstallMode, appUrl: string) {
+  if (mode !== 'managed-simple') return false
+  const caddyPath = path.join(targetDir, 'Caddyfile')
+  const domain = appUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+  let caddyText = await fs.readFile(caddyPath, 'utf8')
+  const policy = contentSecurityPolicy(domain)
+  let changed = false
+
+  if (/Content-Security-Policy\s+"[^"]*img-src 'self' data:(?! blob:)[^"]*"/.test(caddyText)) {
+    caddyText = caddyText.replace(/(img-src 'self' data:)(?! blob:)/g, '$1 blob:')
+    changed = true
+  }
+
+  if (!caddyText.includes('Content-Security-Policy')) {
+    caddyText = caddyText.replace(/(  encode gzip zstd\n)/, `$1\n  header {\n    Content-Security-Policy "${policy}"\n    X-Content-Type-Options "nosniff"\n    Referrer-Policy "strict-origin-when-cross-origin"\n  }\n`)
+    changed = true
+  }
+
+  if (changed) {
+    await fs.writeFile(caddyPath, caddyText)
+    console.log(paint('Updated Caddyfile CSP to allow blob: image previews.', color.green))
+  }
+  return changed
+}
+
+async function ensureRuntimeConfig(targetDir: string, mode: InstallMode, appUrl: string) {
+  const uploadsChanged = await ensureRuntimeUploadsVolume(targetDir)
+  const caddyChanged = await ensureManagedCaddySecurityHeaders(targetDir, mode, appUrl)
+  return uploadsChanged || caddyChanged
+}
+
+async function inspectRuntimeConfigState(targetDir: string, mode: InstallMode) {
+  const composeText = await fs.readFile(path.join(targetDir, 'docker-compose.yml'), 'utf8')
+  const caddyText = mode === 'managed-simple'
+    ? await fs.readFile(path.join(targetDir, 'Caddyfile'), 'utf8')
+    : ''
+
+  return {
+    missingUploadsVolume: !composeText.includes('- sally-uploads:/app/uploads') || !/\n  sally-uploads:\s*(?:\n|$)/.test(composeText),
+    cspBlocksBlobImages: mode === 'managed-simple' && !/img-src[^";]*'self'[^";]*data:[^";]*blob:/.test(caddyText),
+  }
+}
+
 async function promptText(message: string, defaultValue?: string) {
   return await input({ message, default: defaultValue })
 }
@@ -1240,6 +1316,25 @@ async function doctorFlow(options: CliOptions) {
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {
       console.log(`${paint('schema', color.brightYellow)}: ${paint(`failed (${error instanceof Error ? error.message : String(error)})`, color.red)}`)
+    }
+
+    section('Runtime config checks')
+    try {
+      const runtimeConfig = await inspectRuntimeConfigState(targetDir, current.mode)
+      const problems = [
+        runtimeConfig.missingUploadsVolume ? 'API uploads volume missing' : null,
+        runtimeConfig.cspBlocksBlobImages ? 'CSP blocks blob: image previews' : null,
+      ].filter(Boolean)
+      if (problems.length) {
+        console.log(`${paint('runtime config', color.brightYellow)}: ${paint(`${problems.join('; ')}; repairing`, color.red)}`)
+        const changed = await ensureRuntimeConfig(targetDir, current.mode, current.appUrl)
+        if (changed) await runCommand('docker', ['compose', 'up', '-d', 'api', 'caddy'], targetDir)
+        console.log(`${paint('runtime config', color.brightYellow)}: ${paint('repaired', color.green)}`)
+      } else {
+        console.log(`${paint('runtime config', color.brightYellow)}: ${paint('ok', color.green)}`)
+      }
+    } catch (error) {
+      console.log(`${paint('runtime config', color.brightYellow)}: ${paint(`failed (${error instanceof Error ? error.message : String(error)})`, color.red)}`)
     }
 
     section('Health checks')
@@ -1358,6 +1453,7 @@ async function updateFlow(options: CliOptions) {
   }
 
   await backupExistingInstance(targetDir, current.postgresUser, current.postgresDb)
+  await ensureRuntimeConfig(targetDir, current.mode, current.appUrl)
   await updateEnvImageTag(targetDir, imageTag)
   await runInstallerCommands(current.mode, targetDir, current.appUrl, current.postgresUser, current.postgresDb)
   printUpdateSuccess(current.mode, current.appUrl, imageTag)
