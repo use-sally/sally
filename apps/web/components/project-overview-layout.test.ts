@@ -62,6 +62,7 @@ test('project header gives metadata a narrow column and switches description pre
   assert.match(projectOverviewSource, /<MarkdownDescriptionEditor[\s\S]*autoFocus=\{true\}/)
   assert.match(projectOverviewSource, /<MarkdownDescriptionEditor[\s\S]*commitOnOutsideClick=\{true\}/)
   assert.match(markdownEditorSource, /commitOnOutsideClick[\s\S]*editor\.commands\.blur\(\)[\s\S]*document\.addEventListener\('mousedown', onPointerDown\)/)
+  assert.match(markdownEditorSource, /immediatelyRender:\s*false/)
   assert.doesNotMatch(projectOverviewSource, /cursor:\s*'zoom-in'/)
   assert.doesNotMatch(projectOverviewSource, /projectDescriptionExpanded/)
   assert.doesNotMatch(projectOverviewSource, /projectHeaderDescriptionExpandedButton/)

@@ -74,6 +74,7 @@ export function MarkdownDescriptionEditor({
   useEffect(() => { setMounted(true) }, [])
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, codeBlock: false }),
       Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }),
