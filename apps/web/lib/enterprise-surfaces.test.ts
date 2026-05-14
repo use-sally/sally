@@ -35,7 +35,12 @@ test('admin entry lives in the sidebar footer and profile is avatar-only in top 
 test('web has reusable Enterprise locked card and edition client', () => {
   assert.match(lockedCardSource, /EnterpriseLockedCard/)
   assert.match(lockedCardSource, /Enterprise feature/)
-  assert.match(lockedCardSource, /upgrade/i)
+  assert.match(lockedCardSource, /Upgrade to Enterprise/)
+  assert.match(lockedCardSource, /https:\/\/usesally\.com\/sponsorships\?checkout=enterprise/)
+  assert.match(lockedCardSource, /getLicense\(\)/)
+  assert.match(lockedCardSource, /license\.edition === 'ENTERPRISE'/)
+  assert.match(lockedCardSource, /hasActiveLicense \? null : \(/)
+  assert.doesNotMatch(lockedCardSource, /usesally\.app\/enterprise/)
   assert.match(editionClientSource, /getEdition/)
   assert.match(editionClientSource, /availableFeatures/)
 })

@@ -15,7 +15,7 @@ import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
 import { canonicalStatusColor, resolveStatusPair, statusChipStyle, STATUS_COLOR_PAIRS } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
 import { automationBadgeStyle, getTaskAutomationBadge } from '../lib/task-automation'
-import { labelText, projectInputField, sortableHeaderButton } from '../lib/theme'
+import { labelText, projectInputField, restoreTextAction, sortableHeaderButton } from '../lib/theme'
 
 const inputStyle: React.CSSProperties = { ...projectInputField }
 
@@ -653,7 +653,7 @@ function ArchivedTaskRow({ task, restoring, onRestore }: { task: ProjectTaskList
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {task.labels?.length ? task.labels.map((label) => <span key={label} style={tagStyle()}>{label}</span>) : <span style={{ color: 'rgba(209, 250, 229, 0.34)' }}>—</span>}
       </div>
-      <button onClick={onRestore} disabled={restoring} style={{ background: 'rgba(250, 204, 21, 0.12)', color: '#fde68a', border: '1px solid rgba(250, 204, 21, 0.28)', borderRadius: 10, padding: '8px 10px', fontWeight: 700, cursor: 'pointer' }}>{restoring ? 'Restoring…' : 'Restore'}</button>
+      <button onClick={onRestore} disabled={restoring} style={{ ...restoreTextAction, opacity: restoring ? 0.5 : 1 }}>{restoring ? 'Restoring…' : 'Restore'}</button>
     </div>
   )
 }

@@ -15,6 +15,7 @@ export const darkTheme = {
     formBorderFocus: 'rgba(52, 211, 153, 0.72)',
     formRing: 'rgba(16, 185, 129, 0.18)',
     dangerText: '#ef4444',
+    successText: '#34d399',
     sortHeaderActive: '#ecfdf5',
     sortHeaderInactive: 'rgba(209, 250, 229, 0.56)',
     taskTitle: '#fde68a',
@@ -49,6 +50,7 @@ export const lightTheme = {
     formBorderFocus: 'rgba(5, 150, 105, 0.72)',
     formRing: 'rgba(16, 185, 129, 0.16)',
     dangerText: '#dc2626',
+    successText: '#059669',
     sortHeaderActive: '#0f172a',
     sortHeaderInactive: 'rgba(15, 23, 42, 0.52)',
     taskTitle: '#92400e',
@@ -134,6 +136,11 @@ export const archiveTextAction: CSSProperties = {
   fontSize: fontSize.sm,
   fontWeight: 400,
   cursor: 'pointer',
+}
+
+export const restoreTextAction: CSSProperties = {
+  ...archiveTextAction,
+  color: 'var(--success-text)',
 }
 
 export function sortableHeaderButton(active: boolean): CSSProperties {
@@ -234,6 +241,7 @@ function varsFor(mode: ThemeMode) {
     --form-border-focus: ${palette.formBorderFocus};
     --form-ring: ${palette.formRing};
     --danger-text: ${palette.dangerText};
+    --success-text: ${palette.successText};
     --sort-header-active: ${palette.sortHeaderActive};
     --sort-header-inactive: ${palette.sortHeaderInactive};
     --task-title: ${palette.taskTitle};

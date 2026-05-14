@@ -20,7 +20,7 @@ import { addProjectMember, archiveProject, deleteProject, getProjectActivity, ge
 import { getWorkspaceId, loadSession } from '../../../lib/auth'
 import { qk, useBoardQuery, useClientsQuery, useProjectAutomationQuery, useProjectQuery } from '../../../lib/query'
 import { projectWorkflowSummary } from '../../../lib/task-automation'
-import { labelText, projectInputField } from '../../../lib/theme'
+import { archiveTextAction, deleteTextAction, labelText, projectInputField } from '../../../lib/theme'
 import { projectRoleOptions } from '../../../lib/roles'
 import { canChangeProjectClient, canChangeProjectMemberRole, canEditProject, canInviteProjectMember, canManageProjectWorkflow, canRemoveProjectMember } from '../../../lib/permissions'
 
@@ -825,5 +825,5 @@ const projectHeaderNameButton: React.CSSProperties = { ...projectHeaderNameText,
 const projectHeaderNameInput: React.CSSProperties = { ...projectInputField, fontSize: 30, fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
 const projectHeaderDescriptionText: React.CSSProperties = { marginTop: 8, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.45 }
 const projectHeaderDescriptionButton: React.CSSProperties = { ...projectHeaderDescriptionText, display: 'block', width: '100%', maxHeight: 88, overflow: 'hidden', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
-const archiveHeaderButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }
-const deleteHeaderButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 13, cursor: 'pointer' }
+const archiveHeaderButton: React.CSSProperties = { ...archiveTextAction }
+const deleteHeaderButton: React.CSSProperties = { ...deleteTextAction }

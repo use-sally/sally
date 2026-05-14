@@ -26,10 +26,17 @@ test('team hub can create users and add or remove them from workspaces and proje
   assert.match(apiIndexSource, /app\.delete\('\/team\/accounts\/:accountId\/projects\/:membershipId'[\s\S]*prisma\.projectMembership\.delete/)
 })
 
-test('team hub can archive users without deleting the configured superadmin', () => {
+test('team hub can archive and permanently delete archived users without deleting superadmins or the current account', () => {
   assert.match(apiIndexSource, /app\.post\('\/team\/accounts\/:accountId\/archive'[\s\S]*if \(!isPlatformAdmin\(request\)\)/)
+  assert.match(apiIndexSource, /if \(target\.id === requestAccountId && archived\)/)
+  assert.match(apiIndexSource, /target\.platformRole === PlatformRole\.SUPERADMIN && archived/)
   assert.match(apiIndexSource, /if \(isConfiguredSuperadminEmail\(target\.email\) && archived\)/)
   assert.match(apiIndexSource, /data: \{ archivedAt: archived \? new Date\(\) : null \}/)
+  assert.match(apiIndexSource, /app\.delete\('\/team\/accounts\/:accountId'[\s\S]*if \(!isPlatformAdmin\(request\)\)/)
+  assert.match(apiIndexSource, /if \(target\.id === requestAccountId\) return reply\.code\(403\)/)
+  assert.match(apiIndexSource, /target\.platformRole === PlatformRole\.SUPERADMIN \|\| isConfiguredSuperadminEmail\(target\.email\)/)
+  assert.match(apiIndexSource, /if \(!target\.archivedAt\) return reply\.code\(400\).*Archive the user before deleting them/)
+  assert.match(apiIndexSource, /prisma\.account\.delete\(\{ where: \{ id: accountId \} \}\)/)
 })
 
 test('team hub lets platform admins upload and save avatars for any team account', () => {

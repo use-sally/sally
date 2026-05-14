@@ -8,7 +8,7 @@ import { AppShell, panel, pill } from '../../components/app-shell'
 import { archiveProject, createProject } from '../../lib/api'
 import { getWorkspaceId, loadSession } from '../../lib/auth'
 import { canEditProject } from '../../lib/permissions'
-import { labelText, taskTitleText } from '../../lib/theme'
+import { labelText, restoreTextAction, taskTitleText } from '../../lib/theme'
 import { qk, useClientsQuery, useProjectsQuery } from '../../lib/query'
 
 export default function ProjectsPage() {
@@ -99,7 +99,7 @@ export default function ProjectsPage() {
               <div style={{ color: 'var(--text-secondary)' }}>{project.lead}</div>
               <div style={{ color: 'var(--text-secondary)' }}>{project.tasks}</div>
               {projectEditDecision.visible ? (
-                <button onClick={() => void restoreProject(project.id)} disabled={restoringId === project.id || !projectEditDecision.allowed} style={{ background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 12px', fontWeight: 700 }}>
+                <button onClick={() => void restoreProject(project.id)} disabled={restoringId === project.id || !projectEditDecision.allowed} style={{ ...restoreTextAction, opacity: restoringId === project.id || !projectEditDecision.allowed ? 0.5 : 1 }}>
                   {restoringId === project.id ? 'Restoring…' : 'Restore'}
                 </button>
               ) : null}

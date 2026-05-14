@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { WorkspaceInfo } from '@sally/types/src'
 import { AppShell } from '../../components/app-shell'
 import { archiveWorkspace, createWorkspace, deleteWorkspace, getWorkspaces } from '../../lib/api'
+import { archiveTextAction, deleteTextAction, restoreTextAction } from '../../lib/theme'
 
 export default function WorkspacesAdminPage() {
   const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([])
@@ -121,11 +122,11 @@ export default function WorkspacesAdminPage() {
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {archived ? (
-                        <button type="button" onClick={() => handleArchive(workspace, false)} disabled={saving === `archive:${workspace.id}`} style={{ borderRadius: 10, border: '1px solid rgba(52, 211, 153, 0.35)', background: 'transparent', color: '#34d399', padding: '8px 10px', fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer' }}>Restore</button>
+                        <button type="button" onClick={() => handleArchive(workspace, false)} disabled={saving === `archive:${workspace.id}`} style={{ ...restoreTextAction, opacity: saving === `archive:${workspace.id}` ? 0.5 : 1 }}>Restore</button>
                       ) : (
-                        <button type="button" onClick={() => handleArchive(workspace, true)} disabled={saving === `archive:${workspace.id}`} style={{ borderRadius: 10, border: '1px solid rgba(250, 204, 21, 0.35)', background: 'transparent', color: '#fcd34d', padding: '8px 10px', fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer' }}>Archive</button>
+                        <button type="button" onClick={() => handleArchive(workspace, true)} disabled={saving === `archive:${workspace.id}`} style={{ ...archiveTextAction, opacity: saving === `archive:${workspace.id}` ? 0.5 : 1 }}>Archive</button>
                       )}
-                      <button type="button" onClick={() => handleDelete(workspace)} disabled={saving === `delete:${workspace.id}`} style={{ borderRadius: 10, border: '1px solid rgba(248, 113, 113, 0.35)', background: 'transparent', color: '#f87171', padding: '8px 10px', fontWeight: 800, fontFamily: 'inherit', cursor: 'pointer' }}>Delete</button>
+                      <button type="button" onClick={() => handleDelete(workspace)} disabled={saving === `delete:${workspace.id}`} style={{ ...deleteTextAction, opacity: saving === `delete:${workspace.id}` ? 0.5 : 1 }}>Delete</button>
                     </div>
                   </div>
                 )

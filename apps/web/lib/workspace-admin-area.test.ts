@@ -22,6 +22,12 @@ test('workspace admin page can create archive restore and delete workspaces', ()
   assert.match(workspaceAdminPageSource, /Archive/)
   assert.match(workspaceAdminPageSource, /Restore/)
   assert.match(workspaceAdminPageSource, /Delete/)
+  assert.match(workspaceAdminPageSource, /import \{ archiveTextAction, deleteTextAction, restoreTextAction \} from '..\/..\/lib\/theme'/)
+  assert.match(workspaceAdminPageSource, /style=\{\{ \.\.\.archiveTextAction, opacity: saving === `archive:\$\{workspace\.id\}` \? 0\.5 : 1 \}\}>Archive/)
+  assert.match(workspaceAdminPageSource, /style=\{\{ \.\.\.restoreTextAction, opacity: saving === `archive:\$\{workspace\.id\}` \? 0\.5 : 1 \}\}>Restore/)
+  assert.match(workspaceAdminPageSource, /style=\{\{ \.\.\.deleteTextAction, opacity: saving === `delete:\$\{workspace\.id\}` \? 0\.5 : 1 \}\}>Delete/)
+  assert.doesNotMatch(workspaceAdminPageSource, /border: '1px solid rgba\(250, 204, 21, 0\.35\)'/)
+  assert.doesNotMatch(workspaceAdminPageSource, /border: '1px solid rgba\(248, 113, 113, 0\.35\)'/)
 })
 
 test('web API client exposes workspace archive delete and archived listing helpers', () => {

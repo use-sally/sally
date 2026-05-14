@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { AppShell } from '../../components/app-shell'
 import { activateLicense, getLicense, removeLicense, type InstalledLicenseSummary } from '../../lib/api'
+import { deleteTextAction } from '../../lib/theme'
 
 function formatDate(value?: string | null) {
   if (!value) return '—'
@@ -107,17 +108,29 @@ export default function EditionLicensePage() {
           </div>
         </section>
 
-        <form onSubmit={submitActivate} style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 12 }}>
-          <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Activate Enterprise</h2>
-          <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 }}>
-            Paste license key
-            <input value={licenseKey} onChange={(event) => setLicenseKey(event.target.value)} placeholder="sally_live_…" autoComplete="off" style={{ padding: '11px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--text-primary)' }} />
-          </label>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button type="submit" disabled={working} style={{ border: '1px solid rgba(250,204,21,0.45)', background: '#fcd34d', color: '#052e16', borderRadius: 12, padding: '10px 14px', fontWeight: 750 }}>Activate license</button>
-            <button type="button" disabled={working || !license?.installed} onClick={handleRemove} style={{ border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.08)', color: '#fecaca', borderRadius: 12, padding: '10px 14px', fontWeight: 700 }}>Remove license</button>
-          </div>
-        </form>
+        {license?.installed ? (
+          <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 10 }}>
+            <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Installed license</h2>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>This instance already has an active license. Remove it before activating a different one.</p>
+            <button
+              type="button"
+              disabled={working}
+              onClick={handleRemove}
+              style={{ ...deleteTextAction, justifySelf: 'start', opacity: working ? 0.5 : 1 }}
+            >
+              Remove license
+            </button>
+          </section>
+        ) : (
+          <form onSubmit={submitActivate} style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 12 }}>
+            <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Activate Enterprise</h2>
+            <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 }}>
+              Paste license key
+              <input value={licenseKey} onChange={(event) => setLicenseKey(event.target.value)} placeholder="sally_live_…" autoComplete="off" style={{ padding: '11px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--text-primary)' }} />
+            </label>
+            <button type="submit" disabled={working} style={{ justifySelf: 'start', border: '1px solid rgba(250,204,21,0.45)', background: '#fcd34d', color: '#052e16', borderRadius: 12, padding: '10px 14px', fontWeight: 750 }}>Activate license</button>
+          </form>
+        )}
       </div>
     </AppShell>
   )

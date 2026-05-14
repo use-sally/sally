@@ -2852,10 +2852,27 @@ const start = async () => {
       const archived = body.archived !== false
       const target = await prisma.account.findUnique({ where: { id: accountId } })
       if (!target) return reply.code(404).send({ ok: false, error: 'Account not found' })
+      const requestAccountId = (request as any).account?.id as string | undefined
+      if (target.id === requestAccountId && archived) return reply.code(403).send({ ok: false, error: 'You cannot archive yourself' })
+      if (target.platformRole === PlatformRole.SUPERADMIN && archived) return reply.code(403).send({ ok: false, error: 'Superadmin accounts cannot be archived' })
       if (isConfiguredSuperadminEmail(target.email) && archived) return reply.code(403).send({ ok: false, error: 'The configured superadmin cannot be archived' })
       const updated = await prisma.account.update({ where: { id: accountId }, data: { archivedAt: archived ? new Date() : null } })
       if (archived) await prisma.accountSession.updateMany({ where: { accountId }, data: { revokedAt: new Date() } })
       return { ok: true, account: { id: updated.id, archivedAt: updated.archivedAt?.toISOString() ?? null } }
+    })
+
+    app.delete('/team/accounts/:accountId', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const { accountId } = request.params as { accountId: string }
+      const target = await prisma.account.findUnique({ where: { id: accountId } })
+      if (!target) return reply.code(404).send({ ok: false, error: 'Account not found' })
+      const requestAccountId = (request as any).account?.id as string | undefined
+      if (target.id === requestAccountId) return reply.code(403).send({ ok: false, error: 'You cannot delete yourself' })
+      if (target.platformRole === PlatformRole.SUPERADMIN || isConfiguredSuperadminEmail(target.email)) return reply.code(403).send({ ok: false, error: 'Superadmin accounts cannot be deleted' })
+      if (!target.archivedAt) return reply.code(400).send({ ok: false, error: 'Archive the user before deleting them' })
+      await prisma.account.delete({ where: { id: accountId } })
+      await writeAuditLog({ actorAccountId: requestAccountId ?? null, action: 'audit.account.deleted', targetType: 'account', targetId: accountId, summary: `Deleted account ${target.email}`, metadata: { email: target.email } })
+      return { ok: true }
     })
 
     app.post('/team/accounts/:accountId/avatar', async (request, reply) => {

@@ -1,6 +1,28 @@
+'use client'
+
 import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
+import { getLicense } from '../lib/api'
+
+const enterpriseCheckoutUrl = 'https://usesally.com/sponsorships?checkout=enterprise'
 
 export function EnterpriseLockedCard({ title, description, children }: { title: string; description: string; children?: ReactNode }) {
+  const [hasActiveLicense, setHasActiveLicense] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    getLicense()
+      .then((license) => {
+        if (cancelled) return
+        const active = license.edition === 'ENTERPRISE' && Boolean(license.installed || license.license)
+        setHasActiveLicense(active)
+      })
+      .catch(() => {
+        if (!cancelled) setHasActiveLicense(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
   return (
     <section
       style={{
@@ -20,9 +42,11 @@ export function EnterpriseLockedCard({ title, description, children }: { title: 
       </div>
       <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.55, fontSize: 13 }}>{description}</p>
       {children ? <div>{children}</div> : null}
-      <a href="https://usesally.app/enterprise" target="_blank" rel="noreferrer" style={{ color: 'var(--task-title)', fontSize: 13, fontWeight: 700 }}>
-        Upgrade to Enterprise
-      </a>
+      {hasActiveLicense ? null : (
+        <a href={enterpriseCheckoutUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--task-title)', fontSize: 13, fontWeight: 700 }}>
+          Upgrade to Enterprise
+        </a>
+      )}
     </section>
   )
 }
