@@ -64,4 +64,14 @@ test('Admin mode exposes Edition\/License UI and web client functions', () => {
   assert.match(pageSource, /Activate license/)
   assert.match(pageSource, /Refresh certificate/)
   assert.match(pageSource, /Remove license/)
+  assert.doesNotMatch(pageSource, /License server URL|setLicenseServerUrl|licenseServerUrl\.trim/)
+  assert.doesNotMatch(webApiSource, /licenseServerUrl\?: string/)
+})
+
+test('license activation uses the configured Sally license server, not a browser-supplied server URL', () => {
+  const serviceSource = fs.readFileSync(licenseServicePath, 'utf8')
+  assert.match(serviceSource, /const licenseServerUrl = getConfiguredLicenseServerUrl\(\)/)
+  const activationBlock = serviceSource.slice(serviceSource.indexOf('export async function activateInstalledLicense'), serviceSource.indexOf('export async function refreshInstalledLicense'))
+  assert.doesNotMatch(activationBlock, /input\.licenseServerUrl/)
+  assert.doesNotMatch(apiSource, /licenseServerUrl\?: string/)
 })

@@ -21,7 +21,6 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 export default function EditionLicensePage() {
   const [license, setLicense] = useState<InstalledLicenseSummary | null>(null)
   const [licenseKey, setLicenseKey] = useState('')
-  const [licenseServerUrl, setLicenseServerUrl] = useState('https://usesally.com')
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,7 +32,6 @@ export default function EditionLicensePage() {
     try {
       const data = await getLicense()
       setLicense(data)
-      if (data.installed?.licenseServerUrl) setLicenseServerUrl(data.installed.licenseServerUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load license')
     } finally {
@@ -53,7 +51,7 @@ export default function EditionLicensePage() {
     setError(null)
     setNotice(null)
     try {
-      await activateLicense({ licenseKey: licenseKey.trim(), licenseServerUrl: licenseServerUrl.trim() || undefined })
+      await activateLicense({ licenseKey: licenseKey.trim() })
       setLicenseKey('')
       setNotice('License activated.')
       await load()
@@ -129,10 +127,6 @@ export default function EditionLicensePage() {
           <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 }}>
             Paste license key
             <input value={licenseKey} onChange={(event) => setLicenseKey(event.target.value)} placeholder="sally_live_…" autoComplete="off" style={{ padding: '11px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--text-primary)' }} />
-          </label>
-          <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 }}>
-            License server URL
-            <input value={licenseServerUrl} onChange={(event) => setLicenseServerUrl(event.target.value)} placeholder="https://usesally.com" style={{ padding: '11px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--text-primary)' }} />
           </label>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="submit" disabled={working} style={{ border: '1px solid rgba(250,204,21,0.45)', background: '#fcd34d', color: '#052e16', borderRadius: 12, padding: '10px 14px', fontWeight: 750 }}>Activate license</button>

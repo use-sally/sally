@@ -96,10 +96,10 @@ export async function readInstalledLicense(prisma: InstalledLicenseStore): Promi
   }
 }
 
-export async function activateInstalledLicense(prisma: InstalledLicenseStore, input: { licenseKey: string; instanceId?: string | null; instanceName?: string | null; appVersion?: string | null; fingerprint?: string | null; licenseServerUrl?: string | null }) {
+export async function activateInstalledLicense(prisma: InstalledLicenseStore, input: { licenseKey: string; instanceId?: string | null; instanceName?: string | null; appVersion?: string | null; fingerprint?: string | null }) {
   const licenseKey = input.licenseKey.trim()
   if (!licenseKey) throw new Error('licenseKey is required')
-  const licenseServerUrl = (input.licenseServerUrl?.trim() || getConfiguredLicenseServerUrl()).replace(/\/+$/, '')
+  const licenseServerUrl = getConfiguredLicenseServerUrl()
   const instanceId = normalizeInstanceId(input.instanceId)
   const response = await postLicenseServer('/api/licenses/activate', {
     licenseKey,
@@ -120,7 +120,7 @@ export async function activateInstalledLicense(prisma: InstalledLicenseStore, in
 export async function refreshInstalledLicense(prisma: InstalledLicenseStore) {
   const current = await prisma.installedLicense.findUnique({ where: { id: INSTALLED_LICENSE_ID } })
   if (!current?.certificate || !current.publicKey || !current.licenseId || !current.activationId || !current.instanceId) throw new Error('No installed license to refresh')
-  const licenseServerUrl = (current.licenseServerUrl || getConfiguredLicenseServerUrl()).replace(/\/+$/, '')
+  const licenseServerUrl = getConfiguredLicenseServerUrl()
   const response = await postLicenseServer('/api/licenses/refresh', {
     licenseId: current.licenseId,
     activationId: current.activationId,

@@ -1607,7 +1607,7 @@ const start = async () => {
 
     app.post('/license/activate', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
-      const body = request.body as { licenseKey?: string; instanceId?: string; instanceName?: string; appVersion?: string; fingerprint?: string; licenseServerUrl?: string }
+      const body = request.body as { licenseKey?: string; instanceId?: string; instanceName?: string; appVersion?: string; fingerprint?: string }
       try {
         const result = await activateInstalledLicense(prisma, body as any)
         const installedLicense = await readInstalledLicense(prisma)

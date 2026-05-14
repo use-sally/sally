@@ -60,7 +60,7 @@ export type InstalledLicenseSummary = EditionInfo & {
   }
 }
 export function getLicense(): Promise<InstalledLicenseSummary> { return getJson('/license') }
-export function activateLicense(payload: { licenseKey: string; licenseServerUrl?: string; instanceId?: string; instanceName?: string; fingerprint?: string }): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> {
+export function activateLicense(payload: { licenseKey: string; instanceId?: string; instanceName?: string; fingerprint?: string }): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> {
   return getJson('/license/activate', { method: 'POST', body: JSON.stringify(payload) })
 }
 export function refreshLicense(): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> { return getJson('/license/refresh', { method: 'POST', body: JSON.stringify({}) }) }
