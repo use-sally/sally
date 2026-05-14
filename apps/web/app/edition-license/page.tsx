@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { AppShell } from '../../components/app-shell'
-import { activateLicense, getLicense, refreshLicense, removeLicense, type InstalledLicenseSummary } from '../../lib/api'
+import { activateLicense, getLicense, removeLicense, type InstalledLicenseSummary } from '../../lib/api'
 
 function formatDate(value?: string | null) {
   if (!value) return '—'
@@ -62,21 +62,6 @@ export default function EditionLicensePage() {
     }
   }
 
-  const handleRefresh = async () => {
-    setWorking(true)
-    setError(null)
-    setNotice(null)
-    try {
-      await refreshLicense()
-      setNotice('License certificate refreshed.')
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'License refresh failed')
-    } finally {
-      setWorking(false)
-    }
-  }
-
   const handleRemove = async () => {
     if (!window.confirm('Remove the installed license and return this instance to Community?')) return
     setWorking(true)
@@ -96,7 +81,7 @@ export default function EditionLicensePage() {
   const editionLabel = license?.edition === 'ENTERPRISE' ? 'Enterprise' : 'Community'
 
   return (
-    <AppShell title="Edition/License" subtitle="Install, refresh, or remove this Sally instance license.">
+    <AppShell title="Edition/License" subtitle="Install or remove this Sally instance license.">
       <div style={{ display: 'grid', gap: 18 }}>
         <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -118,7 +103,7 @@ export default function EditionLicensePage() {
             <Field label="Customer email" value={license?.license?.customerEmail} />
             <Field label="Valid until" value={formatDate(license?.installed?.validUntil || license?.license?.validUntil)} />
             <Field label="Grace until" value={formatDate(license?.installed?.graceUntil || license?.license?.graceUntil)} />
-            <Field label="Last refresh" value={formatDate(license?.installed?.lastRefreshAt)} />
+            <Field label="Last checked" value={formatDate(license?.installed?.lastRefreshAt)} />
           </div>
         </section>
 
@@ -130,7 +115,6 @@ export default function EditionLicensePage() {
           </label>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="submit" disabled={working} style={{ border: '1px solid rgba(250,204,21,0.45)', background: '#fcd34d', color: '#052e16', borderRadius: 12, padding: '10px 14px', fontWeight: 750 }}>Activate license</button>
-            <button type="button" disabled={working || !license?.installed} onClick={handleRefresh} style={{ border: '1px solid var(--panel-border)', background: 'var(--form-bg)', color: 'var(--text-primary)', borderRadius: 12, padding: '10px 14px', fontWeight: 700 }}>Refresh certificate</button>
             <button type="button" disabled={working || !license?.installed} onClick={handleRemove} style={{ border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.08)', color: '#fecaca', borderRadius: 12, padding: '10px 14px', fontWeight: 700 }}>Remove license</button>
           </div>
         </form>

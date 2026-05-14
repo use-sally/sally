@@ -24,7 +24,7 @@ import { buildApprovalDecisionPatch, buildApprovalRequestPayload, buildBlockerPa
 import { sendEmailChangeConfirmationEmail, sendInviteEmail, sendNotificationEmail, sendPasswordResetEmail } from './mailer.js'
 import { appBuildTime, appGitSha, appVersion } from './version.js'
 import { getEditionInfo, requireFeature } from './edition.js'
-import { activateInstalledLicense, readInstalledLicense, refreshInstalledLicense, removeInstalledLicense } from './license-management.js'
+import { activateInstalledLicense, readInstalledLicense, readInstalledLicenseWithAutoRefresh, refreshInstalledLicense, removeInstalledLicense } from './license-management.js'
 
 function loadSimpleEnv(filePath: string) {
   if (!fs.existsSync(filePath)) return
@@ -1578,14 +1578,14 @@ const start = async () => {
 
     app.get('/health', async () => ({ ok: true, service: 'api', timestamp: new Date().toISOString() }))
     app.get('/edition', async () => {
-      const installedLicense = await readInstalledLicense(prisma)
+      const installedLicense = await readInstalledLicenseWithAutoRefresh(prisma)
       const edition = getEditionInfo({ installedLicense })
       return { ...edition, availableFeatures: edition.availableFeatures }
     })
 
     app.get('/license', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
-      const installedLicense = await readInstalledLicense(prisma)
+      const installedLicense = await readInstalledLicenseWithAutoRefresh(prisma)
       const edition = getEditionInfo({ installedLicense })
       const record = await prisma.installedLicense.findUnique({ where: { id: 'instance' } })
       return {
@@ -2690,7 +2690,7 @@ const start = async () => {
       }))
     })
 
-    const readInstalledLicenseForFeature = () => readInstalledLicense(prisma)
+    const readInstalledLicenseForFeature = () => readInstalledLicenseWithAutoRefresh(prisma)
 
     app.get('/audit-log', { preHandler: requireFeature('security.auditLog', readInstalledLicenseForFeature) }, async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })

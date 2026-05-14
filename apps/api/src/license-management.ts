@@ -82,8 +82,7 @@ async function postLicenseServer(path: string, payload: unknown, licenseServerUr
   return data
 }
 
-export async function readInstalledLicense(prisma: InstalledLicenseStore): Promise<InstalledLicenseInput> {
-  const record = await prisma.installedLicense.findUnique({ where: { id: INSTALLED_LICENSE_ID } })
+function toInstalledLicenseInput(record: InstalledLicenseRecord | null): InstalledLicenseInput {
   if (!record?.certificate || !record.publicKey) return null
   return {
     certificate: record.certificate,
@@ -93,6 +92,32 @@ export async function readInstalledLicense(prisma: InstalledLicenseStore): Promi
     licenseId: record.licenseId ?? null,
     instanceId: record.instanceId ?? null,
     lastRefreshAt: record.lastRefreshAt ?? null,
+  }
+}
+
+export async function readInstalledLicense(prisma: InstalledLicenseStore): Promise<InstalledLicenseInput> {
+  const record = await prisma.installedLicense.findUnique({ where: { id: INSTALLED_LICENSE_ID } })
+  return toInstalledLicenseInput(record)
+}
+
+const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000
+const AUTO_REFRESH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
+
+export async function readInstalledLicenseWithAutoRefresh(prisma: InstalledLicenseStore): Promise<InstalledLicenseInput> {
+  const record = await prisma.installedLicense.findUnique({ where: { id: INSTALLED_LICENSE_ID } })
+  if (!record?.certificate || !record.publicKey || !record.licenseId || !record.activationId || !record.instanceId) return toInstalledLicenseInput(record)
+
+  const now = Date.now()
+  const lastRefreshAt = record.lastRefreshAt ? new Date(record.lastRefreshAt).getTime() : 0
+  const validUntil = record.validUntil ? new Date(record.validUntil).getTime() : 0
+  const refreshDue = !lastRefreshAt || lastRefreshAt <= now - AUTO_REFRESH_INTERVAL_MS || !validUntil || validUntil <= now + AUTO_REFRESH_WINDOW_MS
+  if (!refreshDue) return toInstalledLicenseInput(record)
+
+  try {
+    const refreshed = await refreshInstalledLicense(prisma)
+    return toInstalledLicenseInput(refreshed.license)
+  } catch {
+    return toInstalledLicenseInput(record)
   }
 }
 
