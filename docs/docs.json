@@ -1,0 +1,175 @@
+{
+  "sourceRepository": "https://github.com/use-sally/sally",
+  "sourceBranch": "main",
+  "sourceRoot": "docs",
+  "sections": [
+    {
+      "id": "start",
+      "title": "Start here",
+      "items": [
+        {
+          "slug": "",
+          "source": "docs/index.md",
+          "title": "Sally documentation",
+          "description": "Canonical Sally documentation maintained in the GitHub repository."
+        },
+        {
+          "slug": "getting-started",
+          "source": "docs/ubuntu-debian-install.md",
+          "title": "Getting started",
+          "description": "Install Sally on Ubuntu or Debian."
+        },
+        {
+          "slug": "product-guide",
+          "source": "docs/product-guide.md",
+          "title": "Product guide",
+          "description": "How Sally works as a project management system for humans and agents."
+        },
+        {
+          "slug": "architecture",
+          "source": "docs/ARCHITECTURE.md",
+          "title": "Architecture",
+          "description": "Repository structure and architectural direction behind Sally."
+        }
+      ]
+    },
+    {
+      "id": "install-operate",
+      "title": "Install & operate",
+      "items": [
+        {
+          "slug": "install-modes",
+          "source": "docs/install-release.md",
+          "title": "Install modes",
+          "description": "Installer and release notes for Sally deployments."
+        },
+        {
+          "slug": "update",
+          "source": "docs/update-sally.md",
+          "title": "Update Sally",
+          "description": "The official update path for installer-managed Sally deployments."
+        },
+        {
+          "slug": "doctor",
+          "source": "docs/recovery.md",
+          "title": "Doctor & checks",
+          "description": "Health checks, backup, recovery, and troubleshooting notes."
+        },
+        {
+          "slug": "recovery",
+          "source": "docs/recovery.md",
+          "title": "Recovery",
+          "description": "Backup and recovery procedures for Sally."
+        },
+        {
+          "slug": "licensing",
+          "source": "LICENSING.md",
+          "title": "Licensing",
+          "description": "Sally Community and Enterprise licensing notes."
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "title": "API",
+      "items": [
+        {
+          "slug": "api",
+          "source": "docs/api.md",
+          "title": "API overview",
+          "description": "Sally API reference and integration notes."
+        },
+        {
+          "slug": "api-auth",
+          "source": "docs/auth.md",
+          "title": "Auth & workspace selection",
+          "description": "How Sally authentication and workspace selection work."
+        },
+        {
+          "slug": "api-projects-tasks",
+          "source": "docs/api.md",
+          "title": "Projects & tasks API",
+          "description": "Project and task API behavior."
+        },
+        {
+          "slug": "api-timesheets",
+          "source": "docs/api.md",
+          "title": "Timesheets & reporting API",
+          "description": "Timesheets and reporting behavior in the Sally API."
+        },
+        {
+          "slug": "tutorials",
+          "source": "docs/tutorials.md",
+          "title": "Tutorials",
+          "description": "Practical Sally walkthroughs and examples."
+        }
+      ]
+    },
+    {
+      "id": "mcp-agents",
+      "title": "MCP & agents",
+      "items": [
+        {
+          "slug": "mcp",
+          "source": "docs/mcp.md",
+          "title": "MCP overview",
+          "description": "Hosted and local MCP integration paths for Sally."
+        },
+        {
+          "slug": "mcp-hosted",
+          "source": "docs/mcp.md",
+          "title": "Hosted MCP quickstart",
+          "description": "The primary hosted MCP integration path for Sally."
+        },
+        {
+          "slug": "mcp-stdio",
+          "source": "docs/mcp.md",
+          "title": "Local stdio MCP",
+          "description": "The local stdio MCP wrapper for advanced or legacy use."
+        },
+        {
+          "slug": "connecting-hermes-agent",
+          "source": "docs/connecting-hermes-agent.md",
+          "title": "Connecting Hermes Agent",
+          "description": "Connect Hermes Agent to Sally."
+        },
+        {
+          "slug": "agent-workflow-framework",
+          "source": "docs/sally-hermes-agent-workflow-framework.md",
+          "title": "Agent workflow framework",
+          "description": "How Sally and Hermes coordinate agentic project work."
+        }
+      ]
+    },
+    {
+      "id": "usage",
+      "title": "Usage",
+      "items": [
+        {
+          "slug": "concepts",
+          "source": "docs/product-guide.md",
+          "title": "Concepts",
+          "description": "Core Sally concepts."
+        },
+        {
+          "slug": "usage-workspaces-projects",
+          "source": "docs/product-guide.md",
+          "title": "Workspaces & projects",
+          "description": "How humans use workspaces and projects in Sally."
+        },
+        {
+          "slug": "usage-tasks-timesheets",
+          "source": "docs/task-workflow.md",
+          "title": "Tasks & timesheets",
+          "description": "How humans work with tasks and timesheets in Sally."
+        },
+        {
+          "slug": "usage-keys-notifications",
+          "source": "docs/product-guide.md",
+          "title": "Keys & notifications",
+          "description": "User keys and notification concepts."
+        }
+      ]
+    }
+  ]
+}
