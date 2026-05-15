@@ -61,7 +61,7 @@ test('public help teaches first-time users that Sally supplies multi-runtime con
   assert.match(help, /Sally connector/i)
 })
 
-test('codex runtime keeps workspace sandboxing but enables local Sally API network access', async () => {
+test('codex runtime keeps workspace sandboxing but enables configured Sally API network access', async () => {
   const { getRuntimeDefinition } = await import('./runtime-registry.js')
   const argv = getRuntimeDefinition('codex').buildArgv({ prompt: 'inspect Sally' })
 

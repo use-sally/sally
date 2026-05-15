@@ -99,7 +99,7 @@ function buildAgentPrompt(args: AgentConnectArgs, job: QueuedAgentJob) {
   return `Sally assigned you an automation job.
 
 You are running as a local ${runtime.label} runtime connected through the Sally agent connector.
-Use live Sally state as authoritative. If Sally MCP points to a different instance, use the local Sally REST API from SALLY_API_BASE_URL and SALLY_API_KEY. Do not print or expose SALLY_API_KEY.
+Use live Sally state as authoritative. If Sally MCP points to a different instance, use the configured Sally REST API from SALLY_API_BASE_URL and SALLY_API_KEY. SALLY_API_BASE_URL may point to localhost for development or to a remote Sally instance in normal deployments. Do not print or expose SALLY_API_KEY.
 
 Job context:
 ${JSON.stringify({
