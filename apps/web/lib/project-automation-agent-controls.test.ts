@@ -113,6 +113,13 @@ test('project automation control success states use toast instead of inline mess
   assert.doesNotMatch(automationControlsSource, /\{message \? <div/)
 })
 
+test('project automation controls distinguish pending pairing from established connection', () => {
+  assert.match(automationControlsSource, /const pendingPairing = Boolean\(pairingCode\)/)
+  assert.match(automationControlsSource, /const connectionToggleOn = Boolean\(activeConnection\)/)
+  assert.doesNotMatch(automationControlsSource, /connectionToggleOn = Boolean\(activeConnection\) \|\| Boolean\(pairingCode\)/)
+  assert.match(automationControlsSource, /activeConnection \? `\$\{getAgentRuntimeOption\(activeConnection\.runtimeType\)\.label\} connected` : pendingPairing \? `\$\{getAgentRuntimeOption\(selectedRuntime\)\.label\} pairing pending` : `Connect \$\{getAgentRuntimeOption\(selectedRuntime\)\.label\}`/)
+})
+
 test('disconnecting a connected agent requires an implications modal before clearing work', () => {
   assert.match(automationControlsSource, /const \[disconnectModalOpen, setDisconnectModalOpen\] = useState\(false\)/)
   assert.match(automationControlsSource, /const hasActiveWorkflowWork = hasRunningWorkflowWork\(\{ jobs, runs \}\)/)

@@ -70,7 +70,8 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   const config = data?.config ?? null
   const connections = (data?.connections ?? []).filter((connection) => !connection.revokedAt && connection.status !== 'REVOKED')
   const activeConnection = connections[0] ?? null
-  const connectionToggleOn = Boolean(activeConnection) || Boolean(pairingCode)
+  const pendingPairing = Boolean(pairingCode)
+  const connectionToggleOn = Boolean(activeConnection)
   const workflowEnabled = config?.workflowEnabled ?? false
   const jobs = data?.jobs ?? []
   const runs = data?.runs ?? []
@@ -199,9 +200,9 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
       {connectorModal ? <AgentConnectorModal modal={connectorModal} onClose={() => setConnectorModal(null)} /> : null}
       {disconnectModalOpen && activeConnection ? <AgentDisconnectModal hasActiveWorkflowWork={hasActiveWorkflowWork} saving={saving} onCancel={() => setDisconnectModalOpen(false)} onConfirm={() => void handleDisconnectConfirmed()} /> : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: compact ? 'flex-end' : 'flex-start', alignItems: 'center' }}>
-        {!activeConnection && !pairingCode ? <AgentRuntimePicker value={selectedRuntime} disabled={!canManage || saving} onChange={setSelectedRuntime} /> : null}
+        {!activeConnection && !pendingPairing ? <AgentRuntimePicker value={selectedRuntime} disabled={!canManage || saving} onChange={setSelectedRuntime} /> : null}
         <button type="button" role="switch" aria-checked={connectionToggleOn} disabled={!canManage || saving} onClick={() => void handleRevokeConnection()} style={automationIslandControlStyle(connectionToggleOn, agentPrerequisiteHighlight)}>
-          {connectionToggleOn ? `${activeConnection ? getAgentRuntimeOption(activeConnection.runtimeType).label : getAgentRuntimeOption(selectedRuntime).label} connected` : `Connect ${getAgentRuntimeOption(selectedRuntime).label}`}
+          {activeConnection ? `${getAgentRuntimeOption(activeConnection.runtimeType).label} connected` : pendingPairing ? `${getAgentRuntimeOption(selectedRuntime).label} pairing pending` : `Connect ${getAgentRuntimeOption(selectedRuntime).label}`}
         </button>
         <button type="button" disabled={!canManage || starting || saving} onClick={() => void handleStartWorkflow()} style={automationIslandControlStyle(workflowControl.active)}>{workflowControl.label}</button>
       </div>
