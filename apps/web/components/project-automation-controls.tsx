@@ -131,7 +131,7 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
     setErrorMessage(null)
     try {
       const runtime = getAgentRuntimeOption(selectedRuntime)
-      const result = await createAgentPairingCode({ name: `${runtime.label} local worker`, runtimeType: runtime.id, ttlMinutes: 10 })
+      const result = await createAgentPairingCode({ projectId, name: `${runtime.label} project worker`, runtimeType: runtime.id, ttlMinutes: 10 })
       const commandInput = {
         runtime: runtime.id,
         pairingCode: result.pairingCode,

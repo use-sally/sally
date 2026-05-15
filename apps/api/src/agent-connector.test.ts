@@ -86,10 +86,10 @@ test('redacted connection summaries do not expose token hashes', () => {
   assert.equal(summary.tokenPrefix, 'sallyw_abc')
 })
 
-test('revoke connection clears queued and active workflow work in the workspace', () => {
+test('revoke connection clears queued and active workflow work scoped to the connection project when present', () => {
   assert.match(apiIndexSource, /const clearQueue = \(request\.body as \{ clearQueue\?: boolean \} \| null\)\?\.clearQueue !== false/)
-  assert.match(apiIndexSource, /if \(clearQueue\) \{[\s\S]*tx\.agentJob\.updateMany\(\{ where: \{ workspaceId: workspace\.id, status: \{ in: \[AgentJobStatus\.QUEUED, AgentJobStatus\.CLAIMED, AgentJobStatus\.RUNNING\] \} \}/)
-  assert.match(apiIndexSource, /tx\.agentRun\.updateMany\(\{ where: \{ workspaceId: workspace\.id, status: \{ in: \[AgentRunStatus\.QUEUED, AgentRunStatus\.RUNNING\] \} \}/)
-  assert.match(apiIndexSource, /payload: \{ connectionId, clearQueue, cancelledJobs: cancelledJobs\.count, cancelledRuns: cancelledRuns\.count \}/)
+  assert.match(apiIndexSource, /const activeWorkWhere = \{ workspaceId: workspace\.id, \.\.\.\(connection\.projectId \? \{ projectId: connection\.projectId \} : \{\}\), status: \{ in: \[AgentJobStatus\.QUEUED, AgentJobStatus\.CLAIMED, AgentJobStatus\.RUNNING\] \} \}/)
+  assert.match(apiIndexSource, /const activeRunWhere = \{ workspaceId: workspace\.id, \.\.\.\(connection\.projectId \? \{ projectId: connection\.projectId \} : \{\}\), status: \{ in: \[AgentRunStatus\.QUEUED, AgentRunStatus\.RUNNING\] \} \}/)
+  assert.match(apiIndexSource, /payload: \{ connectionId, projectId: connection\.projectId \?\? null, clearQueue, cancelledJobs: cancelledJobs\.count, cancelledRuns: cancelledRuns\.count \}/)
   assert.match(apiIndexSource, /return \{ ok: true, clearQueue, cancelledJobs: cancelledJobs\.count, cancelledRuns: cancelledRuns\.count \}/)
 })

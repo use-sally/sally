@@ -2234,7 +2234,12 @@ const start = async () => {
     app.post('/agent-connections/pairing-code', async (request, reply) => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
-      const body = request.body as { agentId?: string | null; name?: string | null; runtimeType?: string | null; ttlMinutes?: number | null }
+      const body = request.body as { projectId?: string | null; agentId?: string | null; name?: string | null; runtimeType?: string | null; ttlMinutes?: number | null }
+      const projectId = body.projectId?.trim() || null
+      if (projectId) {
+        const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null }, select: { id: true } })
+        if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
+      }
       const agentId = body.agentId?.trim() || null
       if (agentId) {
         const agent = await prisma.agentIdentity.findFirst({ where: { id: agentId, workspaceId: workspace.id, enabled: true } })
@@ -2244,13 +2249,14 @@ const start = async () => {
       const ttlMinutes = Math.min(Math.max(Number(body.ttlMinutes || 10), 1), 30)
       const pairing = await prisma.agentPairingCode.create({ data: {
         workspaceId: workspace.id,
+        projectId,
         agentId,
         codeHash: hashAgentWorkerToken(code),
         name: body.name?.trim() || 'Connected agent',
         runtimeType: normalizeRuntimeType(body.runtimeType),
         expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
       } })
-      await logActivity({ workspaceId: workspace.id, ...actorFromRequest(request), type: 'agent_connection.pairing_code.created', summary: 'Created agent pairing code', payload: { pairingId: pairing.id, agentId, runtimeType: pairing.runtimeType, expiresAt: pairing.expiresAt.toISOString() } })
+      await logActivity({ workspaceId: workspace.id, projectId, ...actorFromRequest(request), type: 'agent_connection.pairing_code.created', summary: 'Created agent pairing code', payload: { pairingId: pairing.id, projectId, agentId, runtimeType: pairing.runtimeType, expiresAt: pairing.expiresAt.toISOString() } })
       return { ok: true, pairingCode: code, expiresAt: pairing.expiresAt.toISOString(), pairingId: pairing.id }
     })
 
@@ -2275,6 +2281,7 @@ const start = async () => {
         })
         const created = await tx.agentConnection.create({ data: {
           workspaceId: pairing.workspaceId,
+          projectId: pairing.projectId,
           agentId: pairing.agentId,
           name: pairing.name,
           runtimeType: pairing.runtimeType,
@@ -2290,7 +2297,7 @@ const start = async () => {
         await tx.agentEventAck.create({ data: { workspaceId: pairing.workspaceId, connectionId: created.id, lastEventId: latestVisibleEvent?.id ?? null } })
         return created
       })
-      await emitAgentEvent({ workspaceId: connection.workspaceId, agentId: connection.agentId, type: 'connection.paired', payload: { connectionId: connection.id, runtimeType: connection.runtimeType } })
+      await emitAgentEvent({ workspaceId: connection.workspaceId, agentId: connection.agentId, type: 'connection.paired', payload: { connectionId: connection.id, projectId: connection.projectId ?? null, runtimeType: connection.runtimeType } })
       return { ok: true, token, connection: redactAgentConnection(connection as any) }
     })
 
@@ -2298,20 +2305,22 @@ const start = async () => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER]))) return
       const { connectionId } = request.params as { connectionId: string }
-      const connection = await prisma.agentConnection.findFirst({ where: { id: connectionId, workspaceId: workspace.id, revokedAt: null }, select: { id: true } })
+      const connection = await prisma.agentConnection.findFirst({ where: { id: connectionId, workspaceId: workspace.id, revokedAt: null }, select: { id: true, projectId: true } })
       if (!connection) return reply.code(404).send({ ok: false, error: 'Connection not found' })
       const clearQueue = (request.body as { clearQueue?: boolean } | null)?.clearQueue !== false
       const { cancelledJobs, cancelledRuns } = await prisma.$transaction(async (tx) => {
         let cancelledJobs = { count: 0 }
         let cancelledRuns = { count: 0 }
         if (clearQueue) {
-          cancelledJobs = await tx.agentJob.updateMany({ where: { workspaceId: workspace.id, status: { in: [AgentJobStatus.QUEUED, AgentJobStatus.CLAIMED, AgentJobStatus.RUNNING] } }, data: { status: AgentJobStatus.CANCELLED, finishedAt: new Date(), error: 'Cancelled because the connected agent was disconnected.' } })
-          cancelledRuns = await tx.agentRun.updateMany({ where: { workspaceId: workspace.id, status: { in: [AgentRunStatus.QUEUED, AgentRunStatus.RUNNING] } }, data: { status: AgentRunStatus.CANCELLED, finishedAt: new Date(), error: 'Cancelled because the connected agent was disconnected.' } })
+          const activeWorkWhere = { workspaceId: workspace.id, ...(connection.projectId ? { projectId: connection.projectId } : {}), status: { in: [AgentJobStatus.QUEUED, AgentJobStatus.CLAIMED, AgentJobStatus.RUNNING] } }
+          const activeRunWhere = { workspaceId: workspace.id, ...(connection.projectId ? { projectId: connection.projectId } : {}), status: { in: [AgentRunStatus.QUEUED, AgentRunStatus.RUNNING] } }
+          cancelledJobs = await tx.agentJob.updateMany({ where: activeWorkWhere, data: { status: AgentJobStatus.CANCELLED, finishedAt: new Date(), error: 'Cancelled because the connected agent was disconnected.' } })
+          cancelledRuns = await tx.agentRun.updateMany({ where: activeRunWhere, data: { status: AgentRunStatus.CANCELLED, finishedAt: new Date(), error: 'Cancelled because the connected agent was disconnected.' } })
         }
         await tx.agentConnection.delete({ where: { id: connection.id } })
         return { cancelledJobs, cancelledRuns }
       })
-      await emitAgentEvent({ workspaceId: workspace.id, type: 'connection.revoked', payload: { connectionId, clearQueue, cancelledJobs: cancelledJobs.count, cancelledRuns: cancelledRuns.count } })
+      await emitAgentEvent({ workspaceId: workspace.id, type: 'connection.revoked', payload: { connectionId, projectId: connection.projectId ?? null, clearQueue, cancelledJobs: cancelledJobs.count, cancelledRuns: cancelledRuns.count } })
       return { ok: true, clearQueue, cancelledJobs: cancelledJobs.count, cancelledRuns: cancelledRuns.count }
     })
 
@@ -2404,8 +2413,13 @@ const start = async () => {
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const query = request.query as { status?: string; projectId?: string; taskId?: string; role?: string }
       const where: any = { workspaceId: workspace.id }
+      const connection = (request as any).agentConnection as { projectId?: string | null } | undefined
+      if (connection?.projectId) where.projectId = connection.projectId
       if (query.status?.trim()) where.status = query.status.trim().toUpperCase()
-      if (query.projectId?.trim()) where.projectId = query.projectId.trim()
+      if (query.projectId?.trim()) {
+        if (connection?.projectId && query.projectId.trim() !== connection.projectId) return []
+        where.projectId = query.projectId.trim()
+      }
       if (query.taskId?.trim()) where.taskId = query.taskId.trim()
       if (query.role?.trim()) where.role = normalizeAgentRole(query.role)
       return prisma.agentJob.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100, include: { agent: true } })
@@ -2416,10 +2430,12 @@ const start = async () => {
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const account = (request as any).account as { id: string } | undefined
       const body = request.body as { projectId?: string | null; taskId?: string | null; agentId?: string | null; role?: string; mode?: string; triggerType?: string; workflowRunId?: string | null; workflowStep?: number | null; maxSteps?: number | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null; payload?: unknown }
+      const connection = (request as any).agentConnection as { projectId?: string | null } | undefined
       let role: string
       try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
       if (body.payload !== undefined) assertNoSecretLikeJson(body.payload, 'payload')
       const projectId = body.projectId?.trim() || null
+      if (connection?.projectId && projectId !== connection.projectId) return reply.code(403).send({ ok: false, error: 'Worker connection is scoped to a different project' })
       const taskId = body.taskId?.trim() || null
       if (projectId) {
         const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id } })
@@ -2473,13 +2489,14 @@ const start = async () => {
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const { jobId } = request.params as { jobId: string }
       const body = request.body as { agentId?: string | null }
+      const connection = (request as any).agentConnection as { projectId?: string | null } | undefined
       const agentId = body.agentId?.trim() || null
       if (agentId) {
         const agent = await prisma.agentIdentity.findFirst({ where: { id: agentId, workspaceId: workspace.id, enabled: true } })
         if (!agent) return reply.code(404).send({ ok: false, error: 'Agent not found or disabled' })
       }
       const claimed = await prisma.$transaction(async (tx) => {
-        const updated = await tx.agentJob.updateMany({ where: { id: jobId, workspaceId: workspace.id, status: AgentJobStatus.QUEUED }, data: { status: AgentJobStatus.CLAIMED, agentId, lockedAt: new Date(), startedAt: new Date() } })
+        const updated = await tx.agentJob.updateMany({ where: { id: jobId, workspaceId: workspace.id, ...(connection?.projectId ? { projectId: connection.projectId } : {}), status: AgentJobStatus.QUEUED }, data: { status: AgentJobStatus.CLAIMED, agentId, lockedAt: new Date(), startedAt: new Date() } })
         if (!updated.count) return null
         return tx.agentJob.findUnique({ where: { id: jobId }, include: { agent: true } })
       })
@@ -2528,6 +2545,8 @@ const start = async () => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const body = request.body as { projectId?: string | null; taskId?: string | null; jobId?: string | null; agentId?: string | null; role?: string; status?: string; triggerType?: string; provider?: string | null; model?: string | null; workflowRunId?: string | null; workflowStep?: number | null; workItemRefId?: string | null; workItemRef?: WorkItemRefBody | null; summary?: string | null; logUrl?: string | null; evidenceUrl?: string | null; metadata?: unknown }
+      const connection = (request as any).agentConnection as { projectId?: string | null } | undefined
+      if (connection?.projectId && body.projectId?.trim() !== connection.projectId) return reply.code(403).send({ ok: false, error: 'Worker connection is scoped to a different project' })
       let role: string
       try { role = normalizeAgentRole(body.role) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
       if (body.metadata !== undefined) assertNoSecretLikeJson(body.metadata, 'metadata')
@@ -3372,7 +3391,7 @@ const start = async () => {
         prisma.agentIdentity.findMany({ where: { workspaceId: workspace.id, enabled: true }, orderBy: [{ role: 'asc' }, { name: 'asc' }] }),
         prisma.agentJob.findMany({ where: { workspaceId: workspace.id, projectId }, include: { agent: true }, orderBy: { createdAt: 'desc' }, take: 20 }),
         prisma.agentRun.findMany({ where: { workspaceId: workspace.id, projectId }, include: { agent: true }, orderBy: { createdAt: 'desc' }, take: 20 }),
-        prisma.agentConnection.findMany({ where: { workspaceId: workspace.id, revokedAt: null }, orderBy: { updatedAt: 'desc' }, take: 20 }),
+        prisma.agentConnection.findMany({ where: { workspaceId: workspace.id, projectId, revokedAt: null }, orderBy: { updatedAt: 'desc' }, take: 20 }),
         prisma.blocker.findMany({ where: { workspaceId: workspace.id, projectId, status: 'OPEN' }, orderBy: { createdAt: 'desc' }, take: 20 }),
         prisma.approvalRequest.findMany({ where: { workspaceId: workspace.id, projectId, status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 20 }),
       ])

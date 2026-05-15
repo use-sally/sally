@@ -384,6 +384,7 @@ export type AgentIdentitySummary = {
 export type AgentConnectionSummary = {
   id: string
   workspaceId: string
+  projectId: string | null
   agentId: string | null
   name: string
   runtimeType: string

@@ -135,6 +135,7 @@ test('disconnecting a connected agent requires an implications modal before clea
 })
 
 test('agent connector instructions close automatically once an agent is connected', () => {
+  assert.match(automationControlsSource, /createAgentPairingCode\(\{ projectId, name: `\$\{runtime\.label\} project worker`, runtimeType: runtime\.id, ttlMinutes: 10 \}\)/)
   assert.match(automationControlsSource, /useEffect\(\(\) => \{\s*if \(activeConnection && connectorModal\) \{\s*setConnectorModal\(null\)\s*setPairingCode\(null\)\s*\}\s*\}, \[activeConnection, connectorModal\]\)/)
 })
 

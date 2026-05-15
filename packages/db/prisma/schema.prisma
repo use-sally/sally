@@ -260,9 +260,8 @@ model ActivityLog {
   @@index([taskId, createdAt])
 }
 
-
 model InstalledLicense {
-  id               String   @id @default("instance")
+  id               String    @id @default("instance")
   licenseServerUrl String
   certificate      String
   publicKey        String
@@ -273,8 +272,8 @@ model InstalledLicense {
   validUntil       DateTime?
   graceUntil       DateTime?
   lastRefreshAt    DateTime?
-  installedAt      DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  installedAt      DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model AuditLogEvent {
@@ -473,34 +472,36 @@ model User {
 }
 
 model Project {
-  id               String                   @id @default(cuid())
-  workspaceId      String
-  clientId         String?
-  name             String
-  slug             String
-  description      String?
-  taskCounter      Int                      @default(0)
-  archivedAt       DateTime?
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
-  workspace        Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  client           Client?                  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  statuses         TaskStatus[]
-  tasks            Task[]
-  labels           Label[]
-  timesheets       TimesheetEntry[]
-  memberships      ProjectMembership[]
-  activityLogs     ActivityLog[]
-  auditLogEvents   AuditLogEvent[]
-  notifications    Notification[]
-  dependencies     ProjectDependency[]      @relation("projectDependencies")
-  dependedOnBy     ProjectDependency[]      @relation("projectDependedOnBy")
-  automationConfig ProjectAutomationConfig?
-  agentJobs        AgentJob[]
-  agentRuns        AgentRun[]
-  workItemRefs     WorkItemRef[]
-  approvalRequests ApprovalRequest[]
-  blockers         Blocker[]
+  id                String                   @id @default(cuid())
+  workspaceId       String
+  clientId          String?
+  name              String
+  slug              String
+  description       String?
+  taskCounter       Int                      @default(0)
+  archivedAt        DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  client            Client?                  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  statuses          TaskStatus[]
+  tasks             Task[]
+  labels            Label[]
+  timesheets        TimesheetEntry[]
+  memberships       ProjectMembership[]
+  activityLogs      ActivityLog[]
+  auditLogEvents    AuditLogEvent[]
+  notifications     Notification[]
+  dependencies      ProjectDependency[]      @relation("projectDependencies")
+  dependedOnBy      ProjectDependency[]      @relation("projectDependedOnBy")
+  automationConfig  ProjectAutomationConfig?
+  agentConnections  AgentConnection[]
+  agentPairingCodes AgentPairingCode[]
+  agentJobs         AgentJob[]
+  agentRuns         AgentRun[]
+  workItemRefs      WorkItemRef[]
+  approvalRequests  ApprovalRequest[]
+  blockers          Blocker[]
 
   @@unique([workspaceId, slug])
 }
@@ -697,6 +698,7 @@ model AgentIdentity {
 model AgentConnection {
   id             String                @id @default(cuid())
   workspaceId    String
+  projectId      String?
   agentId        String?
   name           String
   runtimeType    String
@@ -712,10 +714,12 @@ model AgentConnection {
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
   workspace      Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project?              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   agent          AgentIdentity?        @relation(fields: [agentId], references: [id], onDelete: SetNull)
   eventAcks      AgentEventAck[]
 
   @@index([workspaceId, status, updatedAt])
+  @@index([workspaceId, projectId, status, updatedAt])
   @@index([workspaceId, agentId])
   @@index([revokedAt])
 }
@@ -723,6 +727,7 @@ model AgentConnection {
 model AgentPairingCode {
   id          String         @id @default(cuid())
   workspaceId String
+  projectId   String?
   agentId     String?
   codeHash    String         @unique
   name        String
@@ -731,9 +736,11 @@ model AgentPairingCode {
   usedAt      DateTime?
   createdAt   DateTime       @default(now())
   workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   agent       AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, expiresAt])
+  @@index([workspaceId, projectId, expiresAt])
   @@index([agentId])
 }
 
@@ -790,34 +797,34 @@ model ProjectAutomationConfig {
 }
 
 model AgentJob {
-  id            String         @id @default(cuid())
-  workspaceId   String
-  projectId     String?
-  taskId        String?
-  agentId       String?
-  createdById   String?
-  role          String
-  mode          String         @default("task")
-  status        AgentJobStatus @default(QUEUED)
-  triggerType   String
-  workflowRunId String?
-  workflowStep  Int?
-  maxSteps      Int?
-  workItemRefId String?
-  payload       Json?
-  lockedAt      DateTime?
-  startedAt     DateTime?
-  finishedAt    DateTime?
-  error         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project       Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task          Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  workItemRef   WorkItemRef?   @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
-  agent         AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  createdBy     Account?       @relation("AgentJobCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  runs          AgentRun[]
+  id             String          @id @default(cuid())
+  workspaceId    String
+  projectId      String?
+  taskId         String?
+  agentId        String?
+  createdById    String?
+  role           String
+  mode           String          @default("task")
+  status         AgentJobStatus  @default(QUEUED)
+  triggerType    String
+  workflowRunId  String?
+  workflowStep   Int?
+  maxSteps       Int?
+  workItemRefId  String?
+  payload        Json?
+  lockedAt       DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  error          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task           Task?           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workItemRef    WorkItemRef?    @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
+  agent          AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdBy      Account?        @relation("AgentJobCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  runs           AgentRun[]
   auditLogEvents AuditLogEvent[]
 
   @@index([workspaceId, status, createdAt])
@@ -828,14 +835,14 @@ model AgentJob {
 }
 
 model AgentRun {
-  id                String         @id @default(cuid())
+  id                String          @id @default(cuid())
   workspaceId       String
   projectId         String?
   taskId            String?
   jobId             String?
   agentId           String?
   role              String
-  status            AgentRunStatus @default(QUEUED)
+  status            AgentRunStatus  @default(QUEUED)
   triggerType       String
   provider          String?
   model             String?
@@ -850,14 +857,14 @@ model AgentRun {
   evidenceUrl       String?
   error             String?
   metadata          Json?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  workspace         Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project           Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task              Task?          @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  workItemRef       WorkItemRef?   @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
-  job               AgentJob?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  agent             AgentIdentity? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project           Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task              Task?           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workItemRef       WorkItemRef?    @relation(fields: [workItemRefId], references: [id], onDelete: SetNull)
+  job               AgentJob?       @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  agent             AgentIdentity?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
   auditLogEvents    AuditLogEvent[]
 
   @@index([workspaceId, status, createdAt])
