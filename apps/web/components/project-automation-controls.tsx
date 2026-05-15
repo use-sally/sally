@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { createAgentPairingCode, revokeAgentConnection, startProjectWorkflow, updateProjectAutomation } from '../lib/api'
 import { AGENT_RUNTIME_OPTIONS, getAgentRuntimeOption, type AgentRuntimeId } from '../lib/agent-runtimes'
@@ -12,10 +13,20 @@ import { pill } from './app-shell'
 type AutomationToast = { kind: 'message'; text: string }
 type AgentConnectorModalState = { pairingCode: string; pairingCommand: string; foregroundCommand: string; copied: boolean; expiresAt: string; runtime: AgentRuntimeId }
 
-type WorkflowControlState = { label: string; active: boolean }
+type WorkflowControlTone = 'neutral' | 'active' | 'success' | 'attention' | 'danger'
+type WorkflowControlAction = 'connect' | 'start' | 'open-automation'
+type WorkflowControlState = { label: string; active: boolean; tone: WorkflowControlTone; helper: string; action: WorkflowControlAction }
 
 function hasRunningWorkflowWork({ jobs, runs }: { jobs: any[]; runs: any[] }) {
   return jobs.some((job) => job.status === 'QUEUED' || job.status === 'CLAIMED' || job.status === 'RUNNING') || runs.some((run) => run.status === 'QUEUED' || run.status === 'RUNNING')
+}
+
+function latestByCreatedAt<T extends { createdAt?: string | null; updatedAt?: string | null }>(items: T[]) {
+  return [...items].sort((a, b) => new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime())[0] ?? null
+}
+
+function terminalWorkflowItemStatus(item: any) {
+  return typeof item?.status === 'string' ? item.status.toUpperCase() : ''
 }
 
 function workflowModeLabel(role: string | null | undefined) {
@@ -30,24 +41,31 @@ function workflowModeLabel(role: string | null | undefined) {
 }
 
 function getWorkflowControlState({ jobs, runs, blockers, approvalRequests, activeConnection, workflowEnabled, starting }: { jobs: any[]; runs: any[]; blockers: any[]; approvalRequests: any[]; activeConnection: any; workflowEnabled: boolean; starting: boolean }): WorkflowControlState {
-  if (starting) return { label: 'Starting workflow…', active: true }
-  if (!activeConnection) return { label: 'Connect agent first', active: false }
-  if (approvalRequests.some((approval) => approval.status === 'PENDING')) return { label: 'Waiting for approval', active: true }
-  if (blockers.some((blocker) => blocker.status === 'OPEN')) return { label: 'Waiting on blocker', active: true }
+  if (starting) return { label: 'Starting…', active: true, tone: 'active', action: 'open-automation', helper: 'Sally is starting the project workflow.' }
+  if (!activeConnection) return { label: 'Connect agent first', active: false, tone: 'neutral', action: 'connect', helper: 'Connect an agent to this project before Sally can plan or work.' }
+
+  const pendingApproval = latestByCreatedAt(approvalRequests.filter((approval) => approval.status === 'PENDING'))
+  if (pendingApproval) return { label: 'Approval needed', active: true, tone: 'attention', action: 'open-automation', helper: 'Sally is waiting for your decision before it can continue.' }
+
+  const openBlocker = latestByCreatedAt(blockers.filter((blocker) => blocker.status === 'OPEN'))
+  if (openBlocker) return { label: 'Blocked: needs input', active: true, tone: 'danger', action: 'open-automation', helper: openBlocker.requiredInput || openBlocker.summary || 'Sally cannot continue until this blocker is resolved.' }
 
   const activeJob = jobs.find((job) => job.status === 'RUNNING' || job.status === 'CLAIMED')
-  if (activeJob) return { label: `Running: ${workflowModeLabel(activeJob.role)}`, active: true }
+  if (activeJob) return { label: `${workflowModeLabel(activeJob.role)} project`, active: true, tone: 'active', action: 'open-automation', helper: 'Sally is working. You can keep using the project.' }
 
   const activeRun = runs.find((run) => run.status === 'RUNNING' || run.status === 'CLAIMED')
-  if (activeRun) return { label: `Running: ${workflowModeLabel(activeRun.role)}`, active: true }
+  if (activeRun) return { label: `${workflowModeLabel(activeRun.role)} project`, active: true, tone: 'active', action: 'open-automation', helper: 'Sally is working. You can keep using the project.' }
 
   const queuedJob = jobs.find((job) => job.status === 'QUEUED')
-  if (queuedJob) return { label: `Queued: ${workflowModeLabel(queuedJob.role)}`, active: true }
+  if (queuedJob) return { label: `Queued: ${workflowModeLabel(queuedJob.role)}`, active: true, tone: 'active', action: 'open-automation', helper: 'Sally has work queued and will continue when the connected agent picks it up.' }
 
-  const latestFailed = jobs.find((job) => job.status === 'FAILED' || job.status === 'TIMED_OUT')
-  if (latestFailed) return { label: 'Last workflow failed', active: false }
+  const latestTerminal = latestByCreatedAt([...jobs, ...runs].filter((item) => ['BLOCKED', 'FAILED', 'TIMED_OUT', 'CANCELLED', 'SUCCEEDED'].includes(terminalWorkflowItemStatus(item))))
+  const latestTerminalStatus = terminalWorkflowItemStatus(latestTerminal)
+  if (latestTerminalStatus === 'BLOCKED') return { label: 'Blocked: needs input', active: true, tone: 'danger', action: 'open-automation', helper: latestTerminal.error || 'Sally cannot continue until this workflow blocker is resolved.' }
+  if (['FAILED', 'TIMED_OUT', 'CANCELLED'].includes(latestTerminalStatus)) return { label: 'Workflow failed', active: false, tone: 'danger', action: 'open-automation', helper: latestTerminal.error || 'Sally hit an error. Review the last run, then retry planning.' }
+  if (latestTerminalStatus === 'SUCCEEDED' && workflowEnabled) return { label: 'All caught up', active: true, tone: 'success', action: 'start', helper: 'Sally has no queued, running, blocked, or waiting workflow work right now.' }
 
-  return { label: workflowEnabled ? 'Ready: workflow enabled' : 'Ready to plan', active: workflowEnabled }
+  return { label: workflowEnabled ? 'Plan again' : 'Start planning', active: workflowEnabled, tone: 'neutral', action: 'start', helper: workflowEnabled ? 'Sally is idle. Start planning again to look for new work.' : 'Sally will review the project, create or update tasks, then start work.' }
 }
 
 function formatTime(value: string | null | undefined) {
@@ -55,6 +73,7 @@ function formatTime(value: string | null | undefined) {
 }
 
 export function ProjectAutomationControls({ projectId, canManage, compact = false }: { projectId: string; canManage: boolean; compact?: boolean }) {
+  const router = useRouter()
   const qc = useQueryClient()
   const { data } = useProjectAutomationQuery(projectId)
   const [saving, setSaving] = useState(false)
@@ -122,6 +141,14 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
     } finally {
       setStarting(false)
     }
+  }
+
+  const handleWorkflowControlAction = async () => {
+    if (workflowControl.action === 'open-automation') {
+      router.replace(`/projects/${projectId}?view=automation`, { scroll: false })
+      return
+    }
+    await handleStartWorkflow()
   }
 
   const handleCreatePairingCode = async () => {
@@ -204,8 +231,9 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
         <button type="button" role="switch" aria-checked={connectionToggleOn} disabled={!canManage || saving} onClick={() => void handleRevokeConnection()} style={automationIslandControlStyle(connectionToggleOn, agentPrerequisiteHighlight)}>
           {activeConnection ? `${getAgentRuntimeOption(activeConnection.runtimeType).label} connected` : pendingPairing ? `${getAgentRuntimeOption(selectedRuntime).label} pairing pending` : `Connect ${getAgentRuntimeOption(selectedRuntime).label}`}
         </button>
-        <button type="button" disabled={!canManage || starting || saving} onClick={() => void handleStartWorkflow()} style={automationIslandControlStyle(workflowControl.active)}>{workflowControl.label}</button>
+        <button type="button" disabled={!canManage || starting || saving} onClick={() => void handleWorkflowControlAction()} style={automationIslandControlStyle(workflowControl.tone)}>{workflowControl.label}</button>
       </div>
+      {workflowControl.helper ? <div style={automationStatusHelperStyle(workflowControl.tone, compact)}>{workflowControl.helper}</div> : null}
       {errorMessage ? <div style={{ color: 'var(--danger-text)', fontSize: 12, textAlign: compact ? 'right' : 'left' }}>{errorMessage}</div> : null}
       {!canManage ? <div style={{ justifySelf: compact ? 'end' : 'start' }}><span style={pill('var(--form-bg)', 'var(--text-secondary)')}>read-only</span></div> : null}
     </div>
@@ -270,17 +298,43 @@ function AgentDisconnectModal({ hasActiveWorkflowWork, saving, onCancel, onConfi
   )
 }
 
-function automationIslandControlStyle(active: boolean, danger = false): CSSProperties {
+function workflowToneStyle(tone: WorkflowControlTone) {
+  if (tone === 'success') return { background: 'rgba(34, 197, 94, 0.12)', color: '#166534', border: '1px solid rgba(34, 197, 94, 0.38)', boxShadow: undefined }
+  if (tone === 'attention') return { background: 'rgba(245, 158, 11, 0.14)', color: '#92400e', border: '1px solid rgba(245, 158, 11, 0.42)', boxShadow: undefined }
+  if (tone === 'danger') return { background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.42)', boxShadow: '0 0 0 3px rgba(239, 68, 68, 0.12)' }
+  if (tone === 'active') return { background: 'rgba(59, 130, 246, 0.12)', color: 'var(--text-primary)', border: '1px solid rgba(59, 130, 246, 0.42)', boxShadow: undefined }
+  return { background: 'var(--form-bg)', color: 'var(--text-secondary)', border: '1px solid var(--form-border)', boxShadow: undefined }
+}
+
+function automationIslandControlStyle(activeOrTone: boolean | WorkflowControlTone, danger = false): CSSProperties {
+  const tone = typeof activeOrTone === 'string' ? activeOrTone : activeOrTone ? 'success' : 'neutral'
+  const toneStyle = workflowToneStyle(tone)
   return {
     textDecoration: 'none',
     padding: '10px 14px',
     borderRadius: 12,
     fontWeight: 400,
-    background: active ? 'rgba(16, 185, 129, 0.10)' : 'var(--form-bg)',
-    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-    border: danger ? '1px solid var(--danger-text)' : active ? '1px solid var(--form-border-focus)' : '1px solid var(--form-border)',
-    boxShadow: danger ? '0 0 0 3px rgba(239, 68, 68, 0.18), 0 10px 24px rgba(239, 68, 68, 0.18)' : undefined,
+    background: danger ? 'var(--form-bg)' : toneStyle.background,
+    color: danger ? 'var(--danger-text)' : toneStyle.color,
+    border: danger ? '1px solid var(--danger-text)' : toneStyle.border,
+    boxShadow: danger ? '0 0 0 3px rgba(239, 68, 68, 0.18), 0 10px 24px rgba(239, 68, 68, 0.18)' : toneStyle.boxShadow,
     cursor: 'pointer',
+  }
+}
+
+function automationStatusHelperStyle(tone: WorkflowControlTone, compact: boolean): CSSProperties {
+  const toneStyle = workflowToneStyle(tone)
+  return {
+    justifySelf: compact ? 'end' : 'start',
+    maxWidth: 520,
+    border: tone === 'neutral' ? 'none' : toneStyle.border,
+    borderRadius: 12,
+    padding: tone === 'neutral' ? '0 2px' : '8px 10px',
+    background: tone === 'neutral' ? 'transparent' : toneStyle.background,
+    color: tone === 'neutral' ? 'var(--text-muted)' : toneStyle.color,
+    fontSize: 12,
+    lineHeight: 1.35,
+    textAlign: compact ? 'right' : 'left',
   }
 }
 
