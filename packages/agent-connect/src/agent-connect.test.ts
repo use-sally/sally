@@ -61,6 +61,22 @@ test('public help teaches first-time users that Sally supplies multi-runtime con
   assert.match(help, /Sally connector/i)
 })
 
+test('codex runtime keeps workspace sandboxing but enables local Sally API network access', async () => {
+  const { getRuntimeDefinition } = await import('./runtime-registry.js')
+  const argv = getRuntimeDefinition('codex').buildArgv({ prompt: 'inspect Sally' })
+
+  assert.deepEqual(argv.slice(0, 6), [
+    'exec',
+    '--skip-git-repo-check',
+    '--sandbox',
+    'workspace-write',
+    '-c',
+    'sandbox_workspace_write.network_access=true',
+  ])
+  assert.equal(argv.at(-1), 'inspect Sally')
+  assert.doesNotMatch(argv.join(' '), /danger-full-access/)
+})
+
 test('unsupported runtimes fail before doing any Sally or agent work', async () => {
   const { parseAgentConnectArgs } = await import('./cli-options.js')
 

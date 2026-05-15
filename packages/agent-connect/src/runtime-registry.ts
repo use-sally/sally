@@ -60,7 +60,15 @@ export const AGENT_RUNTIME_DEFINITIONS: Record<SupportedAgentRuntime, RuntimeDef
     envCapabilities: 'SALLY_CODEX_CAPABILITIES',
     envTimeoutMs: 'SALLY_CODEX_TIMEOUT_MS',
     availabilityArgs: ['--version'],
-    buildArgv: ({ prompt }) => ['exec', '--skip-git-repo-check', prompt],
+    buildArgv: ({ prompt }) => [
+      'exec',
+      '--skip-git-repo-check',
+      '--sandbox',
+      'workspace-write',
+      '-c',
+      'sandbox_workspace_write.network_access=true',
+      prompt,
+    ],
   },
   pi: {
     id: 'pi',
