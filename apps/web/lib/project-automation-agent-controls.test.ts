@@ -29,6 +29,7 @@ test('project automation builds public npx connector commands for supported agen
   })
 
   assert.equal(command, 'npx sally-agent-connect hermes --pairing-code ABCD-EFGH --base-url https://api.sally.example --workspace-id ws_123 --workspace-slug acme')
+  assert.equal(buildAgentNpxConnectCommand({ runtime: 'hermes', pairingCode: 'ABCD-EFGH', background: true }), 'npx sally-agent-connect hermes --pairing-code ABCD-EFGH --background')
   assert.equal(buildAgentNpxConnectCommand({ runtime: 'codex', pairingCode: 'CODEX' }), 'npx sally-agent-connect codex --pairing-code CODEX')
   assert.equal(buildAgentNpxConnectCommand({ runtime: 'pi', pairingCode: 'PI' }), 'npx sally-agent-connect pi --pairing-code PI')
   assert.equal(buildAgentNpxConnectCommand({ runtime: 'openclaw', pairingCode: 'CLAW' }), 'npx sally-agent-connect openclaw --pairing-code CLAW')
@@ -132,12 +133,15 @@ test('agent connector instructions close automatically once an agent is connecte
 
 test('agent connector instructions render in a focus modal instead of a toast', () => {
   assert.match(automationControlsSource, /const \[connectorModal, setConnectorModal\] = useState<AgentConnectorModalState \| null>\(null\)/)
-  assert.match(automationControlsSource, /setConnectorModal\(\{\s*pairingCode: result\.pairingCode,[\s\S]*pairingCommand: command,[\s\S]*copied,[\s\S]*expiresAt: result\.expiresAt,[\s\S]*\}\)/)
+  assert.match(automationControlsSource, /pairingCommand: command,[\s\S]*foregroundCommand,[\s\S]*copied,/)
   assert.match(automationControlsSource, /function AgentConnectorModal/)
   assert.match(automationControlsSource, /role="dialog" aria-modal="true"/)
   assert.match(automationControlsSource, /data-agent-connector-modal="true"/)
   assert.match(automationControlsSource, /\{getAgentRuntimeOption\(modal\.runtime\)\.label\} connection instructions/)
   assert.match(automationControlsSource, /<pre style=\{modalCommandBlock\}><code>\{modal\.pairingCommand\}<\/code><\/pre>/)
+  assert.match(automationControlsSource, /Background runner/)
+  assert.match(automationControlsSource, /Debug\/foreground mode:/)
+  assert.match(automationControlsSource, /modal\.foregroundCommand/)
   assert.doesNotMatch(automationControlsSource, /kind: 'connector'/)
   assert.doesNotMatch(automationControlsSource, /connectorToastStyle/)
   assert.doesNotMatch(automationControlsSource, /toastCommandBlock/)

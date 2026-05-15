@@ -10,7 +10,7 @@ import { qk, useProjectAutomationQuery } from '../lib/query'
 import { pill } from './app-shell'
 
 type AutomationToast = { kind: 'message'; text: string }
-type AgentConnectorModalState = { pairingCode: string; pairingCommand: string; copied: boolean; expiresAt: string; runtime: AgentRuntimeId }
+type AgentConnectorModalState = { pairingCode: string; pairingCommand: string; foregroundCommand: string; copied: boolean; expiresAt: string; runtime: AgentRuntimeId }
 
 type WorkflowControlState = { label: string; active: boolean }
 
@@ -131,18 +131,21 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
     try {
       const runtime = getAgentRuntimeOption(selectedRuntime)
       const result = await createAgentPairingCode({ name: `${runtime.label} local worker`, runtimeType: runtime.id, ttlMinutes: 10 })
-      const command = buildAgentNpxConnectCommand({
+      const commandInput = {
         runtime: runtime.id,
         pairingCode: result.pairingCode,
         apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || undefined,
         workspaceId: process.env.NEXT_PUBLIC_WORKSPACE_ID || undefined,
         workspaceSlug: process.env.NEXT_PUBLIC_WORKSPACE_SLUG || undefined,
-      })
+      }
+      const command = buildAgentNpxConnectCommand({ ...commandInput, background: true })
+      const foregroundCommand = buildAgentNpxConnectCommand(commandInput)
       const copied = await copyAgentConnectCommandToClipboard(command, typeof navigator === 'undefined' ? null : navigator.clipboard)
       setPairingCode({ code: result.pairingCode, expiresAt: result.expiresAt })
       setConnectorModal({
         pairingCode: result.pairingCode,
         pairingCommand: command,
+        foregroundCommand,
         copied,
         expiresAt: result.expiresAt,
         runtime: runtime.id,
@@ -228,11 +231,14 @@ function AgentConnectorModal({ modal, onClose }: { modal: AgentConnectorModalSta
         <div style={{ display: 'grid', gap: 10 }}>
           <div id="agent-connector-title" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{getAgentRuntimeOption(modal.runtime).label} connection instructions</div>
           <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            {modal.copied ? 'Connector command copied to clipboard.' : `Copy this connector command and run it where ${getAgentRuntimeOption(modal.runtime).label} is installed.`}
+            {modal.copied ? 'Background connector command copied to clipboard.' : `Copy this connector command and run it where ${getAgentRuntimeOption(modal.runtime).label} is installed.`}
           </div>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Pairing code: <code>{modal.pairingCode}</code></div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Expires {formatTime(modal.expiresAt)}. Run this where {getAgentRuntimeOption(modal.runtime).label} is installed.</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Expires {formatTime(modal.expiresAt)}. The default command starts a detached runner and writes pid/log files under <code>~/.sally</code>.</div>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 13 }}>Background runner</div>
           <pre style={modalCommandBlock}><code>{modal.pairingCommand}</code></pre>
+          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Debug/foreground mode:</div>
+          <pre style={modalCommandBlock}><code>{modal.foregroundCommand}</code></pre>
         </div>
       </div>
     </div>

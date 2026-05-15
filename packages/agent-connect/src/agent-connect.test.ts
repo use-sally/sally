@@ -34,14 +34,28 @@ test('public runtime commands parse npx-style runtime subcommands and pairing fl
   assert.equal(parsed.apiBaseUrl, 'https://sally.example.com')
   assert.equal(parsed.workspaceSlug, 'acme')
   assert.equal(parsed.once, true)
+  assert.equal(parsed.background, false)
   assert.equal(parsed.tokenFile, '/tmp/sally-home/.sally/hermes-worker-token')
   assert.equal(parsed.cursorFile, '/tmp/sally-home/.sally/hermes-worker-cursor')
+  assert.equal(parsed.pidFile, '/tmp/sally-home/.sally/hermes-worker.pid')
+  assert.equal(parsed.logFile, '/tmp/sally-home/.sally/hermes-worker.log')
 
   const codex = parseAgentConnectArgs(['codex', '--pairing-code', 'CODEX-PAIR', '--once'], { HOME: '/tmp/sally-home' })
   assert.equal(codex.runtime, 'codex')
   assert.equal(codex.runtimeCommand, 'codex')
   assert.equal(codex.workerName, 'codex-local-worker')
   assert.equal(codex.tokenFile, '/tmp/sally-home/.sally/codex-worker-token')
+
+  const background = parseAgentConnectArgs([
+    'codex',
+    '--pairing-code', 'CODEX-PAIR',
+    '--background',
+    '--pid-file', '/tmp/codex.pid',
+    '--log-file', '/tmp/codex.log',
+  ], { HOME: '/tmp/sally-home' })
+  assert.equal(background.background, true)
+  assert.equal(background.pidFile, '/tmp/codex.pid')
+  assert.equal(background.logFile, '/tmp/codex.log')
 
   const claude = parseAgentConnectArgs(['claude-code', '--pairing-code', 'CLAUDE-PAIR', '--claude-command', 'claude'], { HOME: '/tmp/sally-home' })
   assert.equal(claude.runtime, 'claude-code')
@@ -101,6 +115,20 @@ test('pairing code takes precedence over a stale token file', async () => {
     workerToken: 'sallyw_existing',
     shouldPair: false,
   })
+})
+
+test('connector supports detached background mode and exits when Sally revokes the connection', () => {
+  const cliSource = fs.readFileSync(path.join(packageRoot, 'src/cli.ts'), 'utf8')
+  const workerSource = fs.readFileSync(path.join(packageRoot, 'src/hermes-worker.ts'), 'utf8')
+
+  assert.match(cliSource, /spawn\(process\.execPath, \[cliPath, \.\.\.withoutBackgroundFlag\(argv\)\]/)
+  assert.match(cliSource, /detached:\s*true/)
+  assert.match(cliSource, /fs\.writeFileSync\(args\.pidFile/)
+  assert.match(workerSource, /class SallyConnectorAuthError extends Error/)
+  assert.match(workerSource, /res\.status === 401 \|\| res\.status === 403/)
+  assert.match(workerSource, /fs\.unlinkSync\(args\.tokenFile\)/)
+  assert.match(workerSource, /fs\.unlinkSync\(args\.pidFile\)/)
+  assert.match(workerSource, /connection was revoked or the worker token is no longer valid/)
 })
 
 test('published CLI is standalone and does not depend on the Sally monorepo api package', () => {

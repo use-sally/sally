@@ -15,8 +15,10 @@ export function buildAgentNpxConnectCommand(input: {
   apiBaseUrl?: string | null
   workspaceId?: string | null
   workspaceSlug?: string | null
+  background?: boolean
 }) {
   const parts = ['npx', 'sally-agent-connect', input.runtime, '--pairing-code', input.pairingCode]
+  if (input.background) parts.push('--background')
   if (input.apiBaseUrl) parts.push('--base-url', input.apiBaseUrl)
   if (input.workspaceId) parts.push('--workspace-id', input.workspaceId)
   if (input.workspaceSlug) parts.push('--workspace-slug', input.workspaceSlug)

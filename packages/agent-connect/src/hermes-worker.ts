@@ -125,6 +125,17 @@ Expected behavior:
 - Final answer should be concise and operational.`
 }
 
+class SallyConnectorAuthError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SallyConnectorAuthError'
+  }
+}
+
+function isConnectorAuthError(err: unknown) {
+  return err instanceof SallyConnectorAuthError || (err instanceof Error && err.name === 'SallyConnectorAuthError')
+}
+
 class SallyWorkerClient {
   constructor(private readonly options: WorkerClientOptions) {}
 
@@ -142,7 +153,11 @@ class SallyWorkerClient {
     })
     const text = await res.text()
     const parsed = safeJsonParse(text)
-    if (!res.ok) throw new Error(`${method} ${route} failed with ${res.status}: ${redactSecrets(text).slice(0, 500)}`)
+    if (!res.ok) {
+      const message = `${method} ${route} failed with ${res.status}: ${redactSecrets(text).slice(0, 500)}`
+      if (res.status === 401 || res.status === 403) throw new SallyConnectorAuthError(message)
+      throw new Error(message)
+    }
     return parsed
   }
 }
@@ -300,6 +315,8 @@ export async function runHermesConnector(args: AgentConnectArgs) {
     apiBaseUrl: args.apiBaseUrl,
     tokenFile: args.tokenFile,
     cursorFile: args.cursorFile,
+    pidFile: args.pidFile,
+    logFile: args.logFile,
     connectionId,
     workerToken: '[REDACTED]',
   }, null, 2))
@@ -309,6 +326,12 @@ export async function runHermesConnector(args: AgentConnectArgs) {
       const result = await runOneWorkerIteration({ args, client, workerToken })
       console.log(JSON.stringify(result))
     } catch (err) {
+      if (isConnectorAuthError(err)) {
+        try { if (fs.existsSync(args.tokenFile)) fs.unlinkSync(args.tokenFile) } catch {}
+        try { if (fs.existsSync(args.pidFile)) fs.unlinkSync(args.pidFile) } catch {}
+        console.error(`Sally agent connector stopped: connection was revoked or the worker token is no longer valid. ${err instanceof Error ? err.message : ''}`.trim())
+        return 0
+      }
       console.error(err instanceof Error ? err.message : err)
       if (args.once) return 1
     }

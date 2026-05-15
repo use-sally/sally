@@ -16,6 +16,9 @@ export type AgentConnectArgs = {
   capabilities?: string
   timeoutMs?: string
   once: boolean
+  background: boolean
+  pidFile: string
+  logFile: string
   installService: boolean
 }
 
@@ -55,6 +58,9 @@ Common options:
   --runtime-command <CMD>   Override selected agent executable
   --runtime-profile <NAME>  Optional selected-agent profile
   --once                    Process one event/job and exit
+  --background              Start the connector detached, write pid/log files, then return
+  --pid-file <PATH>         Background pid file. Default: ~/.sally/<runtime>-worker.pid
+  --log-file <PATH>         Background log file. Default: ~/.sally/<runtime>-worker.log
   --token-file <PATH>       Worker token file. Default: ~/.sally/<runtime>-worker-token
   --cursor-file <PATH>      Event cursor file. Default: ~/.sally/<runtime>-worker-cursor
 
@@ -76,6 +82,7 @@ export function parseAgentConnectArgs(argv: string[], env: Record<string, string
 
   const definition = getRuntimeDefinition(runtimeArg)
   const home = env.HOME || process.cwd()
+  const defaultStateDir = `${home}/.sally`
   const runtimeProfile = readFlag(argv, '--runtime-profile') || (definition.profileFlag ? readFlag(argv, definition.profileFlag) : undefined) || (definition.envProfile ? env[definition.envProfile] : undefined)
   return {
     runtime: runtimeArg,
@@ -83,14 +90,17 @@ export function parseAgentConnectArgs(argv: string[], env: Record<string, string
     apiBaseUrl: readFlag(argv, '--base-url') || env.SALLY_API_BASE_URL || 'http://localhost:4000',
     workspaceId: readFlag(argv, '--workspace-id') || env.SALLY_WORKSPACE_ID,
     workspaceSlug: readFlag(argv, '--workspace-slug') || env.SALLY_WORKSPACE_SLUG || 'release-validation',
-    tokenFile: readFlag(argv, '--token-file') || env.SALLY_WORKER_TOKEN_FILE || `${home}/.sally/${definition.defaultTokenFileName}`,
-    cursorFile: readFlag(argv, '--cursor-file') || env.SALLY_WORKER_CURSOR_FILE || `${home}/.sally/${definition.defaultCursorFileName}`,
+    tokenFile: readFlag(argv, '--token-file') || env.SALLY_WORKER_TOKEN_FILE || `${defaultStateDir}/${definition.defaultTokenFileName}`,
+    cursorFile: readFlag(argv, '--cursor-file') || env.SALLY_WORKER_CURSOR_FILE || `${defaultStateDir}/${definition.defaultCursorFileName}`,
     workerName: readFlag(argv, '--name') || env.SALLY_WORKER_NAME || definition.defaultWorkerName,
     runtimeCommand: readFlag(argv, '--runtime-command') || readFlag(argv, definition.commandFlag) || env.SALLY_RUNTIME_COMMAND || env[definition.envCommand] || definition.defaultCommand,
     runtimeProfile,
     capabilities: readFlag(argv, '--capabilities') || env.SALLY_RUNTIME_CAPABILITIES || env[definition.envCapabilities],
     timeoutMs: readFlag(argv, '--timeout-ms') || env.SALLY_RUNTIME_TIMEOUT_MS || env[definition.envTimeoutMs],
     once: hasFlag(argv, '--once') || env.SALLY_WORKER_ONCE === '1',
+    background: hasFlag(argv, '--background') || env.SALLY_WORKER_BACKGROUND === '1',
+    pidFile: readFlag(argv, '--pid-file') || env.SALLY_WORKER_PID_FILE || `${defaultStateDir}/${runtimeArg}-worker.pid`,
+    logFile: readFlag(argv, '--log-file') || env.SALLY_WORKER_LOG_FILE || `${defaultStateDir}/${runtimeArg}-worker.log`,
     installService: hasFlag(argv, 'install-service') || hasFlag(argv, '--install-service'),
   }
 }
@@ -110,6 +120,9 @@ export function toHermesConnectorArgs(args: AgentConnectArgs) {
   if (args.runtimeProfile) result.push(definition.profileFlag || '--runtime-profile', args.runtimeProfile)
   if (args.capabilities) result.push('--capabilities', args.capabilities)
   if (args.timeoutMs) result.push('--timeout-ms', args.timeoutMs)
+  if (args.background) result.push('--background')
+  if (args.pidFile) result.push('--pid-file', args.pidFile)
+  if (args.logFile) result.push('--log-file', args.logFile)
   if (args.once) result.push('--once')
   return result
 }
