@@ -522,6 +522,8 @@ export type McpKey = {
   id: string
   label: string
   prefix: string
+  scopes: string[]
+  expiresAt: string | null
   createdAt: string
   lastUsedAt: string | null
   revokedAt: string | null

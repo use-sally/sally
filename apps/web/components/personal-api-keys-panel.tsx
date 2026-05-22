@@ -13,6 +13,8 @@ type KeyItem = {
   id: string
   label: string
   prefix: string
+  scopes: string[]
+  expiresAt: string | null
   createdAt: string
   lastUsedAt: string | null
   revokedAt: string | null
@@ -24,12 +26,26 @@ type McpKeyItem = KeyItem & {
   workspaceName: string | null
 }
 
+function formatKeyMeta(key: KeyItem, extra = '') {
+  const expires = key.expiresAt ? ` · expires ${new Date(key.expiresAt).toLocaleString()}` : ' · no expiry'
+  const scopes = key.scopes?.length ? ` · scopes ${key.scopes.join(', ')}` : ''
+  return `${key.prefix}… · created ${new Date(key.createdAt).toLocaleString()}${key.lastUsedAt ? ` · last used ${new Date(key.lastUsedAt).toLocaleString()}` : ''}${expires}${scopes}${extra}${key.revokedAt ? ' · revoked' : ''}`
+}
+
+function toggleScope(current: string[], scope: string) {
+  return current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope]
+}
+
 export function PersonalApiKeysPanel() {
   const [apiKeys, setApiKeys] = useState<KeyItem[]>([])
   const [mcpKeys, setMcpKeys] = useState<McpKeyItem[]>([])
   const [memberships, setMemberships] = useState<Membership[]>([])
   const [apiKeyLabel, setApiKeyLabel] = useState('')
+  const [apiKeyExpiresAt, setApiKeyExpiresAt] = useState('')
+  const [apiKeyScopes, setApiKeyScopes] = useState<string[]>(['read', 'write'])
   const [mcpKeyLabel, setMcpKeyLabel] = useState('')
+  const [mcpKeyExpiresAt, setMcpKeyExpiresAt] = useState('')
+  const [mcpKeyScopes, setMcpKeyScopes] = useState<string[]>(['read', 'write', 'mcp'])
   const [mcpWorkspaceId, setMcpWorkspaceId] = useState<string>('')
   const [apiKeySecret, setApiKeySecret] = useState<string | null>(null)
   const [mcpKeySecret, setMcpKeySecret] = useState<string | null>(null)
@@ -113,25 +129,44 @@ export function PersonalApiKeysPanel() {
         loading={loading}
         error={error}
         beforeForm={
-          <label style={{ display: 'grid', gap: 6, minWidth: 260, flex: 1 }}>
-            <span style={fieldLabel}>Workspace restriction</span>
-            <select value={mcpWorkspaceId} onChange={(event) => setMcpWorkspaceId(event.target.value)} style={inputStyle}>
-              <option value="">All accessible workspaces</option>
-              {memberships.map((membership) => (
-                <option key={membership.workspaceId} value={membership.workspaceId}>{membership.workspaceName}</option>
-              ))}
-            </select>
-            <span style={{ ...labelText, fontWeight: 500 }}>
-              {restrictedWorkspace
-                ? `This key will only work inside ${restrictedWorkspace.workspaceName}.`
-                : 'Leave this open if the client needs access to every workspace your Sally user can reach.'}
-            </span>
-          </label>
+          <>
+            <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
+              <span style={fieldLabel}>Expires at</span>
+              <input type="datetime-local" value={mcpKeyExpiresAt} onChange={(event) => setMcpKeyExpiresAt(event.target.value)} style={inputStyle} />
+              <span style={{ ...labelText, fontWeight: 500 }}>Optional. Enterprise policy should prefer expiring MCP keys.</span>
+            </label>
+            <div style={{ display: 'grid', gap: 6, minWidth: 220 }}>
+              <span style={fieldLabel}>Scopes</span>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['read', 'write', 'mcp'].map((scope) => (
+                  <label key={scope} style={scopePill}>
+                    <input type="checkbox" checked={mcpKeyScopes.includes(scope)} onChange={() => setMcpKeyScopes((current) => toggleScope(current, scope))} />
+                    {scope}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label style={{ display: 'grid', gap: 6, minWidth: 260, flex: 1 }}>
+              <span style={fieldLabel}>Workspace restriction</span>
+              <select value={mcpWorkspaceId} onChange={(event) => setMcpWorkspaceId(event.target.value)} style={inputStyle}>
+                <option value="">All accessible workspaces</option>
+                {memberships.map((membership) => (
+                  <option key={membership.workspaceId} value={membership.workspaceId}>{membership.workspaceName}</option>
+                ))}
+              </select>
+              <span style={{ ...labelText, fontWeight: 500 }}>
+                {restrictedWorkspace
+                  ? `This key will only work inside ${restrictedWorkspace.workspaceName}.`
+                  : 'Leave this open if the client needs access to every workspace your Sally user can reach.'}
+              </span>
+            </label>
+          </>
         }
         onCreate={async () => {
-          const created = await createMcpKey({ label: mcpKeyLabel.trim(), workspaceId: mcpWorkspaceId || null })
+          const created = await createMcpKey({ label: mcpKeyLabel.trim(), workspaceId: mcpWorkspaceId || null, scopes: mcpKeyScopes, expiresAt: mcpKeyExpiresAt ? new Date(mcpKeyExpiresAt).toISOString() : null })
           setMcpKeySecret(created.key)
           setMcpKeyLabel('')
+          setMcpKeyExpiresAt('')
           await loadKeys()
         }}
         onCopy={() => mcpKeySecret ? void copyValue(mcpKeySecret, 'mcp') : undefined}
@@ -139,7 +174,7 @@ export function PersonalApiKeysPanel() {
         secretTitle="New hosted MCP key"
         placeholder="e.g. Claude hosted MCP, OpenClaw"
         items={mcpKeys}
-        renderMeta={(key) => `${key.prefix}… · created ${new Date(key.createdAt).toLocaleString()}${key.lastUsedAt ? ` · last used ${new Date(key.lastUsedAt).toLocaleString()}` : ''}${key.workspaceName ? ` · restricted to ${key.workspaceName}` : ' · all workspaces'}${key.revokedAt ? ' · revoked' : ''}`}
+        renderMeta={(key) => formatKeyMeta(key, key.workspaceName ? ` · restricted to ${key.workspaceName}` : ' · all workspaces')}
         onRevoke={async (id) => { await revokeMcpKey(id); await loadKeys() }}
       />
 
@@ -153,10 +188,31 @@ export function PersonalApiKeysPanel() {
         copied={copied === 'api'}
         loading={loading}
         error={error}
+        beforeForm={
+          <>
+            <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
+              <span style={fieldLabel}>Expires at</span>
+              <input type="datetime-local" value={apiKeyExpiresAt} onChange={(event) => setApiKeyExpiresAt(event.target.value)} style={inputStyle} />
+              <span style={{ ...labelText, fontWeight: 500 }}>Optional. Use expiry for third-party integrations.</span>
+            </label>
+            <div style={{ display: 'grid', gap: 6, minWidth: 220 }}>
+              <span style={fieldLabel}>Scopes</span>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['read', 'write', 'admin'].map((scope) => (
+                  <label key={scope} style={scopePill}>
+                    <input type="checkbox" checked={apiKeyScopes.includes(scope)} onChange={() => setApiKeyScopes((current) => toggleScope(current, scope))} />
+                    {scope}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </>
+        }
         onCreate={async () => {
-          const created = await createApiKey({ label: apiKeyLabel.trim() })
+          const created = await createApiKey({ label: apiKeyLabel.trim(), scopes: apiKeyScopes, expiresAt: apiKeyExpiresAt ? new Date(apiKeyExpiresAt).toISOString() : null })
           setApiKeySecret(created.key)
           setApiKeyLabel('')
+          setApiKeyExpiresAt('')
           await loadKeys()
         }}
         onCopy={() => apiKeySecret ? void copyValue(apiKeySecret, 'api') : undefined}
@@ -164,7 +220,7 @@ export function PersonalApiKeysPanel() {
         secretTitle="New API key"
         placeholder="e.g. Zapier, n8n"
         items={apiKeys}
-        renderMeta={(key) => `${key.prefix}… · created ${new Date(key.createdAt).toLocaleString()}${key.lastUsedAt ? ` · last used ${new Date(key.lastUsedAt).toLocaleString()}` : ''}${key.revokedAt ? ' · revoked' : ''}`}
+        renderMeta={(key) => formatKeyMeta(key)}
         onRevoke={async (id) => { await revokeApiKey(id); await loadKeys() }}
       />
     </div>
@@ -321,6 +377,20 @@ function CopyBlock({ label, value, copied, onCopy }: { label: string; value: str
 const fieldLabel: CSSProperties = metaLabelText
 
 const inputStyle: CSSProperties = { ...projectInputField, height: 42, boxSizing: 'border-box', lineHeight: '20px' }
+
+const scopePill: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  minHeight: 32,
+  padding: '6px 10px',
+  borderRadius: 999,
+  border: '1px solid var(--panel-border)',
+  background: 'var(--form-bg)',
+  color: 'var(--text-secondary)',
+  fontSize: 12,
+  fontWeight: 700,
+}
 
 const copySurface: CSSProperties = {
   padding: '10px 12px',

@@ -26,6 +26,24 @@ test('API writes audit events for sensitive admin and automation actions and exp
   assert.match(apiIndexSource, /audit\.workspace\.deleted/)
   assert.match(apiIndexSource, /audit\.agentJob\.created/)
   assert.match(apiIndexSource, /audit\.agentRun\.created/)
+  assert.match(apiIndexSource, /audit\.auth\.loginSucceeded/)
+  assert.match(apiIndexSource, /audit\.auth\.loginFailed/)
+  assert.match(apiIndexSource, /audit\.auth\.logout/)
+  assert.match(apiIndexSource, /audit\.apiKey\.created/)
+  assert.match(apiIndexSource, /audit\.apiKey\.revoked/)
+  assert.match(apiIndexSource, /audit\.mcpKey\.created/)
+  assert.match(apiIndexSource, /audit\.mcpKey\.revoked/)
+  assert.match(apiIndexSource, /audit\.license\.activated/)
+  assert.match(apiIndexSource, /audit\.license\.refreshed/)
+  assert.match(apiIndexSource, /audit\.license\.removed/)
+})
+
+test('audit log endpoint supports enterprise filters and CSV export', () => {
+  assert.match(apiIndexSource, /actorAccountId\?: string; workspaceId\?: string; from\?: string; to\?: string; limit\?: string; export\?: string/)
+  assert.match(apiIndexSource, /query\.actorAccountId\?\.trim\(\) \? \{ actorAccountId: query\.actorAccountId\.trim\(\) \}/)
+  assert.match(apiIndexSource, /query\.workspaceId\?\.trim\(\) \? \{ workspaceId: query\.workspaceId\.trim\(\) \}/)
+  assert.match(apiIndexSource, /query\.export === 'csv'/)
+  assert.match(apiIndexSource, /Content-Disposition', 'attachment; filename="sally-audit-log\.csv"/)
 })
 
 test('shared types expose audit log event DTOs for web and external clients', () => {

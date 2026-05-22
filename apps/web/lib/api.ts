@@ -65,13 +65,29 @@ export function activateLicense(payload: { licenseKey: string; instanceId?: stri
 }
 export function refreshLicense(): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> { return getJson('/license/refresh', { method: 'POST', body: JSON.stringify({}) }) }
 export function removeLicense(): Promise<{ ok: boolean; edition: EditionInfo }> { return getJson('/license', { method: 'DELETE' }) }
-export function getAuditLog(filters?: { action?: string; targetType?: string; limit?: number }): Promise<AuditLogEvent[]> {
+export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)
   if (filters?.targetType) params.set('targetType', filters.targetType)
+  if (filters?.actorAccountId) params.set('actorAccountId', filters.actorAccountId)
+  if (filters?.workspaceId) params.set('workspaceId', filters.workspaceId)
+  if (filters?.from) params.set('from', filters.from)
+  if (filters?.to) params.set('to', filters.to)
   if (filters?.limit) params.set('limit', String(filters.limit))
   const q = params.toString()
   return getJson<AuditLogEvent[]>(`/audit-log${q ? `?${q}` : ''}`)
+}
+export function auditLogCsvUrl(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): string {
+  const params = new URLSearchParams()
+  if (filters?.action) params.set('action', filters.action)
+  if (filters?.targetType) params.set('targetType', filters.targetType)
+  if (filters?.actorAccountId) params.set('actorAccountId', filters.actorAccountId)
+  if (filters?.workspaceId) params.set('workspaceId', filters.workspaceId)
+  if (filters?.from) params.set('from', filters.from)
+  if (filters?.to) params.set('to', filters.to)
+  if (filters?.limit) params.set('limit', String(filters.limit))
+  params.set('export', 'csv')
+  return apiUrl(`/audit-log?${params.toString()}`)
 }
 export function getRuntimeConfig(): Promise<{ ok: boolean; appBaseUrl: string | null }> { return getJson('/runtime-config') }
 export function getNotifications(params?: { unreadOnly?: boolean; limit?: number }): Promise<Notification[]> {
@@ -219,8 +235,8 @@ export function getProfile(): Promise<{ ok: boolean; profile: { id: string; name
 export function updateProfile(payload: { name?: string; email?: string; avatarUrl?: string | null }): Promise<{ ok: boolean; profile: { id: string; name: string | null; email: string; avatarUrl: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' }; emailChange?: { pendingEmail: string; emailed: boolean; reason?: string } | null }> { return getJson('/auth/profile', { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function confirmEmailChange(payload: { token: string }): Promise<{ ok: boolean; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' } }> { return getJson('/auth/confirm-email-change', { method: 'POST', body: JSON.stringify(payload) }) }
 export function uploadProfileImage(payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string }> { return getJson('/auth/profile/image-upload', { method: 'POST', body: JSON.stringify(payload) }) }
-export function getApiKeys(): Promise<{ id: string; label: string; prefix: string; createdAt: string; lastUsedAt: string | null; revokedAt: string | null }[]> { return getJson('/auth/api-keys') }
-export function createApiKey(payload: { label: string }): Promise<{ ok: boolean; apiKeyId: string; token: string; key: string; prefix: string }> { return getJson('/auth/api-keys', { method: 'POST', body: JSON.stringify(payload) }) }
+export function getApiKeys(): Promise<{ id: string; label: string; prefix: string; scopes: string[]; expiresAt: string | null; createdAt: string; lastUsedAt: string | null; revokedAt: string | null }[]> { return getJson('/auth/api-keys') }
+export function createApiKey(payload: { label: string; scopes?: string[]; expiresAt?: string | null }): Promise<{ ok: boolean; apiKeyId: string; token: string; key: string; prefix: string; scopes: string[]; expiresAt: string | null }> { return getJson('/auth/api-keys', { method: 'POST', body: JSON.stringify(payload) }) }
 export function revokeApiKey(apiKeyId: string): Promise<{ ok: boolean }> { return getJson(`/auth/api-keys/${apiKeyId}`, { method: 'DELETE' }) }
 
 export function getMe(): Promise<{ ok: boolean; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }> {
@@ -288,5 +304,5 @@ export function removeTeamAccountFromProject(accountId: string, membershipId: st
 export function apiUrl(path: string): string { return `${API_BASE_URL}${path}` }
 
 export function getMcpKeys(): Promise<McpKey[]> { return getJson('/auth/mcp-keys') }
-export function createMcpKey(payload: { label: string; workspaceId?: string | null }): Promise<{ ok: boolean; mcpKeyId: string; token: string; key: string; prefix: string; workspaceId: string | null; workspaceSlug: string | null }> { return getJson('/auth/mcp-keys', { method: 'POST', body: JSON.stringify(payload) }) }
+export function createMcpKey(payload: { label: string; workspaceId?: string | null; scopes?: string[]; expiresAt?: string | null }): Promise<{ ok: boolean; mcpKeyId: string; token: string; key: string; prefix: string; scopes: string[]; expiresAt: string | null; workspaceId: string | null; workspaceSlug: string | null }> { return getJson('/auth/mcp-keys', { method: 'POST', body: JSON.stringify(payload) }) }
 export function revokeMcpKey(mcpKeyId: string): Promise<{ ok: boolean }> { return getJson(`/auth/mcp-keys/${mcpKeyId}`, { method: 'DELETE' }) }

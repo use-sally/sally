@@ -77,6 +77,27 @@ function hashApiToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
 
+const API_KEY_SCOPES = ['read', 'write', 'admin'] as const
+const MCP_KEY_SCOPES = ['read', 'write', 'mcp'] as const
+
+function normalizeKeyScopes(input: unknown, allowed: readonly string[], defaults: string[]) {
+  if (!Array.isArray(input)) return defaults
+  const scopes = Array.from(new Set(input.map((scope) => String(scope).trim()).filter((scope) => allowed.includes(scope))))
+  return scopes.length ? scopes : defaults
+}
+
+function parseOptionalExpiry(value: unknown) {
+  if (value === undefined || value === null || value === '') return null
+  const expiresAt = new Date(String(value))
+  if (Number.isNaN(expiresAt.getTime())) throw new Error('expiresAt must be a valid ISO date')
+  if (expiresAt <= new Date()) throw new Error('expiresAt must be in the future')
+  return expiresAt
+}
+
+function keyIsExpired(key: { expiresAt?: Date | null }) {
+  return Boolean(key.expiresAt && key.expiresAt <= new Date())
+}
+
 function generateApiKeyToken() {
   return `atpm_${crypto.randomBytes(24).toString('base64url')}`
 }
@@ -309,9 +330,13 @@ async function ensureAuth(request: any, reply: any) {
         reply.code(403).send({ ok: false, error: 'Account archived' })
         return false
       }
+      if (keyIsExpired(apiKey)) {
+        reply.code(401).send({ ok: false, error: 'API key expired', code: 'API_KEY_EXPIRED' })
+        return false
+      }
       await prisma.accountApiKey.update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } })
       ;(request as any).account = apiKey.account
-      ;(request as any).apiKey = { id: apiKey.id, label: apiKey.label }
+      ;(request as any).apiKey = { id: apiKey.id, label: apiKey.label, scopes: apiKey.scopes }
       return true
     }
     const mcpKey = await prisma.accountMcpKey.findFirst({
@@ -323,9 +348,13 @@ async function ensureAuth(request: any, reply: any) {
         reply.code(403).send({ ok: false, error: 'Account archived' })
         return false
       }
+      if (keyIsExpired(mcpKey)) {
+        reply.code(401).send({ ok: false, error: 'MCP key expired', code: 'MCP_KEY_EXPIRED' })
+        return false
+      }
       await prisma.accountMcpKey.update({ where: { id: mcpKey.id }, data: { lastUsedAt: new Date() } })
       ;(request as any).account = mcpKey.account
-      ;(request as any).mcpKey = { id: mcpKey.id, label: mcpKey.label, workspaceId: mcpKey.workspaceId, workspaceSlug: mcpKey.workspace?.slug ?? null }
+      ;(request as any).mcpKey = { id: mcpKey.id, label: mcpKey.label, workspaceId: mcpKey.workspaceId, workspaceSlug: mcpKey.workspace?.slug ?? null, scopes: mcpKey.scopes }
       return true
     }
     reply.code(401).send({ ok: false, error: 'Unauthorized' })
@@ -1333,9 +1362,13 @@ async function ensureMcpAuth(request: any, reply: any) {
     reply.code(401).send({ jsonrpc: '2.0', error: { code: -32001, message: 'Invalid MCP key' }, id: null })
     return false
   }
+  if (keyIsExpired(key)) {
+    reply.code(401).send({ jsonrpc: '2.0', error: { code: -32001, message: 'MCP key expired' }, id: null })
+    return false
+  }
   await prisma.accountMcpKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } })
   ;(request as any).account = key.account
-  ;(request as any).mcpKey = { id: key.id, label: key.label, workspaceId: key.workspaceId, workspaceSlug: key.workspace?.slug ?? null }
+  ;(request as any).mcpKey = { id: key.id, label: key.label, workspaceId: key.workspaceId, workspaceSlug: key.workspace?.slug ?? null, scopes: key.scopes }
   return true
 }
 
@@ -1570,6 +1603,10 @@ const start = async () => {
       if ((url.startsWith('/projects') || url.startsWith('/tasks')) && (await ensureWorkerAuth(request, reply))) return
       if (url.startsWith('/auth/login') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
+      const keyAuth = ((request as any).apiKey ?? (request as any).mcpKey) as { scopes?: string[] } | undefined
+      if (keyAuth && !['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !keyAuth.scopes?.includes('write')) {
+        return reply.code(403).send({ ok: false, error: 'Key scope does not allow write access', code: 'KEY_SCOPE_DENIED' })
+      }
       if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth') || url.startsWith('/edition') || url.startsWith('/license')) return
       const workspace = await resolveWorkspace(request, reply)
       if (!workspace) return
@@ -1612,8 +1649,10 @@ const start = async () => {
         const result = await activateInstalledLicense(prisma, body as any)
         const installedLicense = await readInstalledLicense(prisma)
         const edition = getEditionInfo({ installedLicense })
+        await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.license.activated', targetType: 'license', targetId: result.license.licenseId ?? result.license.activationId ?? 'instance', summary: 'Activated Enterprise license', metadata: { status: result.license.status ?? null, validUntil: result.license.validUntil ?? null, graceUntil: result.license.graceUntil ?? null } })
         return { ok: true, edition, installed: result.license }
       } catch (error) {
+        await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.license.activationFailed', targetType: 'license', targetId: 'instance', summary: 'License activation failed', metadata: { reason: error instanceof Error ? error.message : 'License activation failed' } })
         return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'License activation failed' })
       }
     })
@@ -1624,8 +1663,10 @@ const start = async () => {
         const result = await refreshInstalledLicense(prisma)
         const installedLicense = await readInstalledLicense(prisma)
         const edition = getEditionInfo({ installedLicense })
+        await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.license.refreshed', targetType: 'license', targetId: result.license.licenseId ?? result.license.activationId ?? 'instance', summary: 'Refreshed Enterprise license', metadata: { status: result.license.status ?? null, validUntil: result.license.validUntil ?? null, graceUntil: result.license.graceUntil ?? null } })
         return { ok: true, edition, installed: result.license }
       } catch (error) {
+        await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.license.refreshFailed', targetType: 'license', targetId: 'instance', summary: 'License refresh failed', metadata: { reason: error instanceof Error ? error.message : 'License refresh failed' } })
         return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'License refresh failed' })
       }
     })
@@ -1633,6 +1674,7 @@ const start = async () => {
     app.delete('/license', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       await removeInstalledLicense(prisma)
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.license.removed', targetType: 'license', targetId: 'instance', summary: 'Removed Enterprise license' })
       return { ok: true, edition: getEditionInfo({ installedLicense: null }) }
     })
 
@@ -1674,12 +1716,22 @@ const start = async () => {
       const account = await prisma.account.findFirst({ where: { email } })
       const configuredSuperadminPasswordHash = isConfiguredSuperadminEmail(email) ? getConfiguredSuperadminPasswordHash() : null
       const effectivePasswordHash = configuredSuperadminPasswordHash || account?.passwordHash || null
-      if (!account || !effectivePasswordHash) return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
-      if (account.archivedAt) return reply.code(403).send({ ok: false, error: 'Account archived' })
+      if (!account || !effectivePasswordHash) {
+        await writeAuditLog({ actorAccountId: null, action: 'audit.auth.loginFailed', targetType: 'account', targetId: null, summary: `Failed login for ${email}`, metadata: { email, reason: 'invalid_credentials' } })
+        return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
+      }
+      if (account.archivedAt) {
+        await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginFailed', targetType: 'account', targetId: account.id, summary: `Failed login for archived account ${account.email}`, metadata: { reason: 'account_archived' } })
+        return reply.code(403).send({ ok: false, error: 'Account archived' })
+      }
       const valid = await verifyPassword(password, effectivePasswordHash)
-      if (!valid) return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
+      if (!valid) {
+        await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginFailed', targetType: 'account', targetId: account.id, summary: `Failed login for ${account.email}`, metadata: { reason: 'invalid_credentials' } })
+        return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
+      }
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginSucceeded', targetType: 'accountSession', targetId: session.id, summary: `Signed in ${account.email}`, metadata: { expiresAt: session.expiresAt.toISOString() } })
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
@@ -1694,6 +1746,7 @@ const start = async () => {
       const session = (request as any).session as { id: string } | undefined
       if (!session) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
       await prisma.accountSession.update({ where: { id: session.id }, data: { revokedAt: new Date() } })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.auth.logout', targetType: 'accountSession', targetId: session.id, summary: 'Signed out' })
       return { ok: true }
     })
 
@@ -1806,15 +1859,22 @@ const start = async () => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
       const keys = await prisma.accountApiKey.findMany({ where: { accountId: account.id }, orderBy: { createdAt: 'desc' } })
-      return keys.map((key) => ({ id: key.id, label: key.label, prefix: key.prefix, createdAt: key.createdAt.toISOString(), lastUsedAt: key.lastUsedAt?.toISOString() ?? null, revokedAt: key.revokedAt?.toISOString() ?? null }))
+      return keys.map((key) => ({ id: key.id, label: key.label, prefix: key.prefix, scopes: key.scopes, expiresAt: key.expiresAt?.toISOString() ?? null, createdAt: key.createdAt.toISOString(), lastUsedAt: key.lastUsedAt?.toISOString() ?? null, revokedAt: key.revokedAt?.toISOString() ?? null }))
     })
 
     app.post('/auth/api-keys', async (request, reply) => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
-      const body = request.body as { label?: string }
+      const body = request.body as { label?: string; scopes?: string[]; expiresAt?: string | null }
       const label = body.label?.trim()
       if (!label) return reply.code(400).send({ ok: false, error: 'label is required' })
+      let expiresAt: Date | null = null
+      try {
+        expiresAt = parseOptionalExpiry(body.expiresAt)
+      } catch (error) {
+        return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'expiresAt is invalid' })
+      }
+      const scopes = normalizeKeyScopes(body.scopes, API_KEY_SCOPES, ['read', 'write'])
       const token = generateApiKeyToken()
       const created = await prisma.accountApiKey.create({
         data: {
@@ -1822,9 +1882,12 @@ const start = async () => {
           label,
           prefix: token.slice(0, 12),
           tokenHash: hashApiToken(token),
+          scopes,
+          expiresAt,
         },
       })
-      return { ok: true, apiKeyId: created.id, token, key: token, prefix: created.prefix }
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.apiKey.created', targetType: 'apiKey', targetId: created.id, summary: `Created API key ${label}`, metadata: { prefix: created.prefix, scopes, expiresAt: expiresAt?.toISOString() ?? null } })
+      return { ok: true, apiKeyId: created.id, token, key: token, prefix: created.prefix, scopes: created.scopes, expiresAt: created.expiresAt?.toISOString() ?? null }
     })
 
     app.delete('/auth/api-keys/:apiKeyId', async (request, reply) => {
@@ -1835,9 +1898,11 @@ const start = async () => {
       if (!apiKey) return reply.code(404).send({ ok: false, error: 'API key not found' })
       if (apiKey.revokedAt) {
         await prisma.accountApiKey.delete({ where: { id: apiKey.id } })
+        await writeAuditLog({ actorAccountId: account.id, action: 'audit.apiKey.deleted', targetType: 'apiKey', targetId: apiKey.id, summary: `Deleted revoked API key ${apiKey.label}`, metadata: { prefix: apiKey.prefix } })
         return { ok: true, deleted: true }
       }
       await prisma.accountApiKey.update({ where: { id: apiKey.id }, data: { revokedAt: new Date() } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.apiKey.revoked', targetType: 'apiKey', targetId: apiKey.id, summary: `Revoked API key ${apiKey.label}`, metadata: { prefix: apiKey.prefix } })
       return { ok: true, revoked: true }
     })
 
@@ -1845,15 +1910,22 @@ const start = async () => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
       const keys = await prisma.accountMcpKey.findMany({ where: { accountId: account.id }, include: { workspace: true }, orderBy: { createdAt: 'desc' } })
-      return keys.map((key) => ({ id: key.id, label: key.label, prefix: key.prefix, createdAt: key.createdAt.toISOString(), lastUsedAt: key.lastUsedAt?.toISOString() ?? null, revokedAt: key.revokedAt?.toISOString() ?? null, workspaceId: key.workspaceId, workspaceSlug: key.workspace?.slug ?? null, workspaceName: key.workspace?.name ?? null }))
+      return keys.map((key) => ({ id: key.id, label: key.label, prefix: key.prefix, scopes: key.scopes, expiresAt: key.expiresAt?.toISOString() ?? null, createdAt: key.createdAt.toISOString(), lastUsedAt: key.lastUsedAt?.toISOString() ?? null, revokedAt: key.revokedAt?.toISOString() ?? null, workspaceId: key.workspaceId, workspaceSlug: key.workspace?.slug ?? null, workspaceName: key.workspace?.name ?? null }))
     })
 
     app.post('/auth/mcp-keys', async (request, reply) => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
-      const body = request.body as { label?: string; workspaceId?: string | null }
+      const body = request.body as { label?: string; workspaceId?: string | null; scopes?: string[]; expiresAt?: string | null }
       const label = body.label?.trim()
       if (!label) return reply.code(400).send({ ok: false, error: 'label is required' })
+      let expiresAt: Date | null = null
+      try {
+        expiresAt = parseOptionalExpiry(body.expiresAt)
+      } catch (error) {
+        return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'expiresAt is invalid' })
+      }
+      const scopes = normalizeKeyScopes(body.scopes, MCP_KEY_SCOPES, ['read', 'write', 'mcp'])
       let workspaceId: string | null = null
       if (body.workspaceId) {
         const membership = await prisma.workspaceMembership.findFirst({ where: { accountId: account.id, workspaceId: body.workspaceId }, include: { workspace: true } })
@@ -1861,8 +1933,9 @@ const start = async () => {
         workspaceId = membership.workspaceId
       }
       const token = generateMcpKeyToken()
-      const created = await prisma.accountMcpKey.create({ data: { accountId: account.id, workspaceId, label, prefix: token.slice(0, 16), tokenHash: hashApiToken(token) }, include: { workspace: true } })
-      return { ok: true, mcpKeyId: created.id, token, key: token, prefix: created.prefix, workspaceId: created.workspaceId, workspaceSlug: created.workspace?.slug ?? null }
+      const created = await prisma.accountMcpKey.create({ data: { accountId: account.id, workspaceId, label, prefix: token.slice(0, 16), tokenHash: hashApiToken(token), scopes, expiresAt }, include: { workspace: true } })
+      await writeAuditLog({ workspaceId, actorAccountId: account.id, action: 'audit.mcpKey.created', targetType: 'mcpKey', targetId: created.id, summary: `Created MCP key ${label}`, metadata: { prefix: created.prefix, scopes, expiresAt: expiresAt?.toISOString() ?? null, workspaceId } })
+      return { ok: true, mcpKeyId: created.id, token, key: token, prefix: created.prefix, scopes: created.scopes, expiresAt: created.expiresAt?.toISOString() ?? null, workspaceId: created.workspaceId, workspaceSlug: created.workspace?.slug ?? null }
     })
 
     app.delete('/auth/mcp-keys/:mcpKeyId', async (request, reply) => {
@@ -1873,9 +1946,11 @@ const start = async () => {
       if (!mcpKey) return reply.code(404).send({ ok: false, error: 'MCP key not found' })
       if (mcpKey.revokedAt) {
         await prisma.accountMcpKey.delete({ where: { id: mcpKey.id } })
+        await writeAuditLog({ workspaceId: mcpKey.workspaceId, actorAccountId: account.id, action: 'audit.mcpKey.deleted', targetType: 'mcpKey', targetId: mcpKey.id, summary: `Deleted revoked MCP key ${mcpKey.label}`, metadata: { prefix: mcpKey.prefix } })
         return { ok: true, deleted: true }
       }
       await prisma.accountMcpKey.update({ where: { id: mcpKey.id }, data: { revokedAt: new Date() } })
+      await writeAuditLog({ workspaceId: mcpKey.workspaceId, actorAccountId: account.id, action: 'audit.mcpKey.revoked', targetType: 'mcpKey', targetId: mcpKey.id, summary: `Revoked MCP key ${mcpKey.label}`, metadata: { prefix: mcpKey.prefix } })
       return { ok: true, revoked: true }
     })
 
@@ -2713,18 +2788,35 @@ const start = async () => {
 
     app.get('/audit-log', { preHandler: requireFeature('security.auditLog', readInstalledLicenseForFeature) }, async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
-      const query = request.query as { action?: string; targetType?: string; limit?: string }
-      const limit = Math.min(Math.max(Number(query.limit || 100), 1), 250)
+      const query = request.query as { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: string; export?: string }
+      const limit = Math.min(Math.max(Number(query.limit || 100), 1), 1000)
+      const createdAt: any = {}
+      if (query.from?.trim()) createdAt.gte = new Date(query.from.trim())
+      if (query.to?.trim()) createdAt.lte = new Date(query.to.trim())
       const events = await prisma.auditLogEvent.findMany({
         where: {
           ...(query.action?.trim() ? { action: query.action.trim() } : {}),
           ...(query.targetType?.trim() ? { targetType: query.targetType.trim() } : {}),
+          ...(query.actorAccountId?.trim() ? { actorAccountId: query.actorAccountId.trim() } : {}),
+          ...(query.workspaceId?.trim() ? { workspaceId: query.workspaceId.trim() } : {}),
+          ...(Object.keys(createdAt).length ? { createdAt } : {}),
         },
         include: { actor: { select: { id: true, email: true, name: true } } },
         orderBy: { createdAt: 'desc' },
         take: limit,
       })
-      return events.map(formatAuditLogEvent)
+      const formatted = events.map(formatAuditLogEvent)
+      if (query.export === 'csv') {
+        const escapeCsv = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
+        const rows = [
+          ['createdAt', 'action', 'actorEmail', 'targetType', 'targetId', 'workspaceId', 'projectId', 'taskId', 'summary'],
+          ...formatted.map((event) => [event.createdAt, event.action, event.actor?.email ?? 'system', event.targetType ?? '', event.targetId ?? '', event.workspaceId ?? '', event.projectId ?? '', event.taskId ?? '', event.summary ?? '']),
+        ]
+        reply.header('Content-Type', 'text/csv; charset=utf-8')
+        reply.header('Content-Disposition', 'attachment; filename="sally-audit-log.csv"')
+        return rows.map((row) => row.map(escapeCsv).join(',')).join('\n')
+      }
+      return formatted
     })
 
     app.post('/workspaces', async (request, reply) => {

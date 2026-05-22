@@ -13,8 +13,10 @@ test('Admin mode includes Audit Log as a first-class governance section', () => 
   assert.match(appShellSource, /pathname\.startsWith\('\/audit-log'\)/)
 })
 
-test('web API client exposes audit log listing helper', () => {
-  assert.match(apiSource, /export function getAuditLog\(filters\?: \{ action\?: string; targetType\?: string; limit\?: number \}\)/)
+test('web API client exposes audit log listing and CSV export helpers', () => {
+  assert.match(apiSource, /export function getAuditLog\(filters\?: \{ action\?: string; targetType\?: string; actorAccountId\?: string; workspaceId\?: string; from\?: string; to\?: string; limit\?: number \}\)/)
+  assert.match(apiSource, /export function auditLogCsvUrl/)
+  assert.match(apiSource, /params\.set\('export', 'csv'\)/)
   assert.match(apiSource, /getJson<AuditLogEvent\[\]>\(`\/audit-log/)
 })
 
@@ -28,4 +30,8 @@ test('Audit Log page lists events with actor action target and timestamp', () =>
   assert.match(auditLogPageSource, /event\.action/)
   assert.match(auditLogPageSource, /event\.targetType/)
   assert.match(auditLogPageSource, /event\.createdAt/)
+  assert.match(auditLogPageSource, /Apply filters/)
+  assert.match(auditLogPageSource, /Export CSV/)
+  assert.match(auditLogPageSource, /Event detail/)
+  assert.match(auditLogPageSource, /getSessionToken/)
 })

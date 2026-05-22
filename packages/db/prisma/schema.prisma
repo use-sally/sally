@@ -418,12 +418,15 @@ model AccountApiKey {
   label      String
   prefix     String
   tokenHash  String    @unique
+  scopes     String[]  @default(["read", "write"])
+  expiresAt  DateTime?
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
   revokedAt  DateTime?
   account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([expiresAt])
   @@index([revokedAt])
 }
 
@@ -434,6 +437,8 @@ model AccountMcpKey {
   label       String
   prefix      String
   tokenHash   String     @unique
+  scopes      String[]   @default(["read", "write", "mcp"])
+  expiresAt   DateTime?
   createdAt   DateTime   @default(now())
   lastUsedAt  DateTime?
   revokedAt   DateTime?
@@ -442,6 +447,7 @@ model AccountMcpKey {
 
   @@index([accountId])
   @@index([workspaceId])
+  @@index([expiresAt])
   @@index([revokedAt])
 }
 
