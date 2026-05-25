@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react'
 import { AppShell, panel } from '../../components/app-shell'
 import { InfoFlag } from '../../components/info-flag'
 import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
+import { TwoFactorAccountPanel } from '../../components/two-factor-account-panel'
 import { apiUrl, getNotificationPreferences, getProfile, logout, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
 import { labelText, projectInputField, sectionLabelText } from '../../lib/theme'
 
@@ -256,6 +257,8 @@ export default function ProfilePage() {
             ))}
           </div>
         </div>
+
+        <TwoFactorAccountPanel />
 
         <PersonalApiKeysPanel />
       </div>

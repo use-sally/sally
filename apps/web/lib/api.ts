@@ -235,9 +235,16 @@ export function reorderTaskTodos(taskId: string, orderedTodoIds: string[]): Prom
 export function uploadTaskDescriptionImage(taskId: string, payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string }> { return getJson(`/tasks/${taskId}/image-upload`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function uploadProjectDescriptionImage(projectId: string, payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string }> { return getJson(`/projects/${projectId}/image-upload`, { method: 'POST', body: JSON.stringify(payload) }) }
 
-export function login(payload: { email: string; password: string }): Promise<{ ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }> {
+export type LoginSuccess = { ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }
+export type LoginResponse = LoginSuccess | { ok: boolean; requiresTwoFactor: true; challengeToken: string; expiresAt: string }
+export function login(payload: { email: string; password: string }): Promise<LoginResponse> {
   return getJson('/auth/login', { method: 'POST', body: JSON.stringify(payload) })
 }
+export function completeTwoFactorLogin(payload: { challengeToken: string; code: string }): Promise<LoginSuccess> { return getJson('/auth/login/2fa', { method: 'POST', body: JSON.stringify(payload) }) }
+export function getTwoFactorStatus(): Promise<{ ok: boolean; enabled: boolean; confirmedAt: string | null }> { return getJson('/auth/2fa/status') }
+export function startTwoFactorSetup(): Promise<{ ok: boolean; secret: string; otpauthUrl: string }> { return getJson('/auth/2fa/setup', { method: 'POST', body: JSON.stringify({}) }) }
+export function confirmTwoFactorSetup(payload: { code: string }): Promise<{ ok: boolean; enabled: boolean; confirmedAt: string | null }> { return getJson('/auth/2fa/confirm', { method: 'POST', body: JSON.stringify(payload) }) }
+export function disableTwoFactor(payload: { code: string }): Promise<{ ok: boolean; enabled: boolean }> { return getJson('/auth/2fa/disable', { method: 'POST', body: JSON.stringify(payload) }) }
 
 export function requestPasswordReset(payload: { email: string; inviteToken?: string }): Promise<{ ok: boolean; expiresAt?: string }> {
   return getJson('/auth/request-password-reset', { method: 'POST', body: JSON.stringify(payload) })

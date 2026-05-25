@@ -50,7 +50,7 @@ export function TwoFactorPolicyPanel() {
     try {
       const result = await saveTwoFactorPolicy({ enforcementTarget, gracePeriodDays: Math.max(0, Math.min(90, Math.floor(Number(gracePeriodDays || 14)))), allowRecoveryResetByAdmins })
       setEnforcementReady(result.enforcementReady)
-      setNotice(result.enforcementReady ? '2FA enforcement policy saved.' : '2FA policy saved. Enforcement will activate when user 2FA enrollment is available.')
+      setNotice(result.enforcementReady ? '2FA enforcement policy saved.' : '2FA policy saved.')
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save 2FA policy')
@@ -71,7 +71,7 @@ export function TwoFactorPolicyPanel() {
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div>
         <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 16 }}>2FA enforcement</h3>
-        <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>Enterprise policy scaffold for requiring 2FA by role. Enrollment enforcement stays inactive until user 2FA setup is available.</p>
+        <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>Require TOTP authenticator-app 2FA by role. Users manage their authenticator setup from Profile.</p>
       </div>
       <div style={{ border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', padding: 12, color: enforcementReady ? '#bbf7d0' : 'var(--text-secondary)', fontSize: 13 }}>
         Enforcement status: <strong>{enforcementReady ? 'ready' : 'policy-only'}</strong>

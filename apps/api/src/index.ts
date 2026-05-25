@@ -1118,6 +1118,61 @@ function validateStrongPassword(password: string) {
 
 const STRONG_PASSWORD_HINT = 'Password must be at least 12 characters and include uppercase, lowercase, number, and symbol.'
 
+const TOTP_STEP_SECONDS = 30
+const TOTP_DIGITS = 6
+const base32Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+function base32Encode(buffer: Buffer) {
+  let bits = 0
+  let value = 0
+  let output = ''
+  for (const byte of buffer) {
+    value = (value << 8) | byte
+    bits += 8
+    while (bits >= 5) {
+      output += base32Alphabet[(value >>> (bits - 5)) & 31]
+      bits -= 5
+    }
+  }
+  if (bits > 0) output += base32Alphabet[(value << (5 - bits)) & 31]
+  return output
+}
+function base32Decode(input: string) {
+  let bits = 0
+  let value = 0
+  const bytes: number[] = []
+  for (const char of input.replace(/=+$/g, '').toUpperCase().replace(/[^A-Z2-7]/g, '')) {
+    const idx = base32Alphabet.indexOf(char)
+    if (idx < 0) continue
+    value = (value << 5) | idx
+    bits += 5
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 255)
+      bits -= 8
+    }
+  }
+  return Buffer.from(bytes)
+}
+function generateTotpSecret() { return base32Encode(crypto.randomBytes(20)) }
+function hotp(secret: string, counter: number) {
+  const counterBuffer = Buffer.alloc(8)
+  counterBuffer.writeBigUInt64BE(BigInt(counter))
+  const hmac = crypto.createHmac('sha1', base32Decode(secret)).update(counterBuffer).digest()
+  const offset = hmac[hmac.length - 1] & 0x0f
+  const binary = ((hmac[offset] & 0x7f) << 24) | (hmac[offset + 1] << 16) | (hmac[offset + 2] << 8) | hmac[offset + 3]
+  return String(binary % 10 ** TOTP_DIGITS).padStart(TOTP_DIGITS, '0')
+}
+function verifyTotp(secret: string, code: string, now = Date.now()) {
+  const normalized = code.replace(/\s+/g, '')
+  if (!/^\d{6}$/.test(normalized)) return false
+  const counter = Math.floor(now / 1000 / TOTP_STEP_SECONDS)
+  return [-1, 0, 1].some((window) => crypto.timingSafeEqual(Buffer.from(hotp(secret, counter + window)), Buffer.from(normalized)))
+}
+function buildOtpAuthUrl(input: { email: string; secret: string }) {
+  const label = encodeURIComponent(`Sally:${input.email}`)
+  return `otpauth://totp/${label}?secret=${input.secret}&issuer=Sally&algorithm=SHA1&digits=${TOTP_DIGITS}&period=${TOTP_STEP_SECONDS}`
+}
+function getTwoFactorChallengeExpiry() { return new Date(Date.now() + 10 * 60 * 1000) }
+
 const scryptAsync = promisify(crypto.scrypt)
 
 function generateSessionToken() {
@@ -1862,6 +1917,14 @@ const start = async () => {
         && (!policy.requirePasswordNumber || /\d/.test(password))
         && (!policy.requirePasswordSymbol || /[^A-Za-z0-9]/.test(password))
     }
+    const twoFactorRequiredForAccount = async (account: { platformRole?: PlatformRole | null }) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (!edition.availableFeatures.includes('security.enforced2fa')) return false
+      const policy = await readTwoFactorPolicy()
+      if (policy.enforcementTarget === 'ALL') return true
+      if (policy.enforcementTarget === 'ADMINS') return account.platformRole === PlatformRole.ADMIN || account.platformRole === PlatformRole.SUPERADMIN
+      return false
+    }
     const requireAutomationPolicyFeature = async (_request: unknown, reply: any) => {
       const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
       if (edition.availableFeatures.includes('automation.workflowPolicies')) return true
@@ -1984,7 +2047,7 @@ const start = async () => {
     app.get('/security/two-factor-policy', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       if (!(await requireTwoFactorPolicyFeature(request, reply))) return
-      return { ok: true, policy: await readTwoFactorPolicy(), enforcementReady: false }
+      return { ok: true, policy: await readTwoFactorPolicy(), enforcementReady: true }
     })
 
     app.put('/security/two-factor-policy', async (request, reply) => {
@@ -1996,8 +2059,64 @@ const start = async () => {
       const gracePeriodDays = Math.max(0, Math.min(90, Math.floor(Number(body.gracePeriodDays ?? 14))))
       const data = { enforcementTarget, gracePeriodDays, allowRecoveryResetByAdmins: body.allowRecoveryResetByAdmins !== false }
       const policy = await prisma.twoFactorPolicy.upsert({ where: { id: 'instance' }, create: { id: 'instance', ...data }, update: data })
-      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.twoFactorPolicy.updated', targetType: 'twoFactorPolicy', targetId: policy.id, summary: 'Updated 2FA enforcement policy', metadata: { ...data, enforcementReady: false } })
-      return { ok: true, policy, enforcementReady: false }
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.twoFactorPolicy.updated', targetType: 'twoFactorPolicy', targetId: policy.id, summary: 'Updated 2FA enforcement policy', metadata: { ...data, enforcementReady: true } })
+      return { ok: true, policy, enforcementReady: true }
+    })
+
+    app.get('/auth/2fa/status', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: account.id } })
+      return { ok: true, enabled: Boolean(credential?.enabled), confirmedAt: credential?.confirmedAt?.toISOString() ?? null }
+    })
+
+    app.post('/auth/2fa/setup', async (request, reply) => {
+      const account = (request as any).account as { id: string; email: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const secret = generateTotpSecret()
+      const credential = await prisma.accountTwoFactorCredential.upsert({ where: { accountId: account.id }, create: { accountId: account.id, secret, enabled: false }, update: { secret, enabled: false, confirmedAt: null } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.twoFactor.setupStarted', targetType: 'account', targetId: account.id, summary: 'Started 2FA setup' })
+      return { ok: true, secret: credential.secret, otpauthUrl: buildOtpAuthUrl({ email: account.email, secret: credential.secret }) }
+    })
+
+    app.post('/auth/2fa/confirm', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const body = request.body as { code?: string }
+      const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: account.id } })
+      if (!credential) return reply.code(400).send({ ok: false, error: 'Start 2FA setup first' })
+      if (!verifyTotp(credential.secret, body.code || '')) return reply.code(400).send({ ok: false, error: 'Invalid 2FA code' })
+      const updated = await prisma.accountTwoFactorCredential.update({ where: { accountId: account.id }, data: { enabled: true, confirmedAt: new Date() } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.twoFactor.enabled', targetType: 'account', targetId: account.id, summary: 'Enabled 2FA' })
+      return { ok: true, enabled: updated.enabled, confirmedAt: updated.confirmedAt?.toISOString() ?? null }
+    })
+
+    app.post('/auth/2fa/disable', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const body = request.body as { code?: string }
+      const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: account.id } })
+      if (!credential?.enabled) return { ok: true, enabled: false }
+      if (!verifyTotp(credential.secret, body.code || '')) return reply.code(400).send({ ok: false, error: 'Invalid 2FA code' })
+      await prisma.accountTwoFactorCredential.update({ where: { accountId: account.id }, data: { enabled: false, confirmedAt: null } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.twoFactor.disabled', targetType: 'account', targetId: account.id, summary: 'Disabled 2FA' })
+      return { ok: true, enabled: false }
+    })
+
+    app.post('/accounts/:accountId/2fa/reset', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireTwoFactorPolicyFeature(request, reply))) return
+      const policy = await readTwoFactorPolicy()
+      if (!policy.allowRecoveryResetByAdmins) return reply.code(403).send({ ok: false, error: 'Admin 2FA recovery reset is disabled by policy' })
+      const { accountId } = request.params as { accountId: string }
+      const target = await prisma.account.findUnique({ where: { id: accountId } })
+      if (!target) return reply.code(404).send({ ok: false, error: 'Account not found' })
+      await prisma.$transaction([
+        prisma.accountTwoFactorChallenge.deleteMany({ where: { accountId } }),
+        prisma.accountTwoFactorCredential.deleteMany({ where: { accountId } }),
+      ])
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.twoFactor.recoveryReset', targetType: 'account', targetId: accountId, summary: `Reset 2FA for ${target.email}` })
+      return { ok: true, accountId, enabled: false }
     })
 
     const requireAuditLogPolicyFeature = async (_request: unknown, reply: any) => {
@@ -2136,6 +2255,15 @@ const start = async () => {
         await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginFailed', targetType: 'account', targetId: account.id, summary: `Failed login for ${account.email}`, metadata: { reason: 'invalid_credentials' } })
         return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
       }
+      const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: account.id } })
+      const requiresTwoFactor = Boolean(credential?.enabled || await twoFactorRequiredForAccount(account))
+      if (requiresTwoFactor) {
+        if (!credential?.enabled) return reply.code(403).send({ ok: false, error: '2FA is required for this account but is not set up yet. Contact an administrator.' })
+        const challengeToken = crypto.randomBytes(24).toString('base64url')
+        const challenge = await prisma.accountTwoFactorChallenge.create({ data: { accountId: account.id, token: challengeToken, expiresAt: getTwoFactorChallengeExpiry() } })
+        await writeAuditLog({ actorAccountId: account.id, action: 'audit.twoFactor.challengeCreated', targetType: 'account', targetId: account.id, summary: 'Created 2FA login challenge' })
+        return { ok: true, requiresTwoFactor: true, challengeToken: challenge.token, expiresAt: challenge.expiresAt.toISOString() }
+      }
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: await getSessionExpiry() } })
       await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginSucceeded', targetType: 'accountSession', targetId: session.id, summary: `Signed in ${account.email}`, metadata: { expiresAt: session.expiresAt.toISOString() } })
@@ -2147,6 +2275,24 @@ const start = async () => {
         account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole },
         memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })),
       }
+    })
+
+    app.post('/auth/login/2fa', async (request, reply) => {
+      const body = request.body as { challengeToken?: string; code?: string }
+      const challenge = await prisma.accountTwoFactorChallenge.findFirst({ where: { token: body.challengeToken?.trim() || '', usedAt: null, expiresAt: { gt: new Date() } }, include: { account: true } })
+      if (!challenge) return reply.code(401).send({ ok: false, error: '2FA challenge expired or invalid' })
+      if (challenge.account.archivedAt) return reply.code(403).send({ ok: false, error: 'Account archived' })
+      const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: challenge.accountId } })
+      if (!credential?.enabled || !verifyTotp(credential.secret, body.code || '')) {
+        await writeAuditLog({ actorAccountId: challenge.accountId, action: 'audit.twoFactor.challengeFailed', targetType: 'account', targetId: challenge.accountId, summary: 'Failed 2FA login challenge' })
+        return reply.code(401).send({ ok: false, error: 'Invalid 2FA code' })
+      }
+      await prisma.accountTwoFactorChallenge.update({ where: { id: challenge.id }, data: { usedAt: new Date() } })
+      const sessionToken = generateSessionToken()
+      const session = await prisma.accountSession.create({ data: { accountId: challenge.accountId, token: sessionToken, expiresAt: await getSessionExpiry() } })
+      await writeAuditLog({ actorAccountId: challenge.accountId, action: 'audit.twoFactor.challengeSucceeded', targetType: 'accountSession', targetId: session.id, summary: 'Completed 2FA login challenge', metadata: { expiresAt: session.expiresAt.toISOString() } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: challenge.accountId, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      return { ok: true, sessionToken, expiresAt: session.expiresAt.toISOString(), account: { id: challenge.account.id, name: challenge.account.name, email: challenge.account.email, avatarUrl: challenge.account.avatarUrl, platformRole: challenge.account.platformRole }, memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })) }
     })
 
     app.post('/auth/logout', async (request, reply) => {

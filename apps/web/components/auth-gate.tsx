@@ -3,7 +3,7 @@
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { getMe, getSamlStatus, login, requestPasswordReset, samlLoginUrl } from '../lib/api'
+import { completeTwoFactorLogin, getMe, getSamlStatus, login, requestPasswordReset, samlLoginUrl } from '../lib/api'
 import { clearSession, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId, type Membership } from '../lib/auth'
 import { projectInputField } from '../lib/theme'
 
@@ -72,6 +72,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<AuthMode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [twoFactorCode, setTwoFactorCode] = useState('')
+  const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -135,6 +137,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     setInfo(null)
     try {
       const response = await login({ email: email.trim(), password: password.trim() })
+      if (!('sessionToken' in response)) {
+        setTwoFactorChallengeToken(response.challengeToken)
+        setInfo('Enter your 2FA code to finish signing in.')
+        return
+      }
       saveSession({
         token: response.sessionToken,
         expiresAt: response.expiresAt,
@@ -150,6 +157,33 @@ export function AuthGate({ children }: { children: ReactNode }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
       clearSession()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleTwoFactorSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!twoFactorChallengeToken) return
+    if (!twoFactorCode.trim()) {
+      setError('2FA code is required.')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await completeTwoFactorLogin({ challengeToken: twoFactorChallengeToken, code: twoFactorCode.trim() })
+      saveSession({ token: response.sessionToken, expiresAt: response.expiresAt, account: response.account, memberships: response.memberships })
+      setTwoFactorChallengeToken(null)
+      setTwoFactorCode('')
+      if (!response.memberships.length) {
+        setStatus('no-access')
+        return
+      }
+      setWorkspaceId(pickWorkspaceId(response.memberships))
+      setStatus('authed')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '2FA verification failed')
     } finally {
       setLoading(false)
     }
@@ -200,7 +234,20 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (status === 'unauth') {
     return (
       <div style={authPage}>
-        {mode === 'login' ? (
+        {mode === 'login' && twoFactorChallengeToken ? (
+          <form onSubmit={handleTwoFactorSubmit} style={authCard}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}><div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div></div>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / 2fa</div>
+            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>Two-factor authentication</div>
+            <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Enter the 6-digit code from your authenticator app.</div>
+            <label style={{ display: 'grid', gap: 6, marginTop: 18 }}><span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>2FA code</span><input value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} inputMode="numeric" placeholder="123456" style={inputStyle} /></label>
+            {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
+            {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
+            <button type="submit" disabled={loading} style={primaryButton}>{loading ? 'Verifying…' : 'Verify code'}</button>
+            <button type="button" onClick={() => { setTwoFactorChallengeToken(null); setTwoFactorCode(''); setError(null); setInfo(null) }} style={secondaryButton}>Back to sign in</button>
+          </form>
+        ) : null}
+        {mode === 'login' && !twoFactorChallengeToken ? (
           <form onSubmit={handleSubmit} style={authCard}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
               <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>

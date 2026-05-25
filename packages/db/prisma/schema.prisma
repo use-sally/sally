@@ -166,15 +166,15 @@ model Workspace {
 }
 
 model Account {
-  id                      String                   @id @default(cuid())
-  email                   String                   @unique
+  id                      String                      @id @default(cuid())
+  email                   String                      @unique
   name                    String?
   avatarUrl               String?
   passwordHash            String?
-  platformRole            PlatformRole             @default(NONE)
+  platformRole            PlatformRole                @default(NONE)
   archivedAt              DateTime?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
   memberships             WorkspaceMembership[]
   projectMemberships      ProjectMembership[]
   sessions                AccountSession[]
@@ -184,16 +184,42 @@ model Account {
   invites                 AccountInvite[]
   passwordResets          PasswordReset[]
   authoredComments        Comment[]
-  sentNotifications       Notification[]           @relation("NotificationActor")
-  receivedNotifications   Notification[]           @relation("NotificationRecipient")
+  sentNotifications       Notification[]              @relation("NotificationActor")
+  receivedNotifications   Notification[]              @relation("NotificationRecipient")
   notificationPreferences NotificationPreference[]
   commentMentions         CommentMention[]
   agentIdentity           AgentIdentity?
-  createdAgentJobs        AgentJob[]               @relation("AgentJobCreator")
-  decidedApprovals        ApprovalRequest[]        @relation("ApprovalDecider")
-  auditLogEvents          AuditLogEvent[]          @relation("AuditLogActor")
+  createdAgentJobs        AgentJob[]                  @relation("AgentJobCreator")
+  decidedApprovals        ApprovalRequest[]           @relation("ApprovalDecider")
+  auditLogEvents          AuditLogEvent[]             @relation("AuditLogActor")
+  twoFactorCredential     AccountTwoFactorCredential?
+  twoFactorChallenges     AccountTwoFactorChallenge[]
 
   @@index([archivedAt])
+}
+
+model AccountTwoFactorCredential {
+  id          String    @id @default(cuid())
+  accountId   String    @unique
+  secret      String
+  enabled     Boolean   @default(false)
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model AccountTwoFactorChallenge {
+  id        String    @id @default(cuid())
+  accountId String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
 }
 
 model AccountInvite {
