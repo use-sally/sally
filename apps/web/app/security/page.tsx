@@ -5,6 +5,7 @@ import { AppShell } from '../../components/app-shell'
 import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
 import { SamlSsoPanel } from '../../components/saml-sso-panel'
 import { AutomationGovernancePanel } from '../../components/automation-governance-panel'
+import { ApiMcpKeyPolicyPanel } from '../../components/api-mcp-key-policy-panel'
 
 type SecurityIslandKey = 'authentication' | 'sessions' | 'saml' | 'automation' | 'two-factor' | 'api-keys' | 'audit-log'
 
@@ -78,7 +79,8 @@ function ActiveIslandPanel({ activeKey }: { activeKey: SecurityIslandKey }) {
   const island = securityIslands.find((item) => item.key === activeKey) ?? securityIslands[0]
   if (activeKey === 'saml') return <SamlSsoPanel />
   if (activeKey === 'automation') return <AutomationGovernancePanel />
-  if (activeKey === 'two-factor' || activeKey === 'api-keys' || activeKey === 'audit-log') return <EnterprisePlaceholderPanel title={island.title} description={island.description} />
+  if (activeKey === 'api-keys') return <ApiMcpKeyPolicyPanel />
+  if (activeKey === 'two-factor' || activeKey === 'audit-log') return <EnterprisePlaceholderPanel title={island.title} description={island.description} />
   return <PlainIslandPanel title={island.title} description={island.description} />
 }
 

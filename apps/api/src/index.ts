@@ -1838,6 +1838,8 @@ const start = async () => {
 
     const defaultAutomationGovernancePolicy = () => ({ id: 'instance', allowedRuntimeTypes: [] as string[], workflowStartRoles: ['OWNER', 'MEMBER'], maxConcurrentWorkflowJobs: 1, workflowStartRequiresApproval: false })
     const readAutomationGovernancePolicy = async () => (await prisma.automationGovernancePolicy.findUnique({ where: { id: 'instance' } })) ?? defaultAutomationGovernancePolicy()
+    const defaultApiMcpKeyPolicy = () => ({ id: 'instance', requireApiKeyExpiry: false, requireMcpKeyExpiry: false, apiKeyDefaultExpiresInDays: null as number | null, apiKeyMaxExpiresInDays: null as number | null, mcpKeyDefaultExpiresInDays: null as number | null, mcpKeyMaxExpiresInDays: null as number | null, restrictApiKeyCreationToAdmins: false, restrictMcpKeyCreationToAdmins: false })
+    const readApiMcpKeyPolicy = async () => (await prisma.apiMcpKeyPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultApiMcpKeyPolicy()
     const requireAutomationPolicyFeature = async (_request: unknown, reply: any) => {
       const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
       if (edition.availableFeatures.includes('automation.workflowPolicies')) return true
@@ -1864,6 +1866,51 @@ const start = async () => {
         update: { allowedRuntimeTypes, workflowStartRoles: workflowStartRoles.length ? workflowStartRoles : ['OWNER'], maxConcurrentWorkflowJobs, workflowStartRequiresApproval: Boolean(body.workflowStartRequiresApproval) },
       })
       await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.automationPolicy.updated', targetType: 'automationGovernancePolicy', targetId: policy.id, summary: 'Updated automation governance policy', metadata: { allowedRuntimeTypes, workflowStartRoles: policy.workflowStartRoles, maxConcurrentWorkflowJobs, workflowStartRequiresApproval: policy.workflowStartRequiresApproval } })
+      return { ok: true, policy }
+    })
+
+    const requireApiMcpKeyPolicyFeature = async (_request: unknown, reply: any) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (edition.availableFeatures.includes('security.apiMcpKeyPolicy')) return true
+      reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.apiMcpKeyPolicy', upgradeUrl: edition.upgradeUrl })
+      return false
+    }
+    const boundedOptionalDays = (value: unknown) => {
+      if (value === undefined || value === null || value === '') return null
+      const days = Math.floor(Number(value))
+      return Number.isFinite(days) ? Math.max(1, Math.min(3650, days)) : null
+    }
+    const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+    const resolvePolicyExpiry = (input: { requestedExpiresAt: unknown; requireExpiry: boolean; defaultDays: number | null; maxDays: number | null }) => {
+      const requested = parseOptionalExpiry(input.requestedExpiresAt)
+      const expiresAt = requested ?? (input.defaultDays ? daysFromNow(input.defaultDays) : null)
+      if (!expiresAt && input.requireExpiry) throw new Error('expiresAt is required by key policy')
+      if (expiresAt && input.maxDays && expiresAt > daysFromNow(input.maxDays)) throw new Error(`expiresAt cannot be more than ${input.maxDays} days in the future`)
+      return expiresAt
+    }
+
+    app.get('/security/key-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireApiMcpKeyPolicyFeature(request, reply))) return
+      return { ok: true, policy: await readApiMcpKeyPolicy() }
+    })
+
+    app.put('/security/key-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireApiMcpKeyPolicyFeature(request, reply))) return
+      const body = request.body as Record<string, unknown>
+      const data = {
+        requireApiKeyExpiry: Boolean(body.requireApiKeyExpiry),
+        requireMcpKeyExpiry: Boolean(body.requireMcpKeyExpiry),
+        apiKeyDefaultExpiresInDays: boundedOptionalDays(body.apiKeyDefaultExpiresInDays),
+        apiKeyMaxExpiresInDays: boundedOptionalDays(body.apiKeyMaxExpiresInDays),
+        mcpKeyDefaultExpiresInDays: boundedOptionalDays(body.mcpKeyDefaultExpiresInDays),
+        mcpKeyMaxExpiresInDays: boundedOptionalDays(body.mcpKeyMaxExpiresInDays),
+        restrictApiKeyCreationToAdmins: Boolean(body.restrictApiKeyCreationToAdmins),
+        restrictMcpKeyCreationToAdmins: Boolean(body.restrictMcpKeyCreationToAdmins),
+      }
+      const policy = await prisma.apiMcpKeyPolicy.upsert({ where: { id: 'instance' }, create: { id: 'instance', ...data }, update: data })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.keyPolicy.updated', targetType: 'apiMcpKeyPolicy', targetId: policy.id, summary: 'Updated API and MCP key policy', metadata: data })
       return { ok: true, policy }
     })
 
@@ -2062,15 +2109,18 @@ const start = async () => {
       const body = request.body as { label?: string; scopes?: string[]; expiresAt?: string | null }
       const label = body.label?.trim()
       if (!label) return reply.code(400).send({ ok: false, error: 'label is required' })
-      if (body.expiresAt) {
-        const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
-        if (!edition.availableFeatures.includes('security.apiMcpKeyPolicy')) {
-          return reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.apiMcpKeyPolicy', upgradeUrl: edition.upgradeUrl })
-        }
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      const keyPolicyEnabled = edition.availableFeatures.includes('security.apiMcpKeyPolicy')
+      if (body.expiresAt && !keyPolicyEnabled) {
+        return reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.apiMcpKeyPolicy', upgradeUrl: edition.upgradeUrl })
       }
+      const keyPolicy = keyPolicyEnabled ? await readApiMcpKeyPolicy() : defaultApiMcpKeyPolicy()
+      if (keyPolicy.restrictApiKeyCreationToAdmins && !isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'API key creation is restricted to platform admins by key policy' })
       let expiresAt: Date | null = null
       try {
-        expiresAt = parseOptionalExpiry(body.expiresAt)
+        expiresAt = keyPolicyEnabled
+          ? resolvePolicyExpiry({ requestedExpiresAt: body.expiresAt, requireExpiry: keyPolicy.requireApiKeyExpiry, defaultDays: keyPolicy.apiKeyDefaultExpiresInDays, maxDays: keyPolicy.apiKeyMaxExpiresInDays })
+          : parseOptionalExpiry(body.expiresAt)
       } catch (error) {
         return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'expiresAt is invalid' })
       }
@@ -2119,15 +2169,18 @@ const start = async () => {
       const body = request.body as { label?: string; workspaceId?: string | null; scopes?: string[]; expiresAt?: string | null }
       const label = body.label?.trim()
       if (!label) return reply.code(400).send({ ok: false, error: 'label is required' })
-      if (body.expiresAt) {
-        const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
-        if (!edition.availableFeatures.includes('security.apiMcpKeyPolicy')) {
-          return reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.apiMcpKeyPolicy', upgradeUrl: edition.upgradeUrl })
-        }
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      const keyPolicyEnabled = edition.availableFeatures.includes('security.apiMcpKeyPolicy')
+      if (body.expiresAt && !keyPolicyEnabled) {
+        return reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.apiMcpKeyPolicy', upgradeUrl: edition.upgradeUrl })
       }
+      const keyPolicy = keyPolicyEnabled ? await readApiMcpKeyPolicy() : defaultApiMcpKeyPolicy()
+      if (keyPolicy.restrictMcpKeyCreationToAdmins && !isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'MCP key creation is restricted to platform admins by key policy' })
       let expiresAt: Date | null = null
       try {
-        expiresAt = parseOptionalExpiry(body.expiresAt)
+        expiresAt = keyPolicyEnabled
+          ? resolvePolicyExpiry({ requestedExpiresAt: body.expiresAt, requireExpiry: keyPolicy.requireMcpKeyExpiry, defaultDays: keyPolicy.mcpKeyDefaultExpiresInDays, maxDays: keyPolicy.mcpKeyMaxExpiresInDays })
+          : parseOptionalExpiry(body.expiresAt)
       } catch (error) {
         return reply.code(400).send({ ok: false, error: error instanceof Error ? error.message : 'expiresAt is invalid' })
       }

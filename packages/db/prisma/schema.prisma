@@ -301,6 +301,20 @@ model AutomationGovernancePolicy {
   updatedAt                     DateTime @updatedAt
 }
 
+model ApiMcpKeyPolicy {
+  id                             String   @id @default("instance")
+  requireApiKeyExpiry            Boolean  @default(false)
+  requireMcpKeyExpiry            Boolean  @default(false)
+  apiKeyDefaultExpiresInDays     Int?
+  apiKeyMaxExpiresInDays         Int?
+  mcpKeyDefaultExpiresInDays     Int?
+  mcpKeyMaxExpiresInDays         Int?
+  restrictApiKeyCreationToAdmins Boolean  @default(false)
+  restrictMcpKeyCreationToAdmins Boolean  @default(false)
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+}
+
 model SamlAuthRequest {
   id         String    @id
   relayState String    @unique

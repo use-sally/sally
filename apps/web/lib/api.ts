@@ -77,6 +77,9 @@ export function deleteSamlIdentityProvider(): Promise<{ ok: boolean; deleted: bo
 export type AutomationGovernancePolicy = { id: string; allowedRuntimeTypes: string[]; workflowStartRoles: string[]; maxConcurrentWorkflowJobs: number; workflowStartRequiresApproval: boolean }
 export function getAutomationGovernancePolicy(): Promise<{ ok: boolean; policy: AutomationGovernancePolicy }> { return getJson('/security/automation-policy') }
 export function saveAutomationGovernancePolicy(payload: { allowedRuntimeTypes: string[]; workflowStartRoles: string[]; maxConcurrentWorkflowJobs: number; workflowStartRequiresApproval: boolean }): Promise<{ ok: boolean; policy: AutomationGovernancePolicy }> { return getJson('/security/automation-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
+export type ApiMcpKeyPolicy = { id: string; requireApiKeyExpiry: boolean; requireMcpKeyExpiry: boolean; apiKeyDefaultExpiresInDays: number | null; apiKeyMaxExpiresInDays: number | null; mcpKeyDefaultExpiresInDays: number | null; mcpKeyMaxExpiresInDays: number | null; restrictApiKeyCreationToAdmins: boolean; restrictMcpKeyCreationToAdmins: boolean }
+export function getApiMcpKeyPolicy(): Promise<{ ok: boolean; policy: ApiMcpKeyPolicy }> { return getJson('/security/key-policy') }
+export function saveApiMcpKeyPolicy(payload: Omit<ApiMcpKeyPolicy, 'id'>): Promise<{ ok: boolean; policy: ApiMcpKeyPolicy }> { return getJson('/security/key-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)

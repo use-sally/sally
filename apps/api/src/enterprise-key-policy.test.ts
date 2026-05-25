@@ -35,14 +35,25 @@ test('personal key UI exposes expiry and scope controls for API and hosted MCP k
 })
 
 test('API and MCP key validity dates are visible but Enterprise locked in Community', () => {
-  assert.match(apiIndexSource, /app\.post\('\/auth\/api-keys'[\s\S]*body\.expiresAt[\s\S]*security\.apiMcpKeyPolicy[\s\S]*reply\.code\(402\)/)
-  assert.match(apiIndexSource, /app\.post\('\/auth\/mcp-keys'[\s\S]*body\.expiresAt[\s\S]*security\.apiMcpKeyPolicy[\s\S]*reply\.code\(402\)/)
+  assert.match(apiIndexSource, /app\.post\('\/auth\/api-keys'[\s\S]*body\.expiresAt[\s\S]*reply\.code\(402\)[\s\S]*security\.apiMcpKeyPolicy/)
+  assert.match(apiIndexSource, /app\.post\('\/auth\/mcp-keys'[\s\S]*body\.expiresAt[\s\S]*reply\.code\(402\)[\s\S]*security\.apiMcpKeyPolicy/)
   assert.match(personalKeysSource, /const keyExpiryEnabled = hasFeature\(edition, 'security\.apiMcpKeyPolicy'\)/)
   assert.match(personalKeysSource, /readOnly=\{!keyExpiryEnabled\}/)
   assert.match(personalKeysSource, /\$\{kind\} key validity dates are an Enterprise feature/)
   assert.match(personalKeysSource, /showKeyExpiryUpgrade\('API'\)/)
   assert.match(personalKeysSource, /showKeyExpiryUpgrade\('MCP'\)/)
   assert.match(personalKeysSource, /Visible in Community\. Click to learn why validity dates require Enterprise\./)
+})
+
+test('Enterprise API and MCP key policy has admin governance surface', () => {
+  assert.match(schemaSource, /model ApiMcpKeyPolicy \{[\s\S]*requireApiKeyExpiry\s+Boolean[\s\S]*apiKeyMaxExpiresInDays\s+Int\?[\s\S]*restrictMcpKeyCreationToAdmins\s+Boolean/)
+  assert.match(apiIndexSource, /app\.get\('\/security\/key-policy'/)
+  assert.match(apiIndexSource, /app\.put\('\/security\/key-policy'/)
+  assert.match(apiIndexSource, /resolvePolicyExpiry/)
+  assert.match(apiIndexSource, /restrictApiKeyCreationToAdmins/)
+  assert.match(apiIndexSource, /restrictMcpKeyCreationToAdmins/)
+  assert.match(apiClientSource, /getApiMcpKeyPolicy/)
+  assert.match(apiClientSource, /saveApiMcpKeyPolicy/)
 })
 
 test('web API client carries key policy fields', () => {
