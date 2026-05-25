@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { AppShell } from '../../components/app-shell'
-import { activateLicense, getLicense, refreshLicense, removeLicense, type InstalledLicenseSummary } from '../../lib/api'
+import { activateLicense, getLicense, removeLicense, type InstalledLicenseSummary } from '../../lib/api'
 import { deleteTextAction } from '../../lib/theme'
 
 function formatDate(value?: string | null) {
@@ -84,22 +84,6 @@ export default function EditionLicensePage() {
     }
   }
 
-  const handleRefresh = async () => {
-    setWorking(true)
-    setError(null)
-    setNotice(null)
-    try {
-      await refreshLicense()
-      setNotice('License refreshed.')
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'License refresh failed')
-      await load()
-    } finally {
-      setWorking(false)
-    }
-  }
-
   const handleRemove = async () => {
     if (!window.confirm('Remove the installed license and return this instance to Community?')) return
     setWorking(true)
@@ -152,16 +136,8 @@ export default function EditionLicensePage() {
         {license?.installed ? (
           <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 10 }}>
             <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Installed license</h2>
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>This instance has an installed license certificate. Sally refreshes it automatically before the next check time and records the last refresh error if the license server cannot be reached.</p>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>This instance has an installed license certificate. Sally checks license state when this page loads and automatically syncs with the license server before the next check time.</p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                disabled={working}
-                onClick={handleRefresh}
-                style={{ justifySelf: 'start', border: '1px solid var(--panel-border)', background: 'var(--form-bg)', color: 'var(--text-primary)', borderRadius: 12, padding: '10px 14px', fontWeight: 750, opacity: working ? 0.5 : 1 }}
-              >
-                Refresh license now
-              </button>
               <button
                 type="button"
                 disabled={working}
