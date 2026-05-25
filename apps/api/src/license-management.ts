@@ -23,12 +23,15 @@ type InstalledLicenseRecord = InstalledLicenseInput & {
   validUntil?: Date | string | null
   graceUntil?: Date | string | null
   lastRefreshAt?: Date | string | null
+  nextRefreshAt?: Date | string | null
+  lastRefreshError?: string | null
 }
 
 type InstalledLicenseStore = {
   installedLicense: {
     findUnique(args: unknown): Promise<InstalledLicenseRecord | null>
     upsert(args: unknown): Promise<InstalledLicenseRecord>
+    update(args: unknown): Promise<InstalledLicenseRecord>
     deleteMany(args: unknown): Promise<{ count: number }>
   }
 }
@@ -56,6 +59,7 @@ function buildStoredLicense(input: { licenseServerUrl: string; response: License
   if (!input.response.certificate || !input.response.publicKey) throw new Error('License server response did not include a certificate and public key')
   const certificate = decodeBase64UrlJson(input.response.certificate)
   const validUntil = input.response.license?.validUntil || certificate?.validUntil || null
+  const nextRefreshAt = input.response.refreshAfter ? new Date(input.response.refreshAfter) : new Date(Date.now() + AUTO_REFRESH_INTERVAL_MS)
   return {
     id: INSTALLED_LICENSE_ID,
     licenseServerUrl: input.licenseServerUrl,
@@ -68,6 +72,8 @@ function buildStoredLicense(input: { licenseServerUrl: string; response: License
     validUntil: validUntil ? new Date(validUntil) : null,
     graceUntil: certificate?.graceUntil ? new Date(certificate.graceUntil) : null,
     lastRefreshAt: input.lastRefreshAt ?? null,
+    nextRefreshAt: Number.isNaN(nextRefreshAt.getTime()) ? new Date(Date.now() + AUTO_REFRESH_INTERVAL_MS) : nextRefreshAt,
+    lastRefreshError: null,
   }
 }
 
@@ -101,6 +107,7 @@ export async function readInstalledLicense(prisma: InstalledLicenseStore): Promi
 }
 
 const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000
+const AUTO_REFRESH_RETRY_MS = 60 * 60 * 1000
 const AUTO_REFRESH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
 
 export async function readInstalledLicenseWithAutoRefresh(prisma: InstalledLicenseStore): Promise<InstalledLicenseInput> {
@@ -110,13 +117,21 @@ export async function readInstalledLicenseWithAutoRefresh(prisma: InstalledLicen
   const now = Date.now()
   const lastRefreshAt = record.lastRefreshAt ? new Date(record.lastRefreshAt).getTime() : 0
   const validUntil = record.validUntil ? new Date(record.validUntil).getTime() : 0
-  const refreshDue = !lastRefreshAt || lastRefreshAt <= now - AUTO_REFRESH_INTERVAL_MS || !validUntil || validUntil <= now + AUTO_REFRESH_WINDOW_MS
+  const nextRefreshAt = record.nextRefreshAt ? new Date(record.nextRefreshAt).getTime() : 0
+  const refreshDue = !lastRefreshAt || !nextRefreshAt || nextRefreshAt <= now || !validUntil || validUntil <= now + AUTO_REFRESH_WINDOW_MS
   if (!refreshDue) return toInstalledLicenseInput(record)
 
   try {
     const refreshed = await refreshInstalledLicense(prisma)
     return toInstalledLicenseInput(refreshed.license)
-  } catch {
+  } catch (error) {
+    await prisma.installedLicense.update({
+      where: { id: INSTALLED_LICENSE_ID },
+      data: {
+        lastRefreshError: error instanceof Error ? error.message : 'License refresh failed',
+        nextRefreshAt: new Date(Date.now() + AUTO_REFRESH_RETRY_MS),
+      },
+    })
     return toInstalledLicenseInput(record)
   }
 }

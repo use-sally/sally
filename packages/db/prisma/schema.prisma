@@ -272,6 +272,8 @@ model InstalledLicense {
   validUntil       DateTime?
   graceUntil       DateTime?
   lastRefreshAt    DateTime?
+  nextRefreshAt    DateTime?
+  lastRefreshError String?
   installedAt      DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }

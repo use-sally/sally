@@ -1636,6 +1636,8 @@ const start = async () => {
           validUntil: record.validUntil?.toISOString() ?? null,
           graceUntil: record.graceUntil?.toISOString() ?? null,
           lastRefreshAt: record.lastRefreshAt?.toISOString() ?? null,
+          nextRefreshAt: record.nextRefreshAt?.toISOString() ?? null,
+          lastRefreshError: record.lastRefreshError ?? null,
           installedAt: record.installedAt.toISOString(),
           updatedAt: record.updatedAt.toISOString(),
         } : null,

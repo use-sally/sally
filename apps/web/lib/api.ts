@@ -55,6 +55,8 @@ export type InstalledLicenseSummary = EditionInfo & {
     validUntil: string | null
     graceUntil: string | null
     lastRefreshAt: string | null
+    nextRefreshAt: string | null
+    lastRefreshError: string | null
     installedAt: string
     updatedAt: string
   }
