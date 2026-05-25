@@ -34,6 +34,14 @@ test('personal key UI exposes expiry and scope controls for API and hosted MCP k
   assert.match(personalKeysSource, /createMcpKey\(\{ label: mcpKeyLabel\.trim\(\), workspaceId: mcpWorkspaceId \|\| null, scopes: mcpKeyScopes, expiresAt:/)
 })
 
+test('MCP key validity dates are visible but Enterprise locked in Community', () => {
+  assert.match(apiIndexSource, /body\.expiresAt[\s\S]*security\.apiMcpKeyPolicy[\s\S]*reply\.code\(402\)/)
+  assert.match(personalKeysSource, /const mcpKeyExpiryEnabled = hasFeature\(edition, 'security\.apiMcpKeyPolicy'\)/)
+  assert.match(personalKeysSource, /readOnly=\{!mcpKeyExpiryEnabled\}/)
+  assert.match(personalKeysSource, /MCP key validity dates are an Enterprise feature/)
+  assert.match(personalKeysSource, /Visible in Community\. Click to learn why validity dates require Enterprise\./)
+})
+
 test('web API client carries key policy fields', () => {
   assert.match(apiClientSource, /scopes: string\[\]; expiresAt: string \| null/)
   assert.match(apiClientSource, /createApiKey\(payload: \{ label: string; scopes\?: string\[\]; expiresAt\?: string \| null \}/)

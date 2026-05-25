@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import type { Membership } from '../lib/auth'
 import { loadSession } from '../lib/auth'
-import { apiUrl, createApiKey, createMcpKey, getApiKeys, getMcpKeys, getRuntimeConfig, revokeApiKey, revokeMcpKey } from '../lib/api'
+import { apiUrl, createApiKey, createMcpKey, getApiKeys, getMcpKeys, getRuntimeConfig, getEdition, revokeApiKey, revokeMcpKey } from '../lib/api'
+import { hasFeature, type EditionInfo } from '../lib/edition'
 import { deleteTextAction, labelText, metaLabelText, projectInputField, sectionLabelText } from '../lib/theme'
 import { panel } from './app-shell'
 import { InfoFlag } from './info-flag'
@@ -53,6 +54,7 @@ export function PersonalApiKeysPanel() {
   const [copied, setCopied] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [appBaseUrl, setAppBaseUrl] = useState<string | null>(null)
+  const [edition, setEdition] = useState<EditionInfo | null>(null)
 
   const endpoint = apiUrl('/mcp')
   const displayEndpoint = useMemo(() => {
@@ -63,15 +65,18 @@ export function PersonalApiKeysPanel() {
   }, [endpoint, appBaseUrl])
   const hostedConfig = useMemo(() => JSON.stringify({ sally: { type: 'http', url: displayEndpoint, headers: { Authorization: 'Bearer YOUR_HOSTED_MCP_KEY' } } }, null, 2), [displayEndpoint])
   const restrictedWorkspace = memberships.find((membership) => membership.workspaceId === mcpWorkspaceId)
+  const mcpKeyExpiryEnabled = hasFeature(edition, 'security.apiMcpKeyPolicy')
+  const showMcpKeyExpiryUpgrade = () => setError('MCP key validity dates are an Enterprise feature. Upgrade to Enterprise to set expiry dates for hosted MCP keys.')
 
   const loadKeys = async () => {
     setLoading(true)
     setError(null)
     try {
-      const [api, mcp, runtimeConfig] = await Promise.all([getApiKeys(), getMcpKeys(), getRuntimeConfig()])
+      const [api, mcp, runtimeConfig, editionInfo] = await Promise.all([getApiKeys(), getMcpKeys(), getRuntimeConfig(), getEdition()])
       setApiKeys(api)
       setMcpKeys(mcp)
       setAppBaseUrl(runtimeConfig.appBaseUrl)
+      setEdition(editionInfo)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load keys')
     } finally {
@@ -132,8 +137,16 @@ export function PersonalApiKeysPanel() {
           <>
             <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
               <span style={fieldLabel}>Expires at</span>
-              <input type="datetime-local" value={mcpKeyExpiresAt} onChange={(event) => setMcpKeyExpiresAt(event.target.value)} style={inputStyle} />
-              <span style={{ ...labelText, fontWeight: 500 }}>Optional. Enterprise policy should prefer expiring MCP keys.</span>
+              <input
+                type="datetime-local"
+                value={mcpKeyExpiresAt}
+                readOnly={!mcpKeyExpiryEnabled}
+                onClick={() => { if (!mcpKeyExpiryEnabled) showMcpKeyExpiryUpgrade() }}
+                onFocus={() => { if (!mcpKeyExpiryEnabled) showMcpKeyExpiryUpgrade() }}
+                onChange={(event) => { if (mcpKeyExpiryEnabled) setMcpKeyExpiresAt(event.target.value) }}
+                style={{ ...inputStyle, cursor: mcpKeyExpiryEnabled ? 'text' : 'pointer', opacity: mcpKeyExpiryEnabled ? 1 : 0.72 }}
+              />
+              <span style={{ ...labelText, fontWeight: 500 }}>{mcpKeyExpiryEnabled ? 'Optional. Enterprise policy should prefer expiring MCP keys.' : 'Visible in Community. Click to learn why validity dates require Enterprise.'}</span>
             </label>
             <div style={{ display: 'grid', gap: 6, minWidth: 220 }}>
               <span style={fieldLabel}>Scopes</span>
@@ -163,7 +176,7 @@ export function PersonalApiKeysPanel() {
           </>
         }
         onCreate={async () => {
-          const created = await createMcpKey({ label: mcpKeyLabel.trim(), workspaceId: mcpWorkspaceId || null, scopes: mcpKeyScopes, expiresAt: mcpKeyExpiresAt ? new Date(mcpKeyExpiresAt).toISOString() : null })
+          const created = await createMcpKey({ label: mcpKeyLabel.trim(), workspaceId: mcpWorkspaceId || null, scopes: mcpKeyScopes, expiresAt: mcpKeyExpiryEnabled && mcpKeyExpiresAt ? new Date(mcpKeyExpiresAt).toISOString() : null })
           setMcpKeySecret(created.key)
           setMcpKeyLabel('')
           setMcpKeyExpiresAt('')
