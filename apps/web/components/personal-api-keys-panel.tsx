@@ -65,8 +65,8 @@ export function PersonalApiKeysPanel() {
   }, [endpoint, appBaseUrl])
   const hostedConfig = useMemo(() => JSON.stringify({ sally: { type: 'http', url: displayEndpoint, headers: { Authorization: 'Bearer YOUR_HOSTED_MCP_KEY' } } }, null, 2), [displayEndpoint])
   const restrictedWorkspace = memberships.find((membership) => membership.workspaceId === mcpWorkspaceId)
-  const mcpKeyExpiryEnabled = hasFeature(edition, 'security.apiMcpKeyPolicy')
-  const showMcpKeyExpiryUpgrade = () => setError('MCP key validity dates are an Enterprise feature. Upgrade to Enterprise to set expiry dates for hosted MCP keys.')
+  const keyExpiryEnabled = hasFeature(edition, 'security.apiMcpKeyPolicy')
+  const showKeyExpiryUpgrade = (kind: 'API' | 'MCP') => setError(`${kind} key validity dates are an Enterprise feature. Upgrade to Enterprise to set expiry dates for personal ${kind} keys.`)
 
   const loadKeys = async () => {
     setLoading(true)
@@ -140,13 +140,13 @@ export function PersonalApiKeysPanel() {
               <input
                 type="datetime-local"
                 value={mcpKeyExpiresAt}
-                readOnly={!mcpKeyExpiryEnabled}
-                onClick={() => { if (!mcpKeyExpiryEnabled) showMcpKeyExpiryUpgrade() }}
-                onFocus={() => { if (!mcpKeyExpiryEnabled) showMcpKeyExpiryUpgrade() }}
-                onChange={(event) => { if (mcpKeyExpiryEnabled) setMcpKeyExpiresAt(event.target.value) }}
-                style={{ ...inputStyle, cursor: mcpKeyExpiryEnabled ? 'text' : 'pointer', opacity: mcpKeyExpiryEnabled ? 1 : 0.72 }}
+                readOnly={!keyExpiryEnabled}
+                onClick={() => { if (!keyExpiryEnabled) showKeyExpiryUpgrade('MCP') }}
+                onFocus={() => { if (!keyExpiryEnabled) showKeyExpiryUpgrade('MCP') }}
+                onChange={(event) => { if (keyExpiryEnabled) setMcpKeyExpiresAt(event.target.value) }}
+                style={{ ...inputStyle, cursor: keyExpiryEnabled ? 'text' : 'pointer', opacity: keyExpiryEnabled ? 1 : 0.72 }}
               />
-              <span style={{ ...labelText, fontWeight: 500 }}>{mcpKeyExpiryEnabled ? 'Optional. Enterprise policy should prefer expiring MCP keys.' : 'Visible in Community. Click to learn why validity dates require Enterprise.'}</span>
+              <span style={{ ...labelText, fontWeight: 500 }}>{keyExpiryEnabled ? 'Optional. Enterprise policy should prefer expiring MCP keys.' : 'Visible in Community. Click to learn why validity dates require Enterprise.'}</span>
             </label>
             <div style={{ display: 'grid', gap: 6, minWidth: 220 }}>
               <span style={fieldLabel}>Scopes</span>
@@ -176,7 +176,7 @@ export function PersonalApiKeysPanel() {
           </>
         }
         onCreate={async () => {
-          const created = await createMcpKey({ label: mcpKeyLabel.trim(), workspaceId: mcpWorkspaceId || null, scopes: mcpKeyScopes, expiresAt: mcpKeyExpiryEnabled && mcpKeyExpiresAt ? new Date(mcpKeyExpiresAt).toISOString() : null })
+          const created = await createMcpKey({ label: mcpKeyLabel.trim(), workspaceId: mcpWorkspaceId || null, scopes: mcpKeyScopes, expiresAt: keyExpiryEnabled && mcpKeyExpiresAt ? new Date(mcpKeyExpiresAt).toISOString() : null })
           setMcpKeySecret(created.key)
           setMcpKeyLabel('')
           setMcpKeyExpiresAt('')
@@ -205,8 +205,16 @@ export function PersonalApiKeysPanel() {
           <>
             <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
               <span style={fieldLabel}>Expires at</span>
-              <input type="datetime-local" value={apiKeyExpiresAt} onChange={(event) => setApiKeyExpiresAt(event.target.value)} style={inputStyle} />
-              <span style={{ ...labelText, fontWeight: 500 }}>Optional. Use expiry for third-party integrations.</span>
+              <input
+                type="datetime-local"
+                value={apiKeyExpiresAt}
+                readOnly={!keyExpiryEnabled}
+                onClick={() => { if (!keyExpiryEnabled) showKeyExpiryUpgrade('API') }}
+                onFocus={() => { if (!keyExpiryEnabled) showKeyExpiryUpgrade('API') }}
+                onChange={(event) => { if (keyExpiryEnabled) setApiKeyExpiresAt(event.target.value) }}
+                style={{ ...inputStyle, cursor: keyExpiryEnabled ? 'text' : 'pointer', opacity: keyExpiryEnabled ? 1 : 0.72 }}
+              />
+              <span style={{ ...labelText, fontWeight: 500 }}>{keyExpiryEnabled ? 'Optional. Use expiry for third-party integrations.' : 'Visible in Community. Click to learn why validity dates require Enterprise.'}</span>
             </label>
             <div style={{ display: 'grid', gap: 6, minWidth: 220 }}>
               <span style={fieldLabel}>Scopes</span>
@@ -222,7 +230,7 @@ export function PersonalApiKeysPanel() {
           </>
         }
         onCreate={async () => {
-          const created = await createApiKey({ label: apiKeyLabel.trim(), scopes: apiKeyScopes, expiresAt: apiKeyExpiresAt ? new Date(apiKeyExpiresAt).toISOString() : null })
+          const created = await createApiKey({ label: apiKeyLabel.trim(), scopes: apiKeyScopes, expiresAt: keyExpiryEnabled && apiKeyExpiresAt ? new Date(apiKeyExpiresAt).toISOString() : null })
           setApiKeySecret(created.key)
           setApiKeyLabel('')
           setApiKeyExpiresAt('')

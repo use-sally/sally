@@ -2031,6 +2031,12 @@ const start = async () => {
       const body = request.body as { label?: string; scopes?: string[]; expiresAt?: string | null }
       const label = body.label?.trim()
       if (!label) return reply.code(400).send({ ok: false, error: 'label is required' })
+      if (body.expiresAt) {
+        const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+        if (!edition.availableFeatures.includes('security.apiMcpKeyPolicy')) {
+          return reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.apiMcpKeyPolicy', upgradeUrl: edition.upgradeUrl })
+        }
+      }
       let expiresAt: Date | null = null
       try {
         expiresAt = parseOptionalExpiry(body.expiresAt)

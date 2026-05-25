@@ -34,11 +34,14 @@ test('personal key UI exposes expiry and scope controls for API and hosted MCP k
   assert.match(personalKeysSource, /createMcpKey\(\{ label: mcpKeyLabel\.trim\(\), workspaceId: mcpWorkspaceId \|\| null, scopes: mcpKeyScopes, expiresAt:/)
 })
 
-test('MCP key validity dates are visible but Enterprise locked in Community', () => {
-  assert.match(apiIndexSource, /body\.expiresAt[\s\S]*security\.apiMcpKeyPolicy[\s\S]*reply\.code\(402\)/)
-  assert.match(personalKeysSource, /const mcpKeyExpiryEnabled = hasFeature\(edition, 'security\.apiMcpKeyPolicy'\)/)
-  assert.match(personalKeysSource, /readOnly=\{!mcpKeyExpiryEnabled\}/)
-  assert.match(personalKeysSource, /MCP key validity dates are an Enterprise feature/)
+test('API and MCP key validity dates are visible but Enterprise locked in Community', () => {
+  assert.match(apiIndexSource, /app\.post\('\/auth\/api-keys'[\s\S]*body\.expiresAt[\s\S]*security\.apiMcpKeyPolicy[\s\S]*reply\.code\(402\)/)
+  assert.match(apiIndexSource, /app\.post\('\/auth\/mcp-keys'[\s\S]*body\.expiresAt[\s\S]*security\.apiMcpKeyPolicy[\s\S]*reply\.code\(402\)/)
+  assert.match(personalKeysSource, /const keyExpiryEnabled = hasFeature\(edition, 'security\.apiMcpKeyPolicy'\)/)
+  assert.match(personalKeysSource, /readOnly=\{!keyExpiryEnabled\}/)
+  assert.match(personalKeysSource, /\$\{kind\} key validity dates are an Enterprise feature/)
+  assert.match(personalKeysSource, /showKeyExpiryUpgrade\('API'\)/)
+  assert.match(personalKeysSource, /showKeyExpiryUpgrade\('MCP'\)/)
   assert.match(personalKeysSource, /Visible in Community\. Click to learn why validity dates require Enterprise\./)
 })
 
