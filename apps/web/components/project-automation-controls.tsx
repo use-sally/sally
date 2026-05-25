@@ -89,6 +89,10 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   const config = data?.config ?? null
   const connections = (data?.connections ?? []).filter((connection) => !connection.revokedAt && connection.status !== 'REVOKED')
   const activeConnection = connections[0] ?? null
+  const allowedRuntimeTypes = data?.automationPolicy?.allowedRuntimeTypes ?? []
+  const runtimeOptions = allowedRuntimeTypes.length ? AGENT_RUNTIME_OPTIONS.filter((runtime) => allowedRuntimeTypes.includes(runtime.id)) : AGENT_RUNTIME_OPTIONS
+  const selectedRuntimeAllowed = runtimeOptions.some((runtime) => runtime.id === selectedRuntime)
+  const effectiveSelectedRuntime = selectedRuntimeAllowed ? selectedRuntime : (runtimeOptions[0]?.id ?? 'hermes')
   const pendingPairing = Boolean(pairingCode)
   const connectionToggleOn = Boolean(activeConnection)
   const workflowEnabled = config?.workflowEnabled ?? false
@@ -105,6 +109,10 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
       setPairingCode(null)
     }
   }, [activeConnection, connectorModal])
+
+  useEffect(() => {
+    if (runtimeOptions.length && !selectedRuntimeAllowed) setSelectedRuntime(runtimeOptions[0].id)
+  }, [runtimeOptions, selectedRuntimeAllowed])
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: qk.projectAutomation(projectId) })
@@ -157,7 +165,7 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
     setPairingCode(null)
     setErrorMessage(null)
     try {
-      const runtime = getAgentRuntimeOption(selectedRuntime)
+      const runtime = getAgentRuntimeOption(effectiveSelectedRuntime)
       const result = await createAgentPairingCode({ projectId, name: `${runtime.label} project worker`, runtimeType: runtime.id, ttlMinutes: 10 })
       const commandInput = {
         runtime: runtime.id,
@@ -227,9 +235,9 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
       {connectorModal ? <AgentConnectorModal modal={connectorModal} onClose={() => setConnectorModal(null)} /> : null}
       {disconnectModalOpen && activeConnection ? <AgentDisconnectModal hasActiveWorkflowWork={hasActiveWorkflowWork} saving={saving} onCancel={() => setDisconnectModalOpen(false)} onConfirm={() => void handleDisconnectConfirmed()} /> : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: compact ? 'flex-end' : 'flex-start', alignItems: 'center' }}>
-        {!activeConnection && !pendingPairing ? <AgentRuntimePicker value={selectedRuntime} disabled={!canManage || saving} onChange={setSelectedRuntime} /> : null}
+        {!activeConnection && !pendingPairing ? <AgentRuntimePicker value={effectiveSelectedRuntime} options={runtimeOptions} disabled={!canManage || saving || runtimeOptions.length === 0} onChange={setSelectedRuntime} /> : null}
         <button type="button" role="switch" aria-checked={connectionToggleOn} disabled={!canManage || saving} onClick={() => void handleRevokeConnection()} style={automationIslandControlStyle(connectionToggleOn, agentPrerequisiteHighlight)}>
-          {activeConnection ? `${getAgentRuntimeOption(activeConnection.runtimeType).label} connected` : pendingPairing ? `${getAgentRuntimeOption(selectedRuntime).label} pairing pending` : `Connect ${getAgentRuntimeOption(selectedRuntime).label}`}
+          {activeConnection ? `${getAgentRuntimeOption(activeConnection.runtimeType).label} connected` : pendingPairing ? `${getAgentRuntimeOption(effectiveSelectedRuntime).label} pairing pending` : `Connect ${getAgentRuntimeOption(effectiveSelectedRuntime).label}`}
         </button>
         <button type="button" disabled={!canManage || starting || saving} onClick={() => void handleWorkflowControlAction()} style={automationIslandControlStyle(workflowControl.tone)}>{workflowControl.label}</button>
       </div>
@@ -240,10 +248,10 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
   )
 }
 
-function AgentRuntimePicker({ value, disabled, onChange }: { value: AgentRuntimeId; disabled: boolean; onChange: (runtime: AgentRuntimeId) => void }) {
+function AgentRuntimePicker({ value, options, disabled, onChange }: { value: AgentRuntimeId; options: typeof AGENT_RUNTIME_OPTIONS; disabled: boolean; onChange: (runtime: AgentRuntimeId) => void }) {
   return (
     <select aria-label="Agent runtime" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as AgentRuntimeId)} style={runtimePickerStyle}>
-      {AGENT_RUNTIME_OPTIONS.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.label}</option>)}
+      {options.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.label}</option>)}
     </select>
   )
 }

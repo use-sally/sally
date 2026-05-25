@@ -84,9 +84,9 @@ test('project automation controls present one-agent workflow instead of role-age
   assert.match(automationPanelSource, /one connected local agent/i)
   assert.match(automationControlsSource, /role="switch"/)
   assert.match(automationControlsSource, /AgentRuntimePicker/)
-  assert.match(automationControlsSource, /Connect \$\{getAgentRuntimeOption\(selectedRuntime\)\.label\}/)
+  assert.match(automationControlsSource, /Connect \$\{getAgentRuntimeOption\(effectiveSelectedRuntime\)\.label\}/)
   assert.match(automationControlsSource, /getAgentRuntimeOption\(activeConnection\.runtimeType\)\.label/)
-  assert.deepEqual(AGENT_RUNTIME_OPTIONS.map((runtime) => runtime.id), ['hermes', 'codex', 'pi', 'openclaw', 'claude-code'])
+  assert.deepEqual(AGENT_RUNTIME_OPTIONS.map((runtime) => runtime.id), ['hermes', 'codex', 'pi', 'openclaw', 'claude-code', 'opencode'])
   assert.match(automationControlsSource, /workflowControl\.label/)
   assert.ok(automationControlsSource.indexOf('role="switch"') < automationControlsSource.indexOf('workflowControl.label'))
   assert.doesNotMatch(automationPanelSource, /Role mapping/)
@@ -117,7 +117,7 @@ test('project automation controls distinguish pending pairing from established c
   assert.match(automationControlsSource, /const pendingPairing = Boolean\(pairingCode\)/)
   assert.match(automationControlsSource, /const connectionToggleOn = Boolean\(activeConnection\)/)
   assert.doesNotMatch(automationControlsSource, /connectionToggleOn = Boolean\(activeConnection\) \|\| Boolean\(pairingCode\)/)
-  assert.match(automationControlsSource, /activeConnection \? `\$\{getAgentRuntimeOption\(activeConnection\.runtimeType\)\.label\} connected` : pendingPairing \? `\$\{getAgentRuntimeOption\(selectedRuntime\)\.label\} pairing pending` : `Connect \$\{getAgentRuntimeOption\(selectedRuntime\)\.label\}`/)
+  assert.match(automationControlsSource, /activeConnection \? `\$\{getAgentRuntimeOption\(activeConnection\.runtimeType\)\.label\} connected` : pendingPairing \? `\$\{getAgentRuntimeOption\(effectiveSelectedRuntime\)\.label\} pairing pending` : `Connect \$\{getAgentRuntimeOption\(effectiveSelectedRuntime\)\.label\}`/)
 })
 
 test('disconnecting a connected agent requires an implications modal before clearing work', () => {

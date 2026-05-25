@@ -495,8 +495,17 @@ export type BlockerSummary = {
   updatedAt: string
 }
 
+export type AutomationGovernancePolicySummary = {
+  id: string
+  allowedRuntimeTypes: string[]
+  workflowStartRoles: string[]
+  maxConcurrentWorkflowJobs: number
+  workflowStartRequiresApproval: boolean
+}
+
 export type ProjectAutomationOverview = {
   config: ProjectAutomationConfig | null
+  automationPolicy: AutomationGovernancePolicySummary
   agents: AgentIdentitySummary[]
   jobs: AgentJobSummary[]
   runs: AgentRunSummary[]

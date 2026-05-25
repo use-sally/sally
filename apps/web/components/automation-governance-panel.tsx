@@ -7,7 +7,7 @@ import { EnterpriseLockedCard } from './enterprise-locked-card'
 
 const inputStyle = { padding: '11px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--text-primary)' }
 const labelStyle = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 }
-const runtimeOptions = ['hermes', 'claude-code', 'codex', 'opencode']
+const runtimeOptions = ['hermes', 'codex', 'pi', 'openclaw', 'claude-code', 'opencode']
 
 function toggle(current: string[], value: string) {
   return current.includes(value) ? current.filter((item) => item !== value) : [...current, value]

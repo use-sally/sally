@@ -1,4 +1,4 @@
-export type AgentRuntimeId = 'hermes' | 'codex' | 'pi' | 'openclaw' | 'claude-code'
+export type AgentRuntimeId = 'hermes' | 'codex' | 'pi' | 'openclaw' | 'claude-code' | 'opencode'
 
 export type AgentRuntimeOption = {
   id: AgentRuntimeId
@@ -37,6 +37,12 @@ export const AGENT_RUNTIME_OPTIONS: AgentRuntimeOption[] = [
     label: 'Claude Code',
     description: 'Claude Code CLI for autonomous coding tasks and project changes.',
     commandHint: 'claude',
+  },
+  {
+    id: 'opencode',
+    label: 'OpenCode',
+    description: 'OpenCode CLI for coding tasks and project changes.',
+    commandHint: 'opencode',
   },
 ]
 

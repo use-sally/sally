@@ -2552,6 +2552,8 @@ const start = async () => {
       try { patch = buildAgentConnectionPatch({ runtimeVersion: body.runtimeVersion, profileRef: body.profileRef, capabilities: body.capabilities, metadata: body.metadata }) } catch (err: any) { return reply.code(400).send({ ok: false, error: err.message }) }
       const pairing = await prisma.agentPairingCode.findFirst({ where: { codeHash: hashAgentWorkerToken(code), usedAt: null, expiresAt: { gt: new Date() } } })
       if (!pairing) return reply.code(404).send({ ok: false, error: 'Pairing code not found or expired' })
+      const automationPolicy = await readAutomationGovernancePolicy()
+      if (automationPolicy.allowedRuntimeTypes.length && !automationPolicy.allowedRuntimeTypes.includes(pairing.runtimeType)) return reply.code(403).send({ ok: false, error: 'Agent runtime is not allowed by automation governance policy' })
       const token = createAgentWorkerToken()
       const connection = await prisma.$transaction(async (tx) => {
         await tx.agentPairingCode.update({ where: { id: pairing.id }, data: { usedAt: new Date() } })
@@ -3687,8 +3689,9 @@ const start = async () => {
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id }, select: { id: true } })
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
-      const [config, agents, jobs, runs, connections, blockers, approvalRequests] = await Promise.all([
+      const [config, automationPolicy, agents, jobs, runs, connections, blockers, approvalRequests] = await Promise.all([
         prisma.projectAutomationConfig.findUnique({ where: { projectId } }),
+        readAutomationGovernancePolicy(),
         prisma.agentIdentity.findMany({ where: { workspaceId: workspace.id, enabled: true }, orderBy: [{ role: 'asc' }, { name: 'asc' }] }),
         prisma.agentJob.findMany({ where: { workspaceId: workspace.id, projectId }, include: { agent: true }, orderBy: { createdAt: 'desc' }, take: 20 }),
         prisma.agentRun.findMany({ where: { workspaceId: workspace.id, projectId }, include: { agent: true }, orderBy: { createdAt: 'desc' }, take: 20 }),
@@ -3696,7 +3699,7 @@ const start = async () => {
         prisma.blocker.findMany({ where: { workspaceId: workspace.id, projectId, status: 'OPEN' }, orderBy: { createdAt: 'desc' }, take: 20 }),
         prisma.approvalRequest.findMany({ where: { workspaceId: workspace.id, projectId, status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 20 }),
       ])
-      return { config, agents, jobs, runs, connections: connections.map((connection) => redactAgentConnection(connection as any)), blockers, approvalRequests }
+      return { config, automationPolicy, agents, jobs, runs, connections: connections.map((connection) => redactAgentConnection(connection as any)), blockers, approvalRequests }
     })
 
     app.patch('/projects/:projectId/automation', async (request, reply) => {
