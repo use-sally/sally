@@ -36,6 +36,7 @@ type EnterpriseSchemaState = {
   missingSamlIdentityProviderTable: boolean
   missingAutomationGovernancePolicyTable: boolean
   missingApiMcpKeyPolicyTable: boolean
+  missingSessionPolicyTable: boolean
 }
 
 type CliOptions = {
@@ -924,7 +925,8 @@ async function inspectEnterpriseSchemaState(targetDir: string, postgresUser: str
     "  'missingInstalledLicenseTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'InstalledLicense'),",
     "  'missingSamlIdentityProviderTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'SamlIdentityProvider'),",
     "  'missingAutomationGovernancePolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AutomationGovernancePolicy'),",
-    "  'missingApiMcpKeyPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ApiMcpKeyPolicy')",
+    "  'missingApiMcpKeyPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ApiMcpKeyPolicy'),",
+    "  'missingSessionPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'SessionPolicy')",
     ');',
   ].join(' ')
 
@@ -1321,6 +1323,7 @@ async function doctorFlow(options: CliOptions) {
         enterpriseSchema.missingSamlIdentityProviderTable ? 'SamlIdentityProvider table missing' : null,
         enterpriseSchema.missingAutomationGovernancePolicyTable ? 'AutomationGovernancePolicy table missing' : null,
         enterpriseSchema.missingApiMcpKeyPolicyTable ? 'ApiMcpKeyPolicy table missing' : null,
+        enterpriseSchema.missingSessionPolicyTable ? 'SessionPolicy table missing' : null,
       ].filter(Boolean)
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {

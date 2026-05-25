@@ -84,10 +84,13 @@ test('doctor reports missing Enterprise schema after migration checks', () => {
   assert.ok(source.includes("'missingSamlIdentityProviderTable'"))
   assert.ok(source.includes("'missingAutomationGovernancePolicyTable'"))
   assert.ok(source.includes("'missingApiMcpKeyPolicyTable'"))
+  assert.ok(source.includes("'missingSessionPolicyTable'"))
   assert.ok(source.includes("table_name = 'InstalledLicense'"))
   assert.ok(source.includes("table_name = 'ApiMcpKeyPolicy'"))
+  assert.ok(source.includes("table_name = 'SessionPolicy'"))
   assert.ok(source.includes('InstalledLicense table missing'))
   assert.ok(source.includes('ApiMcpKeyPolicy table missing'))
+  assert.ok(source.includes('SessionPolicy table missing'))
 })
 
 test('install and update run one ordered migration pipeline before starting services', () => {

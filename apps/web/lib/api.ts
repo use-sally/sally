@@ -80,6 +80,10 @@ export function saveAutomationGovernancePolicy(payload: { allowedRuntimeTypes: s
 export type ApiMcpKeyPolicy = { id: string; requireApiKeyExpiry: boolean; requireMcpKeyExpiry: boolean; apiKeyDefaultExpiresInDays: number | null; apiKeyMaxExpiresInDays: number | null; mcpKeyDefaultExpiresInDays: number | null; mcpKeyMaxExpiresInDays: number | null; restrictApiKeyCreationToAdmins: boolean; restrictMcpKeyCreationToAdmins: boolean }
 export function getApiMcpKeyPolicy(): Promise<{ ok: boolean; policy: ApiMcpKeyPolicy }> { return getJson('/security/key-policy') }
 export function saveApiMcpKeyPolicy(payload: Omit<ApiMcpKeyPolicy, 'id'>): Promise<{ ok: boolean; policy: ApiMcpKeyPolicy }> { return getJson('/security/key-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
+export type SessionPolicy = { id: string; maxSessionLifetimeDays: number; revokeOnPolicyChange: boolean; restrictSessionPolicyToAdmins: boolean }
+export function getSessionPolicy(): Promise<{ ok: boolean; policy: SessionPolicy; activeSessions: number }> { return getJson('/security/session-policy') }
+export function saveSessionPolicy(payload: Omit<SessionPolicy, 'id'>): Promise<{ ok: boolean; policy: SessionPolicy; revokedSessions: number }> { return getJson('/security/session-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
+export function revokeActiveSessions(): Promise<{ ok: boolean; revokedSessions: number }> { return getJson('/security/session-policy/revoke-sessions', { method: 'POST', body: JSON.stringify({}) }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)

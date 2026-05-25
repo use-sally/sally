@@ -315,6 +315,15 @@ model ApiMcpKeyPolicy {
   updatedAt                      DateTime @updatedAt
 }
 
+model SessionPolicy {
+  id                            String   @id @default("instance")
+  maxSessionLifetimeDays        Int      @default(30)
+  revokeOnPolicyChange          Boolean  @default(false)
+  restrictSessionPolicyToAdmins Boolean  @default(true)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+}
+
 model SamlAuthRequest {
   id         String    @id
   relayState String    @unique

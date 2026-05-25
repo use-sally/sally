@@ -1137,8 +1137,12 @@ async function verifyPassword(password: string, stored: string) {
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), derived)
 }
 
-function getSessionExpiry() {
-  const days = Number.isFinite(SESSION_TTL_DAYS) && SESSION_TTL_DAYS > 0 ? SESSION_TTL_DAYS : 30
+async function getSessionExpiry() {
+  const envDays = Number.isFinite(SESSION_TTL_DAYS) && SESSION_TTL_DAYS > 0 ? SESSION_TTL_DAYS : 30
+  const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+  if (!edition.availableFeatures.includes('security.sessionPolicy')) return new Date(Date.now() + envDays * 24 * 60 * 60 * 1000)
+  const policy = await prisma.sessionPolicy.findUnique({ where: { id: 'instance' } })
+  const days = policy?.maxSessionLifetimeDays && policy.maxSessionLifetimeDays > 0 ? Math.min(policy.maxSessionLifetimeDays, 365) : envDays
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000)
 }
 
@@ -1826,7 +1830,7 @@ const start = async () => {
         return reply.code(403).send({ ok: false, error: 'SAML account is not allowed' })
       }
       const sessionToken = generateSessionToken()
-      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
+      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: await getSessionExpiry() } })
       await writeAuditLog({ actorAccountId: account.id, action: 'audit.saml.loginSucceeded', targetType: 'accountSession', targetId: session.id, summary: `Signed in with SAML ${account.email}`, metadata: { entityId: config.entityId, expiresAt: session.expiresAt.toISOString() } })
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       const response = { ok: true, sessionToken, expiresAt: session.expiresAt.toISOString(), account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole }, memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })) }
@@ -1840,6 +1844,8 @@ const start = async () => {
     const readAutomationGovernancePolicy = async () => (await prisma.automationGovernancePolicy.findUnique({ where: { id: 'instance' } })) ?? defaultAutomationGovernancePolicy()
     const defaultApiMcpKeyPolicy = () => ({ id: 'instance', requireApiKeyExpiry: false, requireMcpKeyExpiry: false, apiKeyDefaultExpiresInDays: null as number | null, apiKeyMaxExpiresInDays: null as number | null, mcpKeyDefaultExpiresInDays: null as number | null, mcpKeyMaxExpiresInDays: null as number | null, restrictApiKeyCreationToAdmins: false, restrictMcpKeyCreationToAdmins: false })
     const readApiMcpKeyPolicy = async () => (await prisma.apiMcpKeyPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultApiMcpKeyPolicy()
+    const defaultSessionPolicy = () => ({ id: 'instance', maxSessionLifetimeDays: 30, revokeOnPolicyChange: false, restrictSessionPolicyToAdmins: true })
+    const readSessionPolicy = async () => (await prisma.sessionPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultSessionPolicy()
     const requireAutomationPolicyFeature = async (_request: unknown, reply: any) => {
       const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
       if (edition.availableFeatures.includes('automation.workflowPolicies')) return true
@@ -1914,6 +1920,44 @@ const start = async () => {
       return { ok: true, policy }
     })
 
+    const requireSessionPolicyFeature = async (_request: unknown, reply: any) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (edition.availableFeatures.includes('security.sessionPolicy')) return true
+      reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.sessionPolicy', upgradeUrl: edition.upgradeUrl })
+      return false
+    }
+
+    app.get('/security/session-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireSessionPolicyFeature(request, reply))) return
+      const activeSessions = await prisma.accountSession.count({ where: { revokedAt: null, expiresAt: { gt: new Date() } } })
+      return { ok: true, policy: await readSessionPolicy(), activeSessions }
+    })
+
+    app.put('/security/session-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireSessionPolicyFeature(request, reply))) return
+      const body = request.body as { maxSessionLifetimeDays?: number; revokeOnPolicyChange?: boolean; restrictSessionPolicyToAdmins?: boolean }
+      const maxSessionLifetimeDays = Math.max(1, Math.min(365, Math.floor(Number(body.maxSessionLifetimeDays || 30))))
+      const data = { maxSessionLifetimeDays, revokeOnPolicyChange: Boolean(body.revokeOnPolicyChange), restrictSessionPolicyToAdmins: body.restrictSessionPolicyToAdmins !== false }
+      const policy = await prisma.sessionPolicy.upsert({ where: { id: 'instance' }, create: { id: 'instance', ...data }, update: data })
+      let revokedSessions = 0
+      if (policy.revokeOnPolicyChange) {
+        const result = await prisma.accountSession.updateMany({ where: { revokedAt: null, expiresAt: { gt: new Date() }, id: { not: ((request as any).session?.id ?? '') } }, data: { revokedAt: new Date() } })
+        revokedSessions = result.count
+      }
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.sessionPolicy.updated', targetType: 'sessionPolicy', targetId: policy.id, summary: 'Updated session policy', metadata: { ...data, revokedSessions } })
+      return { ok: true, policy, revokedSessions }
+    })
+
+    app.post('/security/session-policy/revoke-sessions', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireSessionPolicyFeature(request, reply))) return
+      const result = await prisma.accountSession.updateMany({ where: { revokedAt: null, expiresAt: { gt: new Date() }, id: { not: ((request as any).session?.id ?? '') } }, data: { revokedAt: new Date() } })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.sessionPolicy.sessionsRevoked', targetType: 'sessionPolicy', targetId: 'instance', summary: 'Revoked active sessions', metadata: { revokedSessions: result.count } })
+      return { ok: true, revokedSessions: result.count }
+    })
+
     app.get('/runtime-config', async () => ({
       ok: true,
       appBaseUrl: process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || null,
@@ -1971,7 +2015,7 @@ const start = async () => {
         return reply.code(401).send({ ok: false, error: 'Invalid credentials' })
       }
       const sessionToken = generateSessionToken()
-      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
+      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: await getSessionExpiry() } })
       await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginSucceeded', targetType: 'accountSession', targetId: session.id, summary: `Signed in ${account.email}`, metadata: { expiresAt: session.expiresAt.toISOString() } })
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
@@ -2394,7 +2438,7 @@ const start = async () => {
       }
       await prisma.accountInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date(), accountId: account.id } })
       const sessionToken = generateSessionToken()
-      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
+      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: await getSessionExpiry() } })
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,
@@ -2449,7 +2493,7 @@ const start = async () => {
         }
       }
       const sessionToken = generateSessionToken()
-      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
+      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: await getSessionExpiry() } })
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       return {
         ok: true,

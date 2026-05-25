@@ -6,6 +6,7 @@ import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
 import { SamlSsoPanel } from '../../components/saml-sso-panel'
 import { AutomationGovernancePanel } from '../../components/automation-governance-panel'
 import { ApiMcpKeyPolicyPanel } from '../../components/api-mcp-key-policy-panel'
+import { SessionPolicyPanel } from '../../components/session-policy-panel'
 
 type SecurityIslandKey = 'authentication' | 'sessions' | 'saml' | 'automation' | 'two-factor' | 'api-keys' | 'audit-log'
 
@@ -77,6 +78,7 @@ function EnterprisePlaceholderPanel({ title, description }: { title: string; des
 
 function ActiveIslandPanel({ activeKey }: { activeKey: SecurityIslandKey }) {
   const island = securityIslands.find((item) => item.key === activeKey) ?? securityIslands[0]
+  if (activeKey === 'sessions') return <SessionPolicyPanel />
   if (activeKey === 'saml') return <SamlSsoPanel />
   if (activeKey === 'automation') return <AutomationGovernancePanel />
   if (activeKey === 'api-keys') return <ApiMcpKeyPolicyPanel />
