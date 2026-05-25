@@ -19,6 +19,8 @@ test('database stores one SAML identity provider configuration', () => {
   assert.match(schemaSource, /entityId\s+String/)
   assert.match(schemaSource, /ssoUrl\s+String/)
   assert.match(schemaSource, /certificate\s+String/)
+  assert.match(schemaSource, /allowedDomains\s+String\[\]\s+@default\(\[\]\)/)
+  assert.match(schemaSource, /jitProvisioning\s+Boolean\s+@default\(false\)/)
   assert.match(schemaSource, /enabled\s+Boolean\s+@default\(false\)/)
   assert.match(schemaSource, /enforceSso\s+Boolean\s+@default\(false\)/)
 })
@@ -41,6 +43,8 @@ test('API exposes Enterprise-gated SAML configuration endpoints with audit event
   assert.match(apiSource, /audit\.saml\.enabled/)
   assert.match(apiSource, /audit\.saml\.disabled/)
   assert.match(apiSource, /audit\.saml\.enforceSsoChanged/)
+  assert.match(apiSource, /allowedDomains/)
+  assert.match(apiSource, /jitProvisioning/)
 })
 
 test('API exposes bounded SAML metadata login and ACS flow', () => {
@@ -54,6 +58,8 @@ test('API exposes bounded SAML metadata login and ACS flow', () => {
   assert.match(apiSource, /samlAuthRequest\.findUnique/)
   assert.match(apiSource, /samlAuthRequest\.update/)
   assert.match(apiSource, /invalid_relay_state/)
+  assert.match(apiSource, /domain_not_allowed/)
+  assert.match(apiSource, /audit\.saml\.accountProvisioned/)
   assert.match(apiSource, /SAMLResponse/)
   assert.match(apiSource, /extractSamlEmail/)
   assert.match(apiSource, /verifySamlSignature/)
@@ -82,6 +88,8 @@ test('Security UI shows SAML as visible locked Community card and editable Enter
   assert.match(samlPanelSource, /samlMetadataUrl\(\)/)
   assert.match(samlPanelSource, /samlLoginUrl\(\)/)
   assert.match(samlPanelSource, /Enable SAML SSO/)
+  assert.match(samlPanelSource, /Allowed email domains/)
+  assert.match(samlPanelSource, /Provision missing SAML accounts automatically/)
   assert.match(samlPanelSource, /Enforce SSO for non-superadmin users/)
 })
 

@@ -13,6 +13,8 @@ export function SamlSsoPanel() {
   const [entityId, setEntityId] = useState('')
   const [ssoUrl, setSsoUrl] = useState('')
   const [certificate, setCertificate] = useState('')
+  const [allowedDomains, setAllowedDomains] = useState('')
+  const [jitProvisioning, setJitProvisioning] = useState(false)
   const [enabled, setEnabled] = useState(false)
   const [enforceSso, setEnforceSso] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -34,6 +36,8 @@ export function SamlSsoPanel() {
         setEntityId(result.config.entityId)
         setSsoUrl(result.config.ssoUrl)
         setCertificate(result.config.certificate)
+        setAllowedDomains(result.config.allowedDomains.join(', '))
+        setJitProvisioning(result.config.jitProvisioning)
         setEnabled(result.config.enabled)
         setEnforceSso(result.config.enforceSso)
       }
@@ -52,7 +56,7 @@ export function SamlSsoPanel() {
     setError(null)
     setNotice(null)
     try {
-      await saveSamlIdentityProvider({ entityId, ssoUrl, certificate, enabled, enforceSso })
+      await saveSamlIdentityProvider({ entityId, ssoUrl, certificate, allowedDomains: allowedDomains.split(',').map((domain) => domain.trim()).filter(Boolean), jitProvisioning, enabled, enforceSso })
       setNotice('SAML SSO configuration saved.')
       await load()
     } catch (err) {
@@ -72,6 +76,8 @@ export function SamlSsoPanel() {
       setEntityId('')
       setSsoUrl('')
       setCertificate('')
+      setAllowedDomains('')
+      setJitProvisioning(false)
       setEnabled(false)
       setEnforceSso(false)
       setNotice('SAML SSO configuration deleted.')
@@ -112,6 +118,8 @@ export function SamlSsoPanel() {
         <label style={labelStyle}>IdP Entity ID<input value={entityId} onChange={(event) => setEntityId(event.target.value)} placeholder="https://idp.example.com/entity" style={inputStyle} /></label>
         <label style={labelStyle}>SSO URL<input value={ssoUrl} onChange={(event) => setSsoUrl(event.target.value)} placeholder="https://idp.example.com/sso" style={inputStyle} /></label>
         <label style={labelStyle}>Signing certificate<textarea value={certificate} onChange={(event) => setCertificate(event.target.value)} placeholder="-----BEGIN CERTIFICATE-----" rows={5} style={{ ...inputStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} /></label>
+        <label style={labelStyle}>Allowed email domains<input value={allowedDomains} onChange={(event) => setAllowedDomains(event.target.value)} placeholder="example.com, subsidiary.com" style={inputStyle} /><span style={{ color: 'var(--text-muted)' }}>Optional. Leave empty to allow any matching Sally account. Separate domains with commas.</span></label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={jitProvisioning} onChange={(event) => setJitProvisioning(event.target.checked)} /> Provision missing SAML accounts automatically</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Enable SAML SSO</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={enforceSso} onChange={(event) => setEnforceSso(event.target.checked)} /> Enforce SSO for non-superadmin users</label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

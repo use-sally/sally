@@ -67,12 +67,12 @@ export function activateLicense(payload: { licenseKey: string; instanceId?: stri
 }
 export function refreshLicense(): Promise<{ ok: boolean; edition: EditionInfo; installed: unknown }> { return getJson('/license/refresh', { method: 'POST', body: JSON.stringify({}) }) }
 export function removeLicense(): Promise<{ ok: boolean; edition: EditionInfo }> { return getJson('/license', { method: 'DELETE' }) }
-export type SamlIdentityProviderConfig = { id: string; entityId: string; ssoUrl: string; certificate: string; enabled: boolean; enforceSso: boolean; createdAt: string; updatedAt: string }
+export type SamlIdentityProviderConfig = { id: string; entityId: string; ssoUrl: string; certificate: string; allowedDomains: string[]; jitProvisioning: boolean; enabled: boolean; enforceSso: boolean; createdAt: string; updatedAt: string }
 export const samlMetadataUrl = () => `${API_BASE_URL}/auth/saml/metadata`
 export const samlLoginUrl = () => `${API_BASE_URL}/auth/saml/login`
 export function getSamlStatus(): Promise<{ ok: boolean; enabled: boolean }> { return getJson('/auth/saml/status') }
 export function getSamlIdentityProvider(): Promise<{ ok: boolean; config: SamlIdentityProviderConfig | null }> { return getJson('/security/saml-idp') }
-export function saveSamlIdentityProvider(payload: { entityId: string; ssoUrl: string; certificate: string; enabled: boolean; enforceSso: boolean }): Promise<{ ok: boolean; config: SamlIdentityProviderConfig }> { return getJson('/security/saml-idp', { method: 'PUT', body: JSON.stringify(payload) }) }
+export function saveSamlIdentityProvider(payload: { entityId: string; ssoUrl: string; certificate: string; allowedDomains: string[]; jitProvisioning: boolean; enabled: boolean; enforceSso: boolean }): Promise<{ ok: boolean; config: SamlIdentityProviderConfig }> { return getJson('/security/saml-idp', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function deleteSamlIdentityProvider(): Promise<{ ok: boolean; deleted: boolean }> { return getJson('/security/saml-idp', { method: 'DELETE' }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()

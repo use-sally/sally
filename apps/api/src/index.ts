@@ -1693,13 +1693,13 @@ const start = async () => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       if (!(await requireSamlFeature(request, reply))) return
       const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
-      return { ok: true, config: config ? { id: config.id, entityId: config.entityId, ssoUrl: config.ssoUrl, certificate: config.certificate, enabled: config.enabled, enforceSso: config.enforceSso, createdAt: config.createdAt.toISOString(), updatedAt: config.updatedAt.toISOString() } : null }
+      return { ok: true, config: config ? { id: config.id, entityId: config.entityId, ssoUrl: config.ssoUrl, certificate: config.certificate, allowedDomains: config.allowedDomains, jitProvisioning: config.jitProvisioning, enabled: config.enabled, enforceSso: config.enforceSso, createdAt: config.createdAt.toISOString(), updatedAt: config.updatedAt.toISOString() } : null }
     })
 
     app.put('/security/saml-idp', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       if (!(await requireSamlFeature(request, reply))) return
-      const body = request.body as { entityId?: string; ssoUrl?: string; certificate?: string; enabled?: boolean; enforceSso?: boolean }
+      const body = request.body as { entityId?: string; ssoUrl?: string; certificate?: string; allowedDomains?: string[]; jitProvisioning?: boolean; enabled?: boolean; enforceSso?: boolean }
       const entityId = body.entityId?.trim()
       const ssoUrl = body.ssoUrl?.trim()
       const certificate = body.certificate?.trim()
@@ -1709,17 +1709,18 @@ const start = async () => {
       let parsedSsoUrl: URL
       try { parsedSsoUrl = new URL(ssoUrl) } catch { return reply.code(400).send({ ok: false, error: 'ssoUrl must be a valid URL' }) }
       if (!['http:', 'https:'].includes(parsedSsoUrl.protocol)) return reply.code(400).send({ ok: false, error: 'ssoUrl must be an HTTP(S) URL' })
+      const allowedDomains = [...new Set((body.allowedDomains || []).map((domain) => domain.trim().toLowerCase().replace(/^@/, '')).filter(Boolean))]
       const previous = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
       const config = await prisma.samlIdentityProvider.upsert({
         where: { id: 'default' },
-        update: { entityId, ssoUrl, certificate, enabled: Boolean(body.enabled), enforceSso: Boolean(body.enforceSso) },
-        create: { id: 'default', entityId, ssoUrl, certificate, enabled: Boolean(body.enabled), enforceSso: Boolean(body.enforceSso) },
+        update: { entityId, ssoUrl, certificate, allowedDomains, jitProvisioning: Boolean(body.jitProvisioning), enabled: Boolean(body.enabled), enforceSso: Boolean(body.enforceSso) },
+        create: { id: 'default', entityId, ssoUrl, certificate, allowedDomains, jitProvisioning: Boolean(body.jitProvisioning), enabled: Boolean(body.enabled), enforceSso: Boolean(body.enforceSso) },
       })
       const action = previous ? 'audit.saml.updated' : 'audit.saml.created'
-      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action, targetType: 'samlIdentityProvider', targetId: config.id, summary: previous ? 'Updated SAML SSO configuration' : 'Created SAML SSO configuration', metadata: { entityId: config.entityId, ssoUrl: config.ssoUrl, enabled: config.enabled, enforceSso: config.enforceSso } })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action, targetType: 'samlIdentityProvider', targetId: config.id, summary: previous ? 'Updated SAML SSO configuration' : 'Created SAML SSO configuration', metadata: { entityId: config.entityId, ssoUrl: config.ssoUrl, allowedDomains: config.allowedDomains, jitProvisioning: config.jitProvisioning, enabled: config.enabled, enforceSso: config.enforceSso } })
       if (previous?.enabled !== config.enabled) await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: config.enabled ? 'audit.saml.enabled' : 'audit.saml.disabled', targetType: 'samlIdentityProvider', targetId: config.id, summary: config.enabled ? 'Enabled SAML SSO' : 'Disabled SAML SSO', metadata: { entityId: config.entityId } })
       if (previous && previous.enforceSso !== config.enforceSso) await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.saml.enforceSsoChanged', targetType: 'samlIdentityProvider', targetId: config.id, summary: config.enforceSso ? 'Enabled SAML enforcement' : 'Disabled SAML enforcement', metadata: { entityId: config.entityId, enforceSso: config.enforceSso } })
-      return { ok: true, config: { id: config.id, entityId: config.entityId, ssoUrl: config.ssoUrl, certificate: config.certificate, enabled: config.enabled, enforceSso: config.enforceSso, createdAt: config.createdAt.toISOString(), updatedAt: config.updatedAt.toISOString() } }
+      return { ok: true, config: { id: config.id, entityId: config.entityId, ssoUrl: config.ssoUrl, certificate: config.certificate, allowedDomains: config.allowedDomains, jitProvisioning: config.jitProvisioning, enabled: config.enabled, enforceSso: config.enforceSso, createdAt: config.createdAt.toISOString(), updatedAt: config.updatedAt.toISOString() } }
     })
 
     app.delete('/security/saml-idp', async (request, reply) => {
@@ -1810,7 +1811,16 @@ const start = async () => {
         return reply.code(400).send({ ok: false, error: 'SAML response did not include an email' })
       }
       await prisma.samlAuthRequest.update({ where: { id: authRequest.id }, data: { usedAt: new Date() } })
-      const account = await prisma.account.findFirst({ where: { email } })
+      const emailDomain = email.split('@')[1] || ''
+      if (config.allowedDomains.length && !config.allowedDomains.includes(emailDomain)) {
+        await writeAuditLog({ action: 'audit.saml.loginFailed', targetType: 'samlIdentityProvider', targetId: config.id, summary: `SAML login failed for ${email}`, metadata: { reason: 'domain_not_allowed', emailDomain } })
+        return reply.code(403).send({ ok: false, error: 'SAML email domain is not allowed' })
+      }
+      let account = await prisma.account.findFirst({ where: { email } })
+      if (!account && config.jitProvisioning) {
+        account = await prisma.account.create({ data: { email, platformRole: PlatformRole.NONE } })
+        await writeAuditLog({ actorAccountId: account.id, action: 'audit.saml.accountProvisioned', targetType: 'account', targetId: account.id, summary: `Provisioned SAML account ${email}`, metadata: { emailDomain } })
+      }
       if (!account || account.archivedAt) {
         await writeAuditLog({ actorAccountId: account?.id ?? null, action: 'audit.saml.loginFailed', targetType: 'account', targetId: account?.id ?? null, summary: `SAML login failed for ${email}`, metadata: { reason: account?.archivedAt ? 'account_archived' : 'account_not_found', email } })
         return reply.code(403).send({ ok: false, error: 'SAML account is not allowed' })
