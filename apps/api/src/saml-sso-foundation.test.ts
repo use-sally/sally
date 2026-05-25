@@ -23,6 +23,14 @@ test('database stores one SAML identity provider configuration', () => {
   assert.match(schemaSource, /enforceSso\s+Boolean\s+@default\(false\)/)
 })
 
+test('database stores short-lived SAML auth request relay state', () => {
+  assert.match(schemaSource, /model SamlAuthRequest \{[\s\S]*id\s+String\s+@id/)
+  assert.match(schemaSource, /relayState\s+String\s+@unique/)
+  assert.match(schemaSource, /expiresAt\s+DateTime/)
+  assert.match(schemaSource, /usedAt\s+DateTime\?/)
+  assert.match(schemaSource, /@@index\(\[expiresAt\]\)/)
+})
+
 test('API exposes Enterprise-gated SAML configuration endpoints with audit events', () => {
   assert.match(apiSource, /app\.get\('\/security\/saml-idp'/)
   assert.match(apiSource, /app\.put\('\/security\/saml-idp'/)
@@ -41,6 +49,11 @@ test('API exposes bounded SAML metadata login and ACS flow', () => {
   assert.match(apiSource, /app\.get\('\/auth\/saml\/login'/)
   assert.match(apiSource, /app\.post\('\/auth\/saml\/acs'/)
   assert.match(apiSource, /SAMLRequest/)
+  assert.match(apiSource, /RelayState/)
+  assert.match(apiSource, /samlAuthRequest\.create/)
+  assert.match(apiSource, /samlAuthRequest\.findUnique/)
+  assert.match(apiSource, /samlAuthRequest\.update/)
+  assert.match(apiSource, /invalid_relay_state/)
   assert.match(apiSource, /SAMLResponse/)
   assert.match(apiSource, /extractSamlEmail/)
   assert.match(apiSource, /verifySamlSignature/)

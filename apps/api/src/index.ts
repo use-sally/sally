@@ -1756,6 +1756,7 @@ const start = async () => {
     }
 
     const samlSessionRedirectHtml = (session: unknown) => `<!doctype html><html><head><meta charset="utf-8"><title>SAML sign-in complete</title></head><body><script>location.replace(${JSON.stringify(appPublicBaseUrl() + '/saml/callback')} + '#session=' + encodeURIComponent(${JSON.stringify(Buffer.from(JSON.stringify(session)).toString('base64url'))}));</script><noscript>SAML sign-in succeeded. JavaScript is required to complete the browser session.</noscript></body></html>`
+    const getSamlRequestExpiry = () => new Date(Date.now() + 10 * 60 * 1000)
 
     app.get('/auth/saml/status', async () => {
       const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
@@ -1772,19 +1773,29 @@ const start = async () => {
       const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
       if (!config?.enabled) return reply.code(404).send({ ok: false, error: 'SAML SSO is not enabled' })
       const requestId = `_${randomUUID()}`
+      const relayState = randomUUID()
+      await prisma.samlAuthRequest.create({ data: { id: requestId, relayState, expiresAt: getSamlRequestExpiry() } })
       const samlRequest = `<?xml version="1.0" encoding="UTF-8"?><samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="${requestId}" Version="2.0" IssueInstant="${new Date().toISOString()}" AssertionConsumerServiceURL="${xmlEscape(samlAcsUrl())}"><saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">${xmlEscape(samlSpEntityId())}</saml:Issuer></samlp:AuthnRequest>`
       const redirect = new URL(config.ssoUrl)
       redirect.searchParams.set('SAMLRequest', Buffer.from(samlRequest).toString('base64'))
-      await writeAuditLog({ action: 'audit.saml.loginStarted', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'Started SAML SSO login', metadata: { entityId: config.entityId } })
+      redirect.searchParams.set('RelayState', relayState)
+      await writeAuditLog({ action: 'audit.saml.loginStarted', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'Started SAML SSO login', metadata: { entityId: config.entityId, requestId } })
       return reply.redirect(redirect.toString())
     })
 
     app.post('/auth/saml/acs', async (request, reply) => {
       const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
       if (!config?.enabled) return reply.code(404).send({ ok: false, error: 'SAML SSO is not enabled' })
-      const body = request.body as { SAMLResponse?: string; samlResponse?: string } | undefined
+      const body = request.body as { SAMLResponse?: string; samlResponse?: string; RelayState?: string; relayState?: string } | undefined
       const encoded = body?.SAMLResponse || body?.samlResponse || ''
+      const relayState = body?.RelayState || body?.relayState || ''
       if (!encoded) return reply.code(400).send({ ok: false, error: 'SAMLResponse is required' })
+      if (!relayState) return reply.code(400).send({ ok: false, error: 'RelayState is required' })
+      const authRequest = await prisma.samlAuthRequest.findUnique({ where: { relayState } })
+      if (!authRequest || authRequest.usedAt || authRequest.expiresAt <= new Date()) {
+        await writeAuditLog({ action: 'audit.saml.loginFailed', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'SAML login failed', metadata: { reason: 'invalid_relay_state' } })
+        return reply.code(400).send({ ok: false, error: 'SAML login request expired or was already used' })
+      }
       let xml = ''
       try { xml = Buffer.from(encoded, 'base64').toString('utf8') } catch { return reply.code(400).send({ ok: false, error: 'SAMLResponse is invalid' }) }
       let signatureValid = false
@@ -1798,6 +1809,7 @@ const start = async () => {
         await writeAuditLog({ action: 'audit.saml.loginFailed', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'SAML login failed', metadata: { reason: 'missing_email' } })
         return reply.code(400).send({ ok: false, error: 'SAML response did not include an email' })
       }
+      await prisma.samlAuthRequest.update({ where: { id: authRequest.id }, data: { usedAt: new Date() } })
       const account = await prisma.account.findFirst({ where: { email } })
       if (!account || account.archivedAt) {
         await writeAuditLog({ actorAccountId: account?.id ?? null, action: 'audit.saml.loginFailed', targetType: 'account', targetId: account?.id ?? null, summary: `SAML login failed for ${email}`, metadata: { reason: account?.archivedAt ? 'account_archived' : 'account_not_found', email } })

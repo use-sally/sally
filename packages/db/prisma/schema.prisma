@@ -289,6 +289,16 @@ model SamlIdentityProvider {
   updatedAt   DateTime @updatedAt
 }
 
+model SamlAuthRequest {
+  id         String    @id
+  relayState String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
 model AuditLogEvent {
   id             String         @id @default(cuid())
   workspaceId    String?
