@@ -143,6 +143,23 @@ Relevant interfaces:
 - API: `POST /projects/:projectId/tasks/reorder`
 - MCP: `project.tasks.reorder`
 
+### Enterprise security and governance
+This release line adds Enterprise-gated security/governance tables and policy surfaces. Updates apply these through normal committed Prisma migrations.
+
+New Enterprise schema areas include:
+- installed license lifecycle state
+- SAML SSO configuration and request state
+- automation governance policy
+- API/MCP key policy
+- session policy
+- 2FA policy scaffold
+- audit log policy
+- authentication policy
+
+`create-sally doctor` checks these Enterprise tables after migration deploy and reports missing policy tables clearly if an update is incomplete.
+
+Enterprise features remain visible in Community where useful, but editing/enforcement is gated by the installed Enterprise license.
+
 ---
 
 ## If you want predictable production upgrades

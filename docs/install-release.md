@@ -192,8 +192,10 @@ The same bootstrap step is rerun during managed updates so installer-managed ins
 6. Test one fresh `existing-infra` install on a clean Linux host
 7. Test one `create-sally update` run against an installer-managed deployment
 8. Specifically test the initialized-schema / missing-`_prisma_migrations` recovery path during update
-9. Verify SMTP, login, invite flow, hosted MCP key UX, and hosted `/mcp` behavior
-10. Verify reported Sally version after update matches the deployed image tag
+9. Verify `create-sally doctor` applies pending migrations and reports Enterprise schema checks as ok
+10. Verify SMTP, login, invite flow, hosted MCP key UX, and hosted `/mcp` behavior
+11. Verify Enterprise install/activation unlocks Security policy modals and Community keeps them locked/read-only
+12. Verify reported Sally version after update matches the deployed image tag
 
 ---
 
@@ -240,3 +242,15 @@ The task experience now includes:
 - drag-and-drop status ordering in workflow settings
 - `Blocked` surfaced across task and status management UI
 - task/project responses carrying canonical `position` values so the UI can render consistent order across list and board views
+
+### Enterprise security and governance package
+
+This release line adds the Enterprise feature foundation:
+- installed license lifecycle hardening
+- local Enterprise license activation/refresh handling
+- SAML SSO configuration, login flow, request state, signature verification, and account policy controls
+- API/MCP key expiry policy and Enterprise-gated personal key validity dates
+- automation governance policy for allowed agent runtimes, workflow start roles, approval requirements, and concurrency
+- Security policy modals for authentication, sessions, 2FA policy scaffold, API/MCP keys, audit log, SAML, and automation governance
+
+Committed migrations add the required policy tables. `create-sally update` applies them through `prisma migrate deploy`; `create-sally doctor` starts Postgres, applies pending migrations for managed installs, and reports missing Enterprise tables if the schema is incomplete.
