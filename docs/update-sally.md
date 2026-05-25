@@ -153,19 +153,21 @@ New Enterprise schema areas include:
 - API/MCP key policy
 - session policy
 - TOTP two-factor authentication credentials and login challenges
+- WebAuthn/passkey credentials and challenges
 - 2FA enforcement policy
 - audit log policy
 - authentication policy
 
-`create-sally doctor` checks these Enterprise tables after migration deploy and reports missing policy/2FA tables clearly if an update is incomplete.
+`create-sally doctor` checks these Enterprise tables after migration deploy and reports missing policy/2FA/passkey tables clearly if an update is incomplete.
 
 Enterprise features remain visible in Community where useful, but editing/enforcement is gated by the installed Enterprise license.
 
 Two-factor authentication notes:
 - users enroll authenticator-app TOTP from Profile using a QR code or manual setup key
+- users can also add WebAuthn/passkeys from Profile and use Touch ID, Face ID, or Windows Hello as a phishing-resistant second factor on supported secure origins
 - enabled users complete a second login challenge after email/password validation
 - Enterprise admins can require 2FA for admins or all users from Security
-- platform admins can reset another user's 2FA from Team for account recovery when policy allows it
+- platform admins can reset another user's TOTP 2FA from Team for account recovery when policy allows it
 
 ---
 

@@ -144,25 +144,33 @@ Special case:
   "ok": true,
   "requiresTwoFactor": true,
   "challengeToken": "...",
-  "expiresAt": "2026-03-26T12:10:00.000Z"
+  "expiresAt": "2026-03-26T12:10:00.000Z",
+  "methods": { "totp": true, "passkey": true },
+  "webAuthnOptions": { "challenge": "..." }
 }
 ```
 
-This response is returned instead of a session when the account has enabled TOTP 2FA or when an Enterprise 2FA policy requires it. If Enterprise policy requires 2FA but the account has not enrolled yet, password login is blocked until an admin helps the user enroll or adjusts policy.
+This response is returned instead of a session when the account has enabled TOTP/passkey 2FA or when an Enterprise 2FA policy requires it. If Enterprise policy requires 2FA but the account has not enrolled any second factor yet, password login is blocked until an admin helps the user enroll or adjusts policy.
 
 ### `POST /auth/login/2fa`
 Completes a pending 2FA login challenge.
 
-Request:
+Request with TOTP:
 ```json
 { "challengeToken": "...", "code": "123456" }
+```
+
+Request with WebAuthn/passkey:
+```json
+{ "challengeToken": "...", "webAuthnResponse": { "id": "...", "response": {} } }
 ```
 
 Response mirrors successful `POST /auth/login` and returns a session.
 
 Validation:
 - challenge token must exist, be unused, and not expired
-- code must be the current six-digit TOTP code, with a small clock-skew window
+- TOTP code must be the current six-digit code, with a small clock-skew window
+- passkey assertion must match the generated WebAuthn challenge, RP ID, origin, and stored public key
 - successful completion marks the challenge used before issuing a session
 
 ### `POST /auth/logout`
@@ -436,21 +444,49 @@ Response:
 ```
 
 ### `POST /auth/2fa/disable`
-Disables 2FA for the current account after verifying a current code.
+Disables TOTP for the current account after verifying a current code.
 
 Request:
 ```json
 { "code": "123456" }
 ```
 
+### `POST /auth/webauthn/register/options`
+Starts passkey registration for the current account.
+
+Response:
+```json
+{
+  "ok": true,
+  "token": "...",
+  "options": { "challenge": "...", "rp": { "name": "Sally" } }
+}
+```
+
+### `POST /auth/webauthn/register/verify`
+Verifies and stores a new passkey credential.
+
+Request:
+```json
+{ "token": "...", "label": "Passkey", "response": { "id": "...", "response": {} } }
+```
+
+### `DELETE /auth/webauthn/credentials/:credentialId`
+Deletes one passkey credential owned by the current account.
+
+Passkey notes:
+- supports platform authenticators such as Touch ID, Face ID, and Windows Hello where the browser/device supports WebAuthn
+- production passkeys require a secure origin; local development works on `localhost`, while deployed/mobile testing should use HTTPS
+- passkeys are stored as public credentials only; private key material stays on the user's device or passkey provider
+
 ### `POST /accounts/:accountId/2fa/reset`
 Platform-admin account recovery endpoint. Enterprise 2FA policy must allow admin recovery resets.
 
 Behavior:
 - deletes the target account's TOTP credential
-- deletes pending 2FA login challenges for the target account
+- deletes pending TOTP/passkey login challenges for the target account
 - writes an audit event
-- the user must enroll again from Profile before satisfying a required-2FA policy
+- the user must enroll again from Profile before satisfying a required-2FA policy if no passkey remains
 
 ### `POST /auth/invite`
 Workspace owner only.
