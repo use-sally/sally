@@ -67,7 +67,7 @@ test('Admin mode exposes Edition\/License UI and web client functions', () => {
   assert.match(pageSource, /license\?\.installed \? \(/)
   assert.match(pageSource, /Installed license/)
   assert.match(pageSource, /Remove license/)
-  assert.match(pageSource, /Refresh license now/)
+  assert.match(pageSource, /automatically syncs with the license server/)
   assert.match(pageSource, /Next check/)
   assert.match(pageSource, /Last refresh error/)
   assert.match(pageSource, /statusCopy/)

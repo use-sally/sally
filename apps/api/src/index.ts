@@ -1591,7 +1591,7 @@ async function ensureHostedMcpSession(request: any, reply: any) {
 
 const start = async () => {
   try {
-    await app.register(cors, { origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'X-Session-Token', 'X-Workspace-Id', 'X-Workspace-Slug', 'Mcp-Session-Id'] })
+    await app.register(cors, { origin: ['http://localhost:3000', 'http://127.0.0.1:3000'], methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-Api-Key', 'X-Session-Token', 'X-Workspace-Id', 'X-Workspace-Slug', 'Mcp-Session-Id'] })
 
     app.addHook('preHandler', async (request, reply) => {
       const url = request.raw.url || ''
