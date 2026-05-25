@@ -1,13 +1,15 @@
 import { AppShell } from '../../components/app-shell'
 import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
+import { SamlSsoPanel } from '../../components/saml-sso-panel'
 
 const availableCards = [
   ['Authentication policy', 'Local email/password authentication stays available in Community. Enterprise will add stricter password and identity-provider policies.'],
   ['Sessions', 'View and manage basic session behavior. Enterprise policies will add forced re-authentication, maximum session lifetimes, and force-logout controls.'],
 ]
 
+const samlSsoTitle = 'SAML / SSO'
+
 const enterpriseCards = [
-  ['SAML / SSO', 'Connect Sally to a company identity provider, enforce domains, and keep a break-glass superadmin account.'],
   ['2FA enforcement', 'Require 2FA for admins or all users, set grace periods, and reset recovery paths.'],
   ['API & MCP key policy', 'Control API and MCP key creation, expiry, rotation, and admin-only restrictions.'],
   ['Audit log', 'Search and export security-relevant activity such as role changes, membership changes, login events, and agent connections.'],
@@ -34,6 +36,7 @@ export default function SecurityPage() {
         </section>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
           {availableCards.map(([title, description]) => <PlainCard key={title} title={title} description={description} />)}
+          <SamlSsoPanel key={samlSsoTitle} />
           {enterpriseCards.map(([title, description]) => <EnterpriseLockedCard key={title} title={title} description={description} />)}
         </div>
       </div>

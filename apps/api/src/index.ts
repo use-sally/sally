@@ -1680,6 +1680,56 @@ const start = async () => {
       return { ok: true, edition: getEditionInfo({ installedLicense: null }) }
     })
 
+    const requireSamlFeature = async (_request: unknown, reply: any) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (edition.availableFeatures.includes('security.saml')) return true
+      reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.saml', upgradeUrl: edition.upgradeUrl })
+      return false
+    }
+
+    app.get('/security/saml-idp', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireSamlFeature(request, reply))) return
+      const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      return { ok: true, config: config ? { id: config.id, entityId: config.entityId, ssoUrl: config.ssoUrl, certificate: config.certificate, enabled: config.enabled, enforceSso: config.enforceSso, createdAt: config.createdAt.toISOString(), updatedAt: config.updatedAt.toISOString() } : null }
+    })
+
+    app.put('/security/saml-idp', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireSamlFeature(request, reply))) return
+      const body = request.body as { entityId?: string; ssoUrl?: string; certificate?: string; enabled?: boolean; enforceSso?: boolean }
+      const entityId = body.entityId?.trim()
+      const ssoUrl = body.ssoUrl?.trim()
+      const certificate = body.certificate?.trim()
+      if (!entityId) return reply.code(400).send({ ok: false, error: 'entityId is required' })
+      if (!ssoUrl) return reply.code(400).send({ ok: false, error: 'ssoUrl is required' })
+      if (!certificate) return reply.code(400).send({ ok: false, error: 'certificate is required' })
+      let parsedSsoUrl: URL
+      try { parsedSsoUrl = new URL(ssoUrl) } catch { return reply.code(400).send({ ok: false, error: 'ssoUrl must be a valid URL' }) }
+      if (!['http:', 'https:'].includes(parsedSsoUrl.protocol)) return reply.code(400).send({ ok: false, error: 'ssoUrl must be an HTTP(S) URL' })
+      const previous = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      const config = await prisma.samlIdentityProvider.upsert({
+        where: { id: 'default' },
+        update: { entityId, ssoUrl, certificate, enabled: Boolean(body.enabled), enforceSso: Boolean(body.enforceSso) },
+        create: { id: 'default', entityId, ssoUrl, certificate, enabled: Boolean(body.enabled), enforceSso: Boolean(body.enforceSso) },
+      })
+      const action = previous ? 'audit.saml.updated' : 'audit.saml.created'
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action, targetType: 'samlIdentityProvider', targetId: config.id, summary: previous ? 'Updated SAML SSO configuration' : 'Created SAML SSO configuration', metadata: { entityId: config.entityId, ssoUrl: config.ssoUrl, enabled: config.enabled, enforceSso: config.enforceSso } })
+      if (previous?.enabled !== config.enabled) await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: config.enabled ? 'audit.saml.enabled' : 'audit.saml.disabled', targetType: 'samlIdentityProvider', targetId: config.id, summary: config.enabled ? 'Enabled SAML SSO' : 'Disabled SAML SSO', metadata: { entityId: config.entityId } })
+      if (previous && previous.enforceSso !== config.enforceSso) await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.saml.enforceSsoChanged', targetType: 'samlIdentityProvider', targetId: config.id, summary: config.enforceSso ? 'Enabled SAML enforcement' : 'Disabled SAML enforcement', metadata: { entityId: config.entityId, enforceSso: config.enforceSso } })
+      return { ok: true, config: { id: config.id, entityId: config.entityId, ssoUrl: config.ssoUrl, certificate: config.certificate, enabled: config.enabled, enforceSso: config.enforceSso, createdAt: config.createdAt.toISOString(), updatedAt: config.updatedAt.toISOString() } }
+    })
+
+    app.delete('/security/saml-idp', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireSamlFeature(request, reply))) return
+      const existing = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      if (!existing) return { ok: true, deleted: false }
+      await prisma.samlIdentityProvider.delete({ where: { id: existing.id } })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.saml.deleted', targetType: 'samlIdentityProvider', targetId: existing.id, summary: 'Deleted SAML SSO configuration', metadata: { entityId: existing.entityId } })
+      return { ok: true, deleted: true }
+    })
+
     app.get('/runtime-config', async () => ({
       ok: true,
       appBaseUrl: process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || null,

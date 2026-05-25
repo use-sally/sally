@@ -278,6 +278,17 @@ model InstalledLicense {
   updatedAt        DateTime  @updatedAt
 }
 
+model SamlIdentityProvider {
+  id          String   @id @default("default")
+  entityId    String
+  ssoUrl      String
+  certificate String
+  enabled     Boolean  @default(false)
+  enforceSso  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model AuditLogEvent {
   id             String         @id @default(cuid())
   workspaceId    String?
