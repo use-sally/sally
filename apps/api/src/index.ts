@@ -1846,6 +1846,8 @@ const start = async () => {
     const readApiMcpKeyPolicy = async () => (await prisma.apiMcpKeyPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultApiMcpKeyPolicy()
     const defaultSessionPolicy = () => ({ id: 'instance', maxSessionLifetimeDays: 30, revokeOnPolicyChange: false, restrictSessionPolicyToAdmins: true })
     const readSessionPolicy = async () => (await prisma.sessionPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultSessionPolicy()
+    const defaultTwoFactorPolicy = () => ({ id: 'instance', enforcementTarget: 'NONE', gracePeriodDays: 14, allowRecoveryResetByAdmins: true })
+    const readTwoFactorPolicy = async () => (await prisma.twoFactorPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultTwoFactorPolicy()
     const requireAutomationPolicyFeature = async (_request: unknown, reply: any) => {
       const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
       if (edition.availableFeatures.includes('automation.workflowPolicies')) return true
@@ -1956,6 +1958,32 @@ const start = async () => {
       const result = await prisma.accountSession.updateMany({ where: { revokedAt: null, expiresAt: { gt: new Date() }, id: { not: ((request as any).session?.id ?? '') } }, data: { revokedAt: new Date() } })
       await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.sessionPolicy.sessionsRevoked', targetType: 'sessionPolicy', targetId: 'instance', summary: 'Revoked active sessions', metadata: { revokedSessions: result.count } })
       return { ok: true, revokedSessions: result.count }
+    })
+
+    const requireTwoFactorPolicyFeature = async (_request: unknown, reply: any) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (edition.availableFeatures.includes('security.enforced2fa')) return true
+      reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.enforced2fa', upgradeUrl: edition.upgradeUrl })
+      return false
+    }
+
+    app.get('/security/two-factor-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireTwoFactorPolicyFeature(request, reply))) return
+      return { ok: true, policy: await readTwoFactorPolicy(), enforcementReady: false }
+    })
+
+    app.put('/security/two-factor-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireTwoFactorPolicyFeature(request, reply))) return
+      const body = request.body as { enforcementTarget?: string; gracePeriodDays?: number; allowRecoveryResetByAdmins?: boolean }
+      const target = String(body.enforcementTarget || 'NONE').trim().toUpperCase()
+      const enforcementTarget = target === 'ADMINS' || target === 'ALL' ? target : 'NONE'
+      const gracePeriodDays = Math.max(0, Math.min(90, Math.floor(Number(body.gracePeriodDays ?? 14))))
+      const data = { enforcementTarget, gracePeriodDays, allowRecoveryResetByAdmins: body.allowRecoveryResetByAdmins !== false }
+      const policy = await prisma.twoFactorPolicy.upsert({ where: { id: 'instance' }, create: { id: 'instance', ...data }, update: data })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.twoFactorPolicy.updated', targetType: 'twoFactorPolicy', targetId: policy.id, summary: 'Updated 2FA enforcement policy', metadata: { ...data, enforcementReady: false } })
+      return { ok: true, policy, enforcementReady: false }
     })
 
     app.get('/runtime-config', async () => ({

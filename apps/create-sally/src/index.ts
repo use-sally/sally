@@ -37,6 +37,7 @@ type EnterpriseSchemaState = {
   missingAutomationGovernancePolicyTable: boolean
   missingApiMcpKeyPolicyTable: boolean
   missingSessionPolicyTable: boolean
+  missingTwoFactorPolicyTable: boolean
 }
 
 type CliOptions = {
@@ -926,7 +927,8 @@ async function inspectEnterpriseSchemaState(targetDir: string, postgresUser: str
     "  'missingSamlIdentityProviderTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'SamlIdentityProvider'),",
     "  'missingAutomationGovernancePolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AutomationGovernancePolicy'),",
     "  'missingApiMcpKeyPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'ApiMcpKeyPolicy'),",
-    "  'missingSessionPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'SessionPolicy')",
+    "  'missingSessionPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'SessionPolicy'),",
+    "  'missingTwoFactorPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TwoFactorPolicy')",
     ');',
   ].join(' ')
 
@@ -1324,6 +1326,7 @@ async function doctorFlow(options: CliOptions) {
         enterpriseSchema.missingAutomationGovernancePolicyTable ? 'AutomationGovernancePolicy table missing' : null,
         enterpriseSchema.missingApiMcpKeyPolicyTable ? 'ApiMcpKeyPolicy table missing' : null,
         enterpriseSchema.missingSessionPolicyTable ? 'SessionPolicy table missing' : null,
+        enterpriseSchema.missingTwoFactorPolicyTable ? 'TwoFactorPolicy table missing' : null,
       ].filter(Boolean)
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {

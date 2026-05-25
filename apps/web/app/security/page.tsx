@@ -7,6 +7,7 @@ import { SamlSsoPanel } from '../../components/saml-sso-panel'
 import { AutomationGovernancePanel } from '../../components/automation-governance-panel'
 import { ApiMcpKeyPolicyPanel } from '../../components/api-mcp-key-policy-panel'
 import { SessionPolicyPanel } from '../../components/session-policy-panel'
+import { TwoFactorPolicyPanel } from '../../components/two-factor-policy-panel'
 
 type SecurityIslandKey = 'authentication' | 'sessions' | 'saml' | 'automation' | 'two-factor' | 'api-keys' | 'audit-log'
 
@@ -82,7 +83,8 @@ function ActiveIslandPanel({ activeKey }: { activeKey: SecurityIslandKey }) {
   if (activeKey === 'saml') return <SamlSsoPanel />
   if (activeKey === 'automation') return <AutomationGovernancePanel />
   if (activeKey === 'api-keys') return <ApiMcpKeyPolicyPanel />
-  if (activeKey === 'two-factor' || activeKey === 'audit-log') return <EnterprisePlaceholderPanel title={island.title} description={island.description} />
+  if (activeKey === 'two-factor') return <TwoFactorPolicyPanel />
+  if (activeKey === 'audit-log') return <EnterprisePlaceholderPanel title={island.title} description={island.description} />
   return <PlainIslandPanel title={island.title} description={island.description} />
 }
 

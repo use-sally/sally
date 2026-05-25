@@ -84,6 +84,9 @@ export type SessionPolicy = { id: string; maxSessionLifetimeDays: number; revoke
 export function getSessionPolicy(): Promise<{ ok: boolean; policy: SessionPolicy; activeSessions: number }> { return getJson('/security/session-policy') }
 export function saveSessionPolicy(payload: Omit<SessionPolicy, 'id'>): Promise<{ ok: boolean; policy: SessionPolicy; revokedSessions: number }> { return getJson('/security/session-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function revokeActiveSessions(): Promise<{ ok: boolean; revokedSessions: number }> { return getJson('/security/session-policy/revoke-sessions', { method: 'POST', body: JSON.stringify({}) }) }
+export type TwoFactorPolicy = { id: string; enforcementTarget: string; gracePeriodDays: number; allowRecoveryResetByAdmins: boolean }
+export function getTwoFactorPolicy(): Promise<{ ok: boolean; policy: TwoFactorPolicy; enforcementReady: boolean }> { return getJson('/security/two-factor-policy') }
+export function saveTwoFactorPolicy(payload: Omit<TwoFactorPolicy, 'id'>): Promise<{ ok: boolean; policy: TwoFactorPolicy; enforcementReady: boolean }> { return getJson('/security/two-factor-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)

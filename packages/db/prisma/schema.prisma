@@ -324,6 +324,15 @@ model SessionPolicy {
   updatedAt                     DateTime @updatedAt
 }
 
+model TwoFactorPolicy {
+  id                         String   @id @default("instance")
+  enforcementTarget          String   @default("NONE")
+  gracePeriodDays            Int      @default(14)
+  allowRecoveryResetByAdmins Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
 model SamlAuthRequest {
   id         String    @id
   relayState String    @unique
