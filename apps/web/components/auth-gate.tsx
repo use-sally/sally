@@ -3,7 +3,7 @@
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { getMe, login, requestPasswordReset } from '../lib/api'
+import { getMe, getSamlStatus, login, requestPasswordReset, samlLoginUrl } from '../lib/api'
 import { clearSession, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId, type Membership } from '../lib/auth'
 import { projectInputField } from '../lib/theme'
 
@@ -75,8 +75,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [samlEnabled, setSamlEnabled] = useState(false)
 
-  const isPublicAuthRoute = pathname === '/reset-password' || pathname === '/accept-invite' || pathname === '/confirm-email-change'
+  const isPublicAuthRoute = pathname === '/reset-password' || pathname === '/accept-invite' || pathname === '/confirm-email-change' || pathname === '/saml/callback'
 
   const requestedWorkspaceId = searchParams.get('workspaceId')
 
@@ -86,6 +87,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isPublicAuthRoute) return
+    getSamlStatus().then((status) => setSamlEnabled(status.enabled)).catch(() => setSamlEnabled(false))
     const existing = loadSession()
     if (!existing?.token) {
       setStatus('unauth')
@@ -219,6 +221,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
             <button type="submit" disabled={loading} style={primaryButton}>
               {loading ? 'Signing in…' : 'Continue'}
             </button>
+            {samlEnabled ? <a href={samlLoginUrl()} style={{ ...secondaryButton, display: 'block', textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>Continue with SSO</a> : null}
             <button type="button" onClick={() => { setMode('forgot'); setError(null); setInfo(null) }} style={secondaryButton}>
               Forgot password?
             </button>

@@ -1755,6 +1755,13 @@ const start = async () => {
       return verifier.checkSignature(xml)
     }
 
+    const samlSessionRedirectHtml = (session: unknown) => `<!doctype html><html><head><meta charset="utf-8"><title>SAML sign-in complete</title></head><body><script>location.replace(${JSON.stringify(appPublicBaseUrl() + '/saml/callback')} + '#session=' + encodeURIComponent(${JSON.stringify(Buffer.from(JSON.stringify(session)).toString('base64url'))}));</script><noscript>SAML sign-in succeeded. JavaScript is required to complete the browser session.</noscript></body></html>`
+
+    app.get('/auth/saml/status', async () => {
+      const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      return { ok: true, enabled: Boolean(config?.enabled) }
+    })
+
     app.get('/auth/saml/metadata', async (_request, reply) => {
       const metadata = `<?xml version="1.0" encoding="UTF-8"?><EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${xmlEscape(samlSpEntityId())}"><SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol"><AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${xmlEscape(samlAcsUrl())}" index="0" isDefault="true"/></SPSSODescriptor></EntityDescriptor>`
       reply.header('Content-Type', 'application/samlmetadata+xml')
@@ -1800,7 +1807,11 @@ const start = async () => {
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
       await writeAuditLog({ actorAccountId: account.id, action: 'audit.saml.loginSucceeded', targetType: 'accountSession', targetId: session.id, summary: `Signed in with SAML ${account.email}`, metadata: { entityId: config.entityId, expiresAt: session.expiresAt.toISOString() } })
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
-      return { ok: true, sessionToken, expiresAt: session.expiresAt.toISOString(), account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole }, memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })) }
+      const response = { ok: true, sessionToken, expiresAt: session.expiresAt.toISOString(), account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole }, memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })) }
+      const accept = String(request.headers.accept || '')
+      if (accept.includes('application/json')) return response
+      reply.header('Content-Type', 'text/html; charset=utf-8')
+      return reply.send(samlSessionRedirectHtml(response))
     })
 
     app.get('/runtime-config', async () => ({

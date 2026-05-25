@@ -10,6 +10,8 @@ const schemaSource = fs.readFileSync(path.join(repoRoot, 'packages/db/prisma/sch
 const apiSource = fs.readFileSync(path.join(__dirname, 'index.ts'), 'utf8')
 const securityPageSource = fs.readFileSync(path.join(repoRoot, 'apps/web/app/security/page.tsx'), 'utf8')
 const samlPanelSource = fs.readFileSync(path.join(repoRoot, 'apps/web/components/saml-sso-panel.tsx'), 'utf8')
+const authGateSource = fs.readFileSync(path.join(repoRoot, 'apps/web/components/auth-gate.tsx'), 'utf8')
+const samlCallbackSource = fs.readFileSync(path.join(repoRoot, 'apps/web/app/saml/callback/page.tsx'), 'utf8')
 const webApiSource = fs.readFileSync(path.join(repoRoot, 'apps/web/lib/api.ts'), 'utf8')
 
 test('database stores one SAML identity provider configuration', () => {
@@ -34,6 +36,7 @@ test('API exposes Enterprise-gated SAML configuration endpoints with audit event
 })
 
 test('API exposes bounded SAML metadata login and ACS flow', () => {
+  assert.match(apiSource, /app\.get\('\/auth\/saml\/status'/)
   assert.match(apiSource, /app\.get\('\/auth\/saml\/metadata'/)
   assert.match(apiSource, /app\.get\('\/auth\/saml\/login'/)
   assert.match(apiSource, /app\.post\('\/auth\/saml\/acs'/)
@@ -46,6 +49,8 @@ test('API exposes bounded SAML metadata login and ACS flow', () => {
   assert.match(apiSource, /audit\.saml\.loginStarted/)
   assert.match(apiSource, /audit\.saml\.loginSucceeded/)
   assert.match(apiSource, /audit\.saml\.loginFailed/)
+  assert.match(apiSource, /samlSessionRedirectHtml/)
+  assert.match(apiSource, /\/saml\/callback/)
 })
 
 test('enforced SAML blocks local password login except superadmin break-glass', () => {
@@ -67,10 +72,21 @@ test('Security UI shows SAML as visible locked Community card and editable Enter
   assert.match(samlPanelSource, /Enforce SSO for non-superadmin users/)
 })
 
+test('web has browser SAML completion and SSO login entrypoint', () => {
+  assert.match(authGateSource, /getSamlStatus/)
+  assert.match(authGateSource, /Continue with SSO/)
+  assert.match(authGateSource, /samlLoginUrl\(\)/)
+  assert.match(authGateSource, /pathname === '\/saml\/callback'/)
+  assert.match(samlCallbackSource, /Completing SAML sign-in/)
+  assert.match(samlCallbackSource, /saveSession/)
+  assert.match(samlCallbackSource, /window\.location\.replace\('\/'\)/)
+})
+
 test('web API client exposes SAML configuration helpers', () => {
   assert.match(webApiSource, /getSamlIdentityProvider/)
   assert.match(webApiSource, /saveSamlIdentityProvider/)
   assert.match(webApiSource, /deleteSamlIdentityProvider/)
   assert.match(webApiSource, /samlMetadataUrl/)
   assert.match(webApiSource, /samlLoginUrl/)
+  assert.match(webApiSource, /getSamlStatus/)
 })
