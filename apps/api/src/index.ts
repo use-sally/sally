@@ -1,5 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import { DOMParser } from '@xmldom/xmldom'
+import { SignedXml } from 'xml-crypto'
 import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
@@ -1740,6 +1742,18 @@ const start = async () => {
       const nameId = xml.match(/<[^>]*NameID[^>]*>([^<]+)<\//i)?.[1]
       return (attr || nameId || '').trim().toLowerCase()
     }
+    const normalizeSamlCertificate = (certificate: string) => {
+      const compact = certificate.replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s+/g, '')
+      return `-----BEGIN CERTIFICATE-----\n${compact.match(/.{1,64}/g)?.join('\n') || compact}\n-----END CERTIFICATE-----`
+    }
+    const verifySamlSignature = (xml: string, certificate: string) => {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml')
+      const signature = doc.getElementsByTagNameNS('http://www.w3.org/2000/09/xmldsig#', 'Signature')[0]
+      if (!signature) return false
+      const verifier = new SignedXml({ publicCert: normalizeSamlCertificate(certificate) })
+      verifier.loadSignature(signature as any)
+      return verifier.checkSignature(xml)
+    }
 
     app.get('/auth/saml/metadata', async (_request, reply) => {
       const metadata = `<?xml version="1.0" encoding="UTF-8"?><EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${xmlEscape(samlSpEntityId())}"><SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol"><AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${xmlEscape(samlAcsUrl())}" index="0" isDefault="true"/></SPSSODescriptor></EntityDescriptor>`
@@ -1766,6 +1780,12 @@ const start = async () => {
       if (!encoded) return reply.code(400).send({ ok: false, error: 'SAMLResponse is required' })
       let xml = ''
       try { xml = Buffer.from(encoded, 'base64').toString('utf8') } catch { return reply.code(400).send({ ok: false, error: 'SAMLResponse is invalid' }) }
+      let signatureValid = false
+      try { signatureValid = verifySamlSignature(xml, config.certificate) } catch { signatureValid = false }
+      if (!signatureValid) {
+        await writeAuditLog({ action: 'audit.saml.loginFailed', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'SAML login failed', metadata: { reason: 'invalid_signature' } })
+        return reply.code(400).send({ ok: false, error: 'SAML response signature is invalid' })
+      }
       const email = extractSamlEmail(xml)
       if (!email) {
         await writeAuditLog({ action: 'audit.saml.loginFailed', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'SAML login failed', metadata: { reason: 'missing_email' } })
