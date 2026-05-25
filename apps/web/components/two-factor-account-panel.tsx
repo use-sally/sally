@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
+import QRCode from 'qrcode'
 import { confirmTwoFactorSetup, disableTwoFactor, getTwoFactorStatus, startTwoFactorSetup } from '../lib/api'
 
 export function TwoFactorAccountPanel() {
@@ -8,6 +9,7 @@ export function TwoFactorAccountPanel() {
   const [confirmedAt, setConfirmedAt] = useState<string | null>(null)
   const [secret, setSecret] = useState<string | null>(null)
   const [otpauthUrl, setOtpauthUrl] = useState<string | null>(null)
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [disableCode, setDisableCode] = useState('')
   const [loading, setLoading] = useState(true)
@@ -28,6 +30,17 @@ export function TwoFactorAccountPanel() {
     }
   }
   useEffect(() => { void load() }, [])
+  useEffect(() => {
+    if (!otpauthUrl) {
+      setQrCodeDataUrl(null)
+      return
+    }
+    let cancelled = false
+    QRCode.toDataURL(otpauthUrl, { margin: 1, width: 192, color: { dark: '#052e16', light: '#ffffff' } })
+      .then((dataUrl) => { if (!cancelled) setQrCodeDataUrl(dataUrl) })
+      .catch(() => { if (!cancelled) setQrCodeDataUrl(null) })
+    return () => { cancelled = true }
+  }, [otpauthUrl])
 
   const start = async () => {
     setWorking(true); setError(null); setMessage(null)
@@ -47,7 +60,7 @@ export function TwoFactorAccountPanel() {
       const result = await confirmTwoFactorSetup({ code })
       setEnabled(result.enabled)
       setConfirmedAt(result.confirmedAt)
-      setSecret(null); setOtpauthUrl(null); setCode('')
+      setSecret(null); setOtpauthUrl(null); setQrCodeDataUrl(null); setCode('')
       setMessage('2FA enabled.')
     } catch (err) { setError(err instanceof Error ? err.message : 'Failed to confirm 2FA') }
     finally { setWorking(false) }
@@ -72,7 +85,9 @@ export function TwoFactorAccountPanel() {
       {message ? <div style={{ color: 'var(--text-primary)', fontSize: 13 }}>{message}</div> : null}
       {!enabled && !secret ? <button type="button" disabled={working || loading} onClick={start} style={buttonStyle}>Set up authenticator app</button> : null}
       {secret ? <form onSubmit={confirm} style={{ display: 'grid', gap: 10 }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Secret: <code style={{ color: 'var(--text-primary)' }}>{secret}</code></div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Scan this QR code with your authenticator app, or enter the setup key manually.</div>
+        {qrCodeDataUrl ? <img src={qrCodeDataUrl} alt="QR code for authenticator app setup" width={192} height={192} style={{ borderRadius: 12, border: '1px solid var(--panel-border)', background: '#fff', padding: 10 }} /> : <div style={{ width: 192, height: 192, borderRadius: 12, border: '1px solid var(--panel-border)', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>Generating QR…</div>}
+        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Setup key: <code style={{ color: 'var(--text-primary)', wordBreak: 'break-all' }}>{secret}</code></div>
         {otpauthUrl ? <a href={otpauthUrl} style={{ color: 'var(--task-title)', fontSize: 13 }}>Open authenticator app</a> : null}
         <input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" placeholder="123456" style={inputStyle} />
         <button type="submit" disabled={working} style={buttonStyle}>Confirm and enable 2FA</button>

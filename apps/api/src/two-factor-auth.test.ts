@@ -96,10 +96,15 @@ test('web client and login UI support the 2FA challenge flow', () => {
 
 test('profile UI exposes authenticator enrollment and disable controls', () => {
   assert.match(profileSource, /TwoFactorAccountPanel/)
+  assert.match(accountPanelSource, /QRCode from 'qrcode'/)
+  assert.match(accountPanelSource, /QRCode\.toDataURL/)
   assert.match(accountPanelSource, /startTwoFactorSetup/)
   assert.match(accountPanelSource, /confirmTwoFactorSetup/)
   assert.match(accountPanelSource, /disableTwoFactor/)
   assert.match(accountPanelSource, /Set up authenticator app/)
+  assert.match(accountPanelSource, /Scan this QR code with your authenticator app/)
+  assert.match(accountPanelSource, /QR code for authenticator app setup/)
+  assert.match(accountPanelSource, /Setup key:/)
   assert.match(accountPanelSource, /Confirm and enable 2FA/)
   assert.match(accountPanelSource, /Disable 2FA/)
   assert.match(accountPanelSource, /Open authenticator app/)
