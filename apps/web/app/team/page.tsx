@@ -214,7 +214,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
           <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email}</div>
           {archived ? <div style={{ color: 'var(--danger-text)', fontSize: 11, fontWeight: 800, marginTop: 5 }}>Archived</div> : null}
           <div style={{ color: account.twoFactorEnabled ? '#6ee7b7' : 'var(--text-muted)', fontSize: 11, fontWeight: 800, marginTop: 5 }}>
-            2FA {account.twoFactorEnabled ? 'enabled' : 'not enabled'}{account.twoFactorConfirmedAt ? ` · ${new Date(account.twoFactorConfirmedAt).toLocaleDateString()}` : ''}
+            2FA {account.twoFactorEnabled ? 'enabled' : 'not enabled'}{account.twoFactorConfirmedAt ? ` · TOTP ${new Date(account.twoFactorConfirmedAt).toLocaleDateString()}` : ''}{account.passkeyCount ? ` · ${account.passkeyCount} passkey${account.passkeyCount === 1 ? '' : 's'}` : ''}
           </div>
         </div>
         {isSuperadminAccount ? (
@@ -262,7 +262,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
             <button
               type="button"
               onClick={() => {
-                if (!window.confirm(`Reset 2FA for ${account.name || account.email}? They will need to enroll an authenticator again.`)) return
+                if (!window.confirm(`Reset 2FA for ${account.name || account.email}? This removes their authenticator and passkeys; they will need to enroll again.`)) return
                 void onAction(`2fa:${account.id}`, () => resetTeamAccountTwoFactor(account.id), '2FA reset. The user must enroll again.')
               }}
               disabled={saving === `2fa:${account.id}` || isCurrentAccount}

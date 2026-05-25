@@ -48,12 +48,15 @@ test('Team page exposes promote demote add remove archive and delete controls', 
 test('Team page shows 2FA status and admin recovery reset action', () => {
   assert.match(apiSource, /twoFactorEnabled: boolean/)
   assert.match(apiSource, /twoFactorConfirmedAt: string \| null/)
+  assert.match(apiSource, /passkeyCount: number/)
   assert.match(apiSource, /export function resetTeamAccountTwoFactor/)
   assert.match(apiSource, /`\/accounts\/\$\{accountId\}\/2fa\/reset`/)
   assert.match(teamPageSource, /resetTeamAccountTwoFactor/)
   assert.match(teamPageSource, /2FA \{account\.twoFactorEnabled \? 'enabled' : 'not enabled'\}/)
+  assert.match(teamPageSource, /account\.passkeyCount/)
+  assert.match(teamPageSource, /passkey\$\{account\.passkeyCount === 1 \? '' : 's'\}/)
   assert.match(teamPageSource, /Reset 2FA/)
-  assert.match(teamPageSource, /They will need to enroll an authenticator again/)
+  assert.match(teamPageSource, /removes their authenticator and passkeys/)
   assert.match(teamPageSource, /Reset your own 2FA from Profile/)
 })
 

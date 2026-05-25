@@ -2163,7 +2163,9 @@ const start = async () => {
       if (!target) return reply.code(404).send({ ok: false, error: 'Account not found' })
       await prisma.$transaction([
         prisma.accountTwoFactorChallenge.deleteMany({ where: { accountId } }),
+        prisma.accountWebAuthnChallenge.deleteMany({ where: { accountId } }),
         prisma.accountTwoFactorCredential.deleteMany({ where: { accountId } }),
+        prisma.accountWebAuthnCredential.deleteMany({ where: { accountId } }),
       ])
       await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.twoFactor.recoveryReset', targetType: 'account', targetId: accountId, summary: `Reset 2FA for ${target.email}` })
       return { ok: true, accountId, enabled: false }
@@ -3568,6 +3570,7 @@ const start = async () => {
             memberships: { include: { workspace: true }, orderBy: { createdAt: 'asc' } },
             projectMemberships: { include: { project: { include: { workspace: true } } }, orderBy: { createdAt: 'asc' } },
             twoFactorCredential: true,
+            _count: { select: { webAuthnCredentials: true } },
           },
         }),
         prisma.workspace.findMany({ where: { archivedAt: null }, orderBy: { name: 'asc' } }),
@@ -3583,8 +3586,9 @@ const start = async () => {
           email: account.email,
           avatarUrl: account.avatarUrl ?? null,
           platformRole: account.platformRole,
-          twoFactorEnabled: Boolean(account.twoFactorCredential?.enabled),
+          twoFactorEnabled: Boolean(account.twoFactorCredential?.enabled || account._count.webAuthnCredentials > 0),
           twoFactorConfirmedAt: account.twoFactorCredential?.confirmedAt?.toISOString() ?? null,
+          passkeyCount: account._count.webAuthnCredentials,
           archivedAt: account.archivedAt?.toISOString() ?? null,
           createdAt: account.createdAt.toISOString(),
           updatedAt: account.updatedAt.toISOString(),

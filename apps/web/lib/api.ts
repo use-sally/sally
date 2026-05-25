@@ -326,6 +326,7 @@ export type TeamAccountHub = {
     platformRole: 'NONE' | 'ADMIN' | 'SUPERADMIN'
     twoFactorEnabled: boolean
     twoFactorConfirmedAt: string | null
+    passkeyCount: number
     archivedAt: string | null
     createdAt: string
     updatedAt: string

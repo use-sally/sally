@@ -76,7 +76,9 @@ test('Enterprise 2FA policy is enforcement-ready and exposes admin recovery rese
   assert.match(apiSource, /allowRecoveryResetByAdmins/)
   assert.match(apiSource, /Admin 2FA recovery reset is disabled by policy/)
   assert.match(apiSource, /accountTwoFactorChallenge\.deleteMany\(\{ where: \{ accountId \} \}\)/)
+  assert.match(apiSource, /accountWebAuthnChallenge\.deleteMany\(\{ where: \{ accountId \} \}\)/)
   assert.match(apiSource, /accountTwoFactorCredential\.deleteMany\(\{ where: \{ accountId \} \}\)/)
+  assert.match(apiSource, /accountWebAuthnCredential\.deleteMany\(\{ where: \{ accountId \} \}\)/)
   assert.match(apiSource, /audit\.twoFactor\.recoveryReset/)
 })
 

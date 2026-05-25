@@ -484,9 +484,10 @@ Platform-admin account recovery endpoint. Enterprise 2FA policy must allow admin
 
 Behavior:
 - deletes the target account's TOTP credential
+- deletes the target account's passkeys
 - deletes pending TOTP/passkey login challenges for the target account
 - writes an audit event
-- the user must enroll again from Profile before satisfying a required-2FA policy if no passkey remains
+- the user must enroll again from Profile before satisfying a required-2FA policy
 
 ### `POST /auth/invite`
 Workspace owner only.
