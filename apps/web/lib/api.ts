@@ -87,6 +87,10 @@ export function revokeActiveSessions(): Promise<{ ok: boolean; revokedSessions: 
 export type TwoFactorPolicy = { id: string; enforcementTarget: string; gracePeriodDays: number; allowRecoveryResetByAdmins: boolean }
 export function getTwoFactorPolicy(): Promise<{ ok: boolean; policy: TwoFactorPolicy; enforcementReady: boolean }> { return getJson('/security/two-factor-policy') }
 export function saveTwoFactorPolicy(payload: Omit<TwoFactorPolicy, 'id'>): Promise<{ ok: boolean; policy: TwoFactorPolicy; enforcementReady: boolean }> { return getJson('/security/two-factor-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
+export type AuditLogPolicy = { id: string; retentionDays: number; exportRequiresAdmin: boolean; includeAuthEvents: boolean; includeAutomationEvents: boolean }
+export function getAuditLogPolicy(): Promise<{ ok: boolean; policy: AuditLogPolicy; stats: { totalEvents: number; retainedEvents: number; prunableEvents: number } }> { return getJson('/security/audit-log-policy') }
+export function saveAuditLogPolicy(payload: Omit<AuditLogPolicy, 'id'>): Promise<{ ok: boolean; policy: AuditLogPolicy }> { return getJson('/security/audit-log-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
+export function pruneAuditLog(): Promise<{ ok: boolean; deletedEvents: number }> { return getJson('/security/audit-log-policy/prune', { method: 'POST', body: JSON.stringify({}) }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)

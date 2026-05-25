@@ -1848,6 +1848,8 @@ const start = async () => {
     const readSessionPolicy = async () => (await prisma.sessionPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultSessionPolicy()
     const defaultTwoFactorPolicy = () => ({ id: 'instance', enforcementTarget: 'NONE', gracePeriodDays: 14, allowRecoveryResetByAdmins: true })
     const readTwoFactorPolicy = async () => (await prisma.twoFactorPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultTwoFactorPolicy()
+    const defaultAuditLogPolicy = () => ({ id: 'instance', retentionDays: 365, exportRequiresAdmin: true, includeAuthEvents: true, includeAutomationEvents: true })
+    const readAuditLogPolicy = async () => (await prisma.auditLogPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultAuditLogPolicy()
     const requireAutomationPolicyFeature = async (_request: unknown, reply: any) => {
       const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
       if (edition.availableFeatures.includes('automation.workflowPolicies')) return true
@@ -1984,6 +1986,51 @@ const start = async () => {
       const policy = await prisma.twoFactorPolicy.upsert({ where: { id: 'instance' }, create: { id: 'instance', ...data }, update: data })
       await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.twoFactorPolicy.updated', targetType: 'twoFactorPolicy', targetId: policy.id, summary: 'Updated 2FA enforcement policy', metadata: { ...data, enforcementReady: false } })
       return { ok: true, policy, enforcementReady: false }
+    })
+
+    const requireAuditLogPolicyFeature = async (_request: unknown, reply: any) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (edition.availableFeatures.includes('security.auditLog')) return true
+      reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.auditLog', upgradeUrl: edition.upgradeUrl })
+      return false
+    }
+
+    app.get('/security/audit-log-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireAuditLogPolicyFeature(request, reply))) return
+      const policy = await readAuditLogPolicy()
+      const cutoff = new Date(Date.now() - policy.retentionDays * 24 * 60 * 60 * 1000)
+      const [totalEvents, retainedEvents, prunableEvents] = await Promise.all([
+        prisma.auditLogEvent.count(),
+        prisma.auditLogEvent.count({ where: { createdAt: { gte: cutoff } } }),
+        prisma.auditLogEvent.count({ where: { createdAt: { lt: cutoff } } }),
+      ])
+      return { ok: true, policy, stats: { totalEvents, retainedEvents, prunableEvents } }
+    })
+
+    app.put('/security/audit-log-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireAuditLogPolicyFeature(request, reply))) return
+      const body = request.body as { retentionDays?: number; exportRequiresAdmin?: boolean; includeAuthEvents?: boolean; includeAutomationEvents?: boolean }
+      const data = {
+        retentionDays: Math.max(30, Math.min(3650, Math.floor(Number(body.retentionDays || 365)))),
+        exportRequiresAdmin: body.exportRequiresAdmin !== false,
+        includeAuthEvents: body.includeAuthEvents !== false,
+        includeAutomationEvents: body.includeAutomationEvents !== false,
+      }
+      const policy = await prisma.auditLogPolicy.upsert({ where: { id: 'instance' }, create: { id: 'instance', ...data }, update: data })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.auditLogPolicy.updated', targetType: 'auditLogPolicy', targetId: policy.id, summary: 'Updated audit log policy', metadata: data })
+      return { ok: true, policy }
+    })
+
+    app.post('/security/audit-log-policy/prune', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireAuditLogPolicyFeature(request, reply))) return
+      const policy = await readAuditLogPolicy()
+      const cutoff = new Date(Date.now() - policy.retentionDays * 24 * 60 * 60 * 1000)
+      const result = await prisma.auditLogEvent.deleteMany({ where: { createdAt: { lt: cutoff } } })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.auditLogPolicy.pruned', targetType: 'auditLogPolicy', targetId: policy.id, summary: 'Pruned audit log events', metadata: { retentionDays: policy.retentionDays, deletedEvents: result.count } })
+      return { ok: true, deletedEvents: result.count }
     })
 
     app.get('/runtime-config', async () => ({
@@ -3125,6 +3172,8 @@ const start = async () => {
     app.get('/audit-log', { preHandler: requireFeature('security.auditLog', readInstalledLicenseForFeature) }, async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const query = request.query as { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: string; export?: string }
+      const policy = await readAuditLogPolicy()
+      if (query.export === 'csv' && policy.exportRequiresAdmin && !isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Audit log export requires platform admin' })
       const limit = Math.min(Math.max(Number(query.limit || 100), 1), 1000)
       const createdAt: any = {}
       if (query.from?.trim()) createdAt.gte = new Date(query.from.trim())
@@ -3136,6 +3185,8 @@ const start = async () => {
           ...(query.actorAccountId?.trim() ? { actorAccountId: query.actorAccountId.trim() } : {}),
           ...(query.workspaceId?.trim() ? { workspaceId: query.workspaceId.trim() } : {}),
           ...(Object.keys(createdAt).length ? { createdAt } : {}),
+          ...(!policy.includeAuthEvents ? { NOT: [{ action: { startsWith: 'audit.auth.' } }, { action: { startsWith: 'audit.saml.login' } }] } : {}),
+          ...(!policy.includeAutomationEvents ? { action: { not: { startsWith: 'audit.agent' } } } : {}),
         },
         include: { actor: { select: { id: true, email: true, name: true } } },
         orderBy: { createdAt: 'desc' },

@@ -333,6 +333,16 @@ model TwoFactorPolicy {
   updatedAt                  DateTime @updatedAt
 }
 
+model AuditLogPolicy {
+  id                      String   @id @default("instance")
+  retentionDays           Int      @default(365)
+  exportRequiresAdmin     Boolean  @default(true)
+  includeAuthEvents       Boolean  @default(true)
+  includeAutomationEvents Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
 model SamlAuthRequest {
   id         String    @id
   relayState String    @unique
