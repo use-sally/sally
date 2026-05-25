@@ -33,12 +33,33 @@ test('API exposes Enterprise-gated SAML configuration endpoints with audit event
   assert.match(apiSource, /audit\.saml\.enforceSsoChanged/)
 })
 
+test('API exposes bounded SAML metadata login and ACS flow', () => {
+  assert.match(apiSource, /app\.get\('\/auth\/saml\/metadata'/)
+  assert.match(apiSource, /app\.get\('\/auth\/saml\/login'/)
+  assert.match(apiSource, /app\.post\('\/auth\/saml\/acs'/)
+  assert.match(apiSource, /SAMLRequest/)
+  assert.match(apiSource, /SAMLResponse/)
+  assert.match(apiSource, /extractSamlEmail/)
+  assert.match(apiSource, /audit\.saml\.loginStarted/)
+  assert.match(apiSource, /audit\.saml\.loginSucceeded/)
+  assert.match(apiSource, /audit\.saml\.loginFailed/)
+})
+
+test('enforced SAML blocks local password login except superadmin break-glass', () => {
+  assert.match(apiSource, /samlIdentityProvider\.findUnique\(\{ where: \{ id: 'default' \} \}\)/)
+  assert.match(apiSource, /samlConfig\?\.enabled && samlConfig\.enforceSso && account\.platformRole !== PlatformRole\.SUPERADMIN/)
+  assert.match(apiSource, /SAML SSO is enforced for this instance/)
+  assert.match(apiSource, /reason: 'saml_enforced'/)
+})
+
 test('Security UI shows SAML as visible locked Community card and editable Enterprise form', () => {
   assert.match(securityPageSource, /SamlSsoPanel/)
   assert.match(samlPanelSource, /hasFeature\(info, 'security\.saml'\)/)
   assert.match(samlPanelSource, /EnterpriseLockedCard title="SAML \/ SSO"/)
   assert.match(samlPanelSource, /Visible in Community; editable in Enterprise\./)
   assert.match(samlPanelSource, /Save SAML configuration/)
+  assert.match(samlPanelSource, /samlMetadataUrl\(\)/)
+  assert.match(samlPanelSource, /samlLoginUrl\(\)/)
   assert.match(samlPanelSource, /Enable SAML SSO/)
   assert.match(samlPanelSource, /Enforce SSO for non-superadmin users/)
 })
@@ -47,4 +68,6 @@ test('web API client exposes SAML configuration helpers', () => {
   assert.match(webApiSource, /getSamlIdentityProvider/)
   assert.match(webApiSource, /saveSamlIdentityProvider/)
   assert.match(webApiSource, /deleteSamlIdentityProvider/)
+  assert.match(webApiSource, /samlMetadataUrl/)
+  assert.match(webApiSource, /samlLoginUrl/)
 })

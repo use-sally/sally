@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
-import { deleteSamlIdentityProvider, getEdition, getSamlIdentityProvider, saveSamlIdentityProvider } from '../lib/api'
+import { deleteSamlIdentityProvider, getEdition, getSamlIdentityProvider, samlLoginUrl, samlMetadataUrl, saveSamlIdentityProvider } from '../lib/api'
 import { hasFeature, type EditionInfo } from '../lib/edition'
 import { EnterpriseLockedCard } from './enterprise-locked-card'
 
@@ -104,6 +104,10 @@ export function SamlSsoPanel() {
       </div>
       {error ? <div style={{ border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.08)', color: '#fecaca', borderRadius: 12, padding: 12 }}>{error}</div> : null}
       {notice ? <div style={{ border: '1px solid rgba(110,231,183,0.35)', background: 'rgba(16,185,129,0.08)', color: '#bbf7d0', borderRadius: 12, padding: 12 }}>{notice}</div> : null}
+      <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 12, background: 'var(--form-bg)', border: '1px solid var(--panel-border)', color: 'var(--text-secondary)', fontSize: 13 }}>
+        <div><strong style={{ color: 'var(--text-primary)' }}>SP metadata:</strong> <code>{samlMetadataUrl()}</code></div>
+        <div><strong style={{ color: 'var(--text-primary)' }}>Login URL:</strong> <code>{samlLoginUrl()}</code></div>
+      </div>
       <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
         <label style={labelStyle}>IdP Entity ID<input value={entityId} onChange={(event) => setEntityId(event.target.value)} placeholder="https://idp.example.com/entity" style={inputStyle} /></label>
         <label style={labelStyle}>SSO URL<input value={ssoUrl} onChange={(event) => setSsoUrl(event.target.value)} placeholder="https://idp.example.com/sso" style={inputStyle} /></label>

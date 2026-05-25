@@ -1601,7 +1601,7 @@ const start = async () => {
       }
       if ((url.startsWith('/agent-jobs') || url.startsWith('/agent-runs') || url.startsWith('/blockers') || url.startsWith('/approval-requests')) && (await ensureWorkerAuth(request, reply))) return
       if ((url.startsWith('/projects') || url.startsWith('/tasks')) && (await ensureWorkerAuth(request, reply))) return
-      if (url.startsWith('/auth/login') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
+      if (url.startsWith('/auth/login') || url.startsWith('/auth/saml') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
       const keyAuth = ((request as any).apiKey ?? (request as any).mcpKey) as { scopes?: string[] } | undefined
       if (keyAuth && !['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !keyAuth.scopes?.includes('write')) {
@@ -1730,6 +1730,59 @@ const start = async () => {
       return { ok: true, deleted: true }
     })
 
+    const appPublicBaseUrl = () => process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || 'http://localhost:3000'
+    const apiPublicBaseUrl = () => process.env.API_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_API_URL?.replace(/\/+$/, '') || 'http://localhost:4000'
+    const samlSpEntityId = () => `${appPublicBaseUrl()}/saml/metadata`
+    const samlAcsUrl = () => `${apiPublicBaseUrl()}/auth/saml/acs`
+    const xmlEscape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    const extractSamlEmail = (xml: string) => {
+      const attr = xml.match(/<[^>]*Attribute[^>]+Name=["'](?:email|Email|mail|urn:oid:0\.9\.2342\.19200300\.100\.1\.3)["'][\s\S]*?<[^>]*AttributeValue[^>]*>([^<]+)<\//i)?.[1]
+      const nameId = xml.match(/<[^>]*NameID[^>]*>([^<]+)<\//i)?.[1]
+      return (attr || nameId || '').trim().toLowerCase()
+    }
+
+    app.get('/auth/saml/metadata', async (_request, reply) => {
+      const metadata = `<?xml version="1.0" encoding="UTF-8"?><EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${xmlEscape(samlSpEntityId())}"><SPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol"><AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="${xmlEscape(samlAcsUrl())}" index="0" isDefault="true"/></SPSSODescriptor></EntityDescriptor>`
+      reply.header('Content-Type', 'application/samlmetadata+xml')
+      return reply.send(metadata)
+    })
+
+    app.get('/auth/saml/login', async (_request, reply) => {
+      const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      if (!config?.enabled) return reply.code(404).send({ ok: false, error: 'SAML SSO is not enabled' })
+      const requestId = `_${randomUUID()}`
+      const samlRequest = `<?xml version="1.0" encoding="UTF-8"?><samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="${requestId}" Version="2.0" IssueInstant="${new Date().toISOString()}" AssertionConsumerServiceURL="${xmlEscape(samlAcsUrl())}"><saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">${xmlEscape(samlSpEntityId())}</saml:Issuer></samlp:AuthnRequest>`
+      const redirect = new URL(config.ssoUrl)
+      redirect.searchParams.set('SAMLRequest', Buffer.from(samlRequest).toString('base64'))
+      await writeAuditLog({ action: 'audit.saml.loginStarted', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'Started SAML SSO login', metadata: { entityId: config.entityId } })
+      return reply.redirect(redirect.toString())
+    })
+
+    app.post('/auth/saml/acs', async (request, reply) => {
+      const config = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      if (!config?.enabled) return reply.code(404).send({ ok: false, error: 'SAML SSO is not enabled' })
+      const body = request.body as { SAMLResponse?: string; samlResponse?: string } | undefined
+      const encoded = body?.SAMLResponse || body?.samlResponse || ''
+      if (!encoded) return reply.code(400).send({ ok: false, error: 'SAMLResponse is required' })
+      let xml = ''
+      try { xml = Buffer.from(encoded, 'base64').toString('utf8') } catch { return reply.code(400).send({ ok: false, error: 'SAMLResponse is invalid' }) }
+      const email = extractSamlEmail(xml)
+      if (!email) {
+        await writeAuditLog({ action: 'audit.saml.loginFailed', targetType: 'samlIdentityProvider', targetId: config.id, summary: 'SAML login failed', metadata: { reason: 'missing_email' } })
+        return reply.code(400).send({ ok: false, error: 'SAML response did not include an email' })
+      }
+      const account = await prisma.account.findFirst({ where: { email } })
+      if (!account || account.archivedAt) {
+        await writeAuditLog({ actorAccountId: account?.id ?? null, action: 'audit.saml.loginFailed', targetType: 'account', targetId: account?.id ?? null, summary: `SAML login failed for ${email}`, metadata: { reason: account?.archivedAt ? 'account_archived' : 'account_not_found', email } })
+        return reply.code(403).send({ ok: false, error: 'SAML account is not allowed' })
+      }
+      const sessionToken = generateSessionToken()
+      const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: getSessionExpiry() } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.saml.loginSucceeded', targetType: 'accountSession', targetId: session.id, summary: `Signed in with SAML ${account.email}`, metadata: { entityId: config.entityId, expiresAt: session.expiresAt.toISOString() } })
+      const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
+      return { ok: true, sessionToken, expiresAt: session.expiresAt.toISOString(), account: { id: account.id, name: account.name, email: account.email, avatarUrl: account.avatarUrl, platformRole: account.platformRole }, memberships: memberships.map((membership) => ({ id: membership.id, workspaceId: membership.workspaceId, workspaceSlug: membership.workspace.slug, workspaceName: membership.workspace.name, workspaceArchivedAt: membership.workspace.archivedAt?.toISOString() ?? null, role: membership.role })) }
+    })
+
     app.get('/runtime-config', async () => ({
       ok: true,
       appBaseUrl: process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || null,
@@ -1775,6 +1828,11 @@ const start = async () => {
       if (account.archivedAt) {
         await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginFailed', targetType: 'account', targetId: account.id, summary: `Failed login for archived account ${account.email}`, metadata: { reason: 'account_archived' } })
         return reply.code(403).send({ ok: false, error: 'Account archived' })
+      }
+      const samlConfig = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      if (samlConfig?.enabled && samlConfig.enforceSso && account.platformRole !== PlatformRole.SUPERADMIN) {
+        await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginFailed', targetType: 'account', targetId: account.id, summary: `Blocked password login for ${account.email}`, metadata: { reason: 'saml_enforced' } })
+        return reply.code(403).send({ ok: false, error: 'SAML SSO is enforced for this instance' })
       }
       const valid = await verifyPassword(password, effectivePasswordHash)
       if (!valid) {
