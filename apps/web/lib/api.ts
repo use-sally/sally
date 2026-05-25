@@ -319,6 +319,8 @@ export type TeamAccountHub = {
     email: string
     avatarUrl: string | null
     platformRole: 'NONE' | 'ADMIN' | 'SUPERADMIN'
+    twoFactorEnabled: boolean
+    twoFactorConfirmedAt: string | null
     archivedAt: string | null
     createdAt: string
     updatedAt: string
@@ -332,6 +334,7 @@ export function createTeamAccount(payload: { name?: string; email: string }): Pr
 export function archiveTeamAccount(accountId: string, archived = true): Promise<{ ok: boolean; account: { id: string; archivedAt: string | null } }> { return getJson(`/team/accounts/${accountId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
 export function deleteTeamAccount(accountId: string): Promise<{ ok: boolean }> { return getJson(`/team/accounts/${accountId}`, { method: 'DELETE' }) }
 export function uploadTeamAccountAvatar(accountId: string, payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string; account: { id: string; name: string | null; email: string; avatarUrl: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' } }> { return getJson(`/team/accounts/${accountId}/avatar`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function resetTeamAccountTwoFactor(accountId: string): Promise<{ ok: boolean; accountId: string; enabled: boolean }> { return getJson(`/accounts/${accountId}/2fa/reset`, { method: 'POST', body: JSON.stringify({}) }) }
 export function addTeamAccountToWorkspace(accountId: string, payload: { workspaceId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/workspaces`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function removeTeamAccountFromWorkspace(accountId: string, membershipId: string): Promise<{ ok: boolean }> { return getJson(`/team/accounts/${accountId}/workspaces/${membershipId}`, { method: 'DELETE' }) }
 export function addTeamAccountToProject(accountId: string, payload: { projectId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/projects`, { method: 'POST', body: JSON.stringify(payload) }) }

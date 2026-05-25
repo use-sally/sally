@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AppShell } from '../../components/app-shell'
-import { addTeamAccountToProject, addTeamAccountToWorkspace, apiUrl, archiveTeamAccount, createTeamAccount, deleteTeamAccount, getTeamAccounts, removeTeamAccountFromProject, removeTeamAccountFromWorkspace, type TeamAccountHub, updateAccountPlatformRole, uploadTeamAccountAvatar } from '../../lib/api'
+import { addTeamAccountToProject, addTeamAccountToWorkspace, apiUrl, archiveTeamAccount, createTeamAccount, deleteTeamAccount, getTeamAccounts, removeTeamAccountFromProject, removeTeamAccountFromWorkspace, resetTeamAccountTwoFactor, type TeamAccountHub, updateAccountPlatformRole, uploadTeamAccountAvatar } from '../../lib/api'
 import { loadSession } from '../../lib/auth'
 import { platformRoleLabel } from '../../lib/roles'
 import { archiveTextAction, deleteTextAction, restoreTextAction } from '../../lib/theme'
@@ -213,6 +213,9 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
           <div style={{ color: 'var(--text-primary)', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name || account.email}</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email}</div>
           {archived ? <div style={{ color: 'var(--danger-text)', fontSize: 11, fontWeight: 800, marginTop: 5 }}>Archived</div> : null}
+          <div style={{ color: account.twoFactorEnabled ? '#6ee7b7' : 'var(--text-muted)', fontSize: 11, fontWeight: 800, marginTop: 5 }}>
+            2FA {account.twoFactorEnabled ? 'enabled' : 'not enabled'}{account.twoFactorConfirmedAt ? ` · ${new Date(account.twoFactorConfirmedAt).toLocaleDateString()}` : ''}
+          </div>
         </div>
         {isSuperadminAccount ? (
           <div style={{ display: 'grid', gap: 5, color: 'var(--text-muted)', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
@@ -255,6 +258,20 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
               Archive user
             </button>
           )}
+          {account.twoFactorEnabled ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm(`Reset 2FA for ${account.name || account.email}? They will need to enroll an authenticator again.`)) return
+                void onAction(`2fa:${account.id}`, () => resetTeamAccountTwoFactor(account.id), '2FA reset. The user must enroll again.')
+              }}
+              disabled={saving === `2fa:${account.id}` || isCurrentAccount}
+              style={{ ...archiveTextAction, opacity: saving === `2fa:${account.id}` || isCurrentAccount ? 0.5 : 1 }}
+              title={isCurrentAccount ? 'Reset your own 2FA from Profile.' : 'Clear this user’s 2FA credential for account recovery.'}
+            >
+              Reset 2FA
+            </button>
+          ) : null}
           {!isSuperadminAccount && archived ? (
             <button
               type="button"

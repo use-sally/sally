@@ -14,8 +14,10 @@ test('team hub has account archival state for central user lifecycle management'
 
 test('team hub list is visible to platform admins and includes every account with workspace and project memberships', () => {
   assert.match(apiIndexSource, /app\.get\('\/team\/accounts'[\s\S]*if \(!isPlatformAdmin\(request\)\)/)
-  assert.match(apiIndexSource, /prisma\.account\.findMany\(\{[\s\S]*include: \{[\s\S]*memberships:[\s\S]*projectMemberships:/)
+  assert.match(apiIndexSource, /prisma\.account\.findMany\(\{[\s\S]*include: \{[\s\S]*memberships:[\s\S]*projectMemberships:[\s\S]*twoFactorCredential: true/)
   assert.match(apiIndexSource, /workspaceMemberships:[\s\S]*projectMemberships:/)
+  assert.match(apiIndexSource, /twoFactorEnabled: Boolean\(account\.twoFactorCredential\?\.enabled\)/)
+  assert.match(apiIndexSource, /twoFactorConfirmedAt: account\.twoFactorCredential\?\.confirmedAt\?\.toISOString\(\) \?\? null/)
 })
 
 test('team hub can create users and add or remove them from workspaces and projects', () => {

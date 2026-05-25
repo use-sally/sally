@@ -3498,6 +3498,7 @@ const start = async () => {
           include: {
             memberships: { include: { workspace: true }, orderBy: { createdAt: 'asc' } },
             projectMemberships: { include: { project: { include: { workspace: true } } }, orderBy: { createdAt: 'asc' } },
+            twoFactorCredential: true,
           },
         }),
         prisma.workspace.findMany({ where: { archivedAt: null }, orderBy: { name: 'asc' } }),
@@ -3513,6 +3514,8 @@ const start = async () => {
           email: account.email,
           avatarUrl: account.avatarUrl ?? null,
           platformRole: account.platformRole,
+          twoFactorEnabled: Boolean(account.twoFactorCredential?.enabled),
+          twoFactorConfirmedAt: account.twoFactorCredential?.confirmedAt?.toISOString() ?? null,
           archivedAt: account.archivedAt?.toISOString() ?? null,
           createdAt: account.createdAt.toISOString(),
           updatedAt: account.updatedAt.toISOString(),
