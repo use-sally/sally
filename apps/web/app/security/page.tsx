@@ -1,6 +1,7 @@
 import { AppShell } from '../../components/app-shell'
 import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
 import { SamlSsoPanel } from '../../components/saml-sso-panel'
+import { AutomationGovernancePanel } from '../../components/automation-governance-panel'
 
 const availableCards = [
   ['Authentication policy', 'Local email/password authentication stays available in Community. Enterprise will add stricter password and identity-provider policies.'],
@@ -37,6 +38,7 @@ export default function SecurityPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
           {availableCards.map(([title, description]) => <PlainCard key={title} title={title} description={description} />)}
           <SamlSsoPanel key={samlSsoTitle} />
+          <AutomationGovernancePanel />
           {enterpriseCards.map(([title, description]) => <EnterpriseLockedCard key={title} title={title} description={description} />)}
         </div>
       </div>

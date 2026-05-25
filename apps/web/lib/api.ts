@@ -74,6 +74,9 @@ export function getSamlStatus(): Promise<{ ok: boolean; enabled: boolean }> { re
 export function getSamlIdentityProvider(): Promise<{ ok: boolean; config: SamlIdentityProviderConfig | null }> { return getJson('/security/saml-idp') }
 export function saveSamlIdentityProvider(payload: { entityId: string; ssoUrl: string; certificate: string; allowedDomains: string[]; jitProvisioning: boolean; enabled: boolean; enforceSso: boolean }): Promise<{ ok: boolean; config: SamlIdentityProviderConfig }> { return getJson('/security/saml-idp', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function deleteSamlIdentityProvider(): Promise<{ ok: boolean; deleted: boolean }> { return getJson('/security/saml-idp', { method: 'DELETE' }) }
+export type AutomationGovernancePolicy = { id: string; allowedRuntimeTypes: string[]; workflowStartRoles: string[]; maxConcurrentWorkflowJobs: number; workflowStartRequiresApproval: boolean }
+export function getAutomationGovernancePolicy(): Promise<{ ok: boolean; policy: AutomationGovernancePolicy }> { return getJson('/security/automation-policy') }
+export function saveAutomationGovernancePolicy(payload: { allowedRuntimeTypes: string[]; workflowStartRoles: string[]; maxConcurrentWorkflowJobs: number; workflowStartRequiresApproval: boolean }): Promise<{ ok: boolean; policy: AutomationGovernancePolicy }> { return getJson('/security/automation-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)

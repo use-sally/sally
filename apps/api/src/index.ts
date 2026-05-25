@@ -1836,6 +1836,37 @@ const start = async () => {
       return reply.send(samlSessionRedirectHtml(response))
     })
 
+    const defaultAutomationGovernancePolicy = () => ({ id: 'instance', allowedRuntimeTypes: [] as string[], workflowStartRoles: ['OWNER', 'MEMBER'], maxConcurrentWorkflowJobs: 1, workflowStartRequiresApproval: false })
+    const readAutomationGovernancePolicy = async () => (await prisma.automationGovernancePolicy.findUnique({ where: { id: 'instance' } })) ?? defaultAutomationGovernancePolicy()
+    const requireAutomationPolicyFeature = async (_request: unknown, reply: any) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (edition.availableFeatures.includes('automation.workflowPolicies')) return true
+      reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'automation.workflowPolicies', upgradeUrl: edition.upgradeUrl })
+      return false
+    }
+
+    app.get('/security/automation-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireAutomationPolicyFeature(request, reply))) return
+      return { ok: true, policy: await readAutomationGovernancePolicy() }
+    })
+
+    app.put('/security/automation-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireAutomationPolicyFeature(request, reply))) return
+      const body = request.body as { allowedRuntimeTypes?: string[]; workflowStartRoles?: string[]; maxConcurrentWorkflowJobs?: number; workflowStartRequiresApproval?: boolean }
+      const allowedRuntimeTypes = [...new Set((body.allowedRuntimeTypes || []).map((item) => normalizeRuntimeType(item)).filter(Boolean))]
+      const workflowStartRoles = [...new Set((body.workflowStartRoles || ['OWNER', 'MEMBER']).map((role) => String(role).trim().toUpperCase()).filter((role) => role === 'OWNER' || role === 'MEMBER'))]
+      const maxConcurrentWorkflowJobs = Math.max(1, Math.min(20, Math.floor(Number(body.maxConcurrentWorkflowJobs || 1))))
+      const policy = await prisma.automationGovernancePolicy.upsert({
+        where: { id: 'instance' },
+        create: { id: 'instance', allowedRuntimeTypes, workflowStartRoles: workflowStartRoles.length ? workflowStartRoles : ['OWNER'], maxConcurrentWorkflowJobs, workflowStartRequiresApproval: Boolean(body.workflowStartRequiresApproval) },
+        update: { allowedRuntimeTypes, workflowStartRoles: workflowStartRoles.length ? workflowStartRoles : ['OWNER'], maxConcurrentWorkflowJobs, workflowStartRequiresApproval: Boolean(body.workflowStartRequiresApproval) },
+      })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.automationPolicy.updated', targetType: 'automationGovernancePolicy', targetId: policy.id, summary: 'Updated automation governance policy', metadata: { allowedRuntimeTypes, workflowStartRoles: policy.workflowStartRoles, maxConcurrentWorkflowJobs, workflowStartRequiresApproval: policy.workflowStartRequiresApproval } })
+      return { ok: true, policy }
+    })
+
     app.get('/runtime-config', async () => ({
       ok: true,
       appBaseUrl: process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || null,
@@ -2490,6 +2521,9 @@ const start = async () => {
         const project = await prisma.project.findFirst({ where: { id: projectId, workspaceId: workspace.id, archivedAt: null }, select: { id: true } })
         if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       }
+      const runtimeType = normalizeRuntimeType(body.runtimeType)
+      const automationPolicy = await readAutomationGovernancePolicy()
+      if (automationPolicy.allowedRuntimeTypes.length && !automationPolicy.allowedRuntimeTypes.includes(runtimeType)) return reply.code(403).send({ ok: false, error: 'Agent runtime is not allowed by automation governance policy' })
       const agentId = body.agentId?.trim() || null
       if (agentId) {
         const agent = await prisma.agentIdentity.findFirst({ where: { id: agentId, workspaceId: workspace.id, enabled: true } })
@@ -2503,7 +2537,7 @@ const start = async () => {
         agentId,
         codeHash: hashAgentWorkerToken(code),
         name: body.name?.trim() || 'Connected agent',
-        runtimeType: normalizeRuntimeType(body.runtimeType),
+        runtimeType,
         expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
       } })
       await logActivity({ workspaceId: workspace.id, projectId, ...actorFromRequest(request), type: 'agent_connection.pairing_code.created', summary: 'Created agent pairing code', payload: { pairingId: pairing.id, projectId, agentId, runtimeType: pairing.runtimeType, expiresAt: pairing.expiresAt.toISOString() } })
@@ -3698,6 +3732,15 @@ const start = async () => {
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       const config = await prisma.projectAutomationConfig.findUnique({ where: { projectId } })
       if (!config?.workflowEnabled) return reply.code(400).send({ ok: false, error: 'Project automation is not enabled' })
+      const automationPolicy = await readAutomationGovernancePolicy()
+      const account = (request as any).account as { id: string } | undefined
+      const workspaceMembership = (request as any).membership as { role: WorkspaceRole } | undefined
+      const projectMembership = account ? await prisma.projectMembership.findFirst({ where: { projectId, accountId: account.id } }) : null
+      const startRole = isPlatformAdmin(request) || workspaceMembership?.role === WorkspaceRole.OWNER || projectMembership?.role === PROJECT_ROLE.OWNER ? 'OWNER' : 'MEMBER'
+      if (!automationPolicy.workflowStartRoles.includes(startRole)) return reply.code(403).send({ ok: false, error: 'Workflow start is not allowed by automation governance policy' })
+      if (automationPolicy.workflowStartRequiresApproval) return reply.code(403).send({ ok: false, error: 'Workflow start requires approval by automation governance policy' })
+      const activeWorkflowJobs = await prisma.agentJob.count({ where: { workspaceId: workspace.id, projectId, mode: 'workflow', status: { in: [AgentJobStatus.QUEUED, AgentJobStatus.CLAIMED, AgentJobStatus.RUNNING] } } })
+      if (activeWorkflowJobs >= automationPolicy.maxConcurrentWorkflowJobs) return reply.code(429).send({ ok: false, error: 'Project workflow concurrency limit reached' })
       const workflowRunId = randomUUID()
       const payload = buildStartProjectWorkflowJobPayload({ projectId, pmAgentId: config.defaultPmAgentId, workflowRunId })
       const body = request.body as { maxSteps?: number | null } | undefined

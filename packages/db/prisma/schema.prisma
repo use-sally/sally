@@ -291,6 +291,16 @@ model SamlIdentityProvider {
   updatedAt       DateTime @updatedAt
 }
 
+model AutomationGovernancePolicy {
+  id                            String   @id @default("instance")
+  allowedRuntimeTypes           String[] @default([])
+  workflowStartRoles            String[] @default(["OWNER", "MEMBER"])
+  maxConcurrentWorkflowJobs     Int      @default(1)
+  workflowStartRequiresApproval Boolean  @default(false)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+}
+
 model SamlAuthRequest {
   id         String    @id
   relayState String    @unique
