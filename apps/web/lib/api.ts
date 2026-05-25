@@ -1,3 +1,4 @@
+import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 import type { AuditLogEvent, BoardColumn, Client, ClientDetail, EditionInfo, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
@@ -236,15 +237,19 @@ export function uploadTaskDescriptionImage(taskId: string, payload: { fileName?:
 export function uploadProjectDescriptionImage(projectId: string, payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string }> { return getJson(`/projects/${projectId}/image-upload`, { method: 'POST', body: JSON.stringify(payload) }) }
 
 export type LoginSuccess = { ok: boolean; sessionToken: string; expiresAt: string; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' }; memberships: { id: string; workspaceId: string; workspaceSlug?: string; workspaceName: string; role: string }[] }
-export type LoginResponse = LoginSuccess | { ok: boolean; requiresTwoFactor: true; challengeToken: string; expiresAt: string }
+export type LoginResponse = LoginSuccess | { ok: boolean; requiresTwoFactor: true; challengeToken: string; expiresAt: string; methods?: { totp: boolean; passkey: boolean }; webAuthnOptions?: PublicKeyCredentialRequestOptionsJSON }
 export function login(payload: { email: string; password: string }): Promise<LoginResponse> {
   return getJson('/auth/login', { method: 'POST', body: JSON.stringify(payload) })
 }
-export function completeTwoFactorLogin(payload: { challengeToken: string; code: string }): Promise<LoginSuccess> { return getJson('/auth/login/2fa', { method: 'POST', body: JSON.stringify(payload) }) }
-export function getTwoFactorStatus(): Promise<{ ok: boolean; enabled: boolean; confirmedAt: string | null }> { return getJson('/auth/2fa/status') }
+export type PasskeySummary = { id: string; label: string | null; createdAt: string; lastUsedAt: string | null }
+export function completeTwoFactorLogin(payload: { challengeToken: string; code?: string; webAuthnResponse?: unknown }): Promise<LoginSuccess> { return getJson('/auth/login/2fa', { method: 'POST', body: JSON.stringify(payload) }) }
+export function getTwoFactorStatus(): Promise<{ ok: boolean; enabled: boolean; confirmedAt: string | null; passkeys: PasskeySummary[] }> { return getJson('/auth/2fa/status') }
 export function startTwoFactorSetup(): Promise<{ ok: boolean; secret: string; otpauthUrl: string }> { return getJson('/auth/2fa/setup', { method: 'POST', body: JSON.stringify({}) }) }
 export function confirmTwoFactorSetup(payload: { code: string }): Promise<{ ok: boolean; enabled: boolean; confirmedAt: string | null }> { return getJson('/auth/2fa/confirm', { method: 'POST', body: JSON.stringify(payload) }) }
 export function disableTwoFactor(payload: { code: string }): Promise<{ ok: boolean; enabled: boolean }> { return getJson('/auth/2fa/disable', { method: 'POST', body: JSON.stringify(payload) }) }
+export function startPasskeyRegistration(): Promise<{ ok: boolean; token: string; options: PublicKeyCredentialCreationOptionsJSON }> { return getJson('/auth/webauthn/register/options', { method: 'POST', body: JSON.stringify({}) }) }
+export function verifyPasskeyRegistration(payload: { token: string; label?: string; response: unknown }): Promise<{ ok: boolean; passkey: PasskeySummary }> { return getJson('/auth/webauthn/register/verify', { method: 'POST', body: JSON.stringify(payload) }) }
+export function deletePasskey(passkeyId: string): Promise<{ ok: boolean }> { return getJson(`/auth/webauthn/credentials/${passkeyId}`, { method: 'DELETE' }) }
 
 export function requestPasswordReset(payload: { email: string; inviteToken?: string }): Promise<{ ok: boolean; expiresAt?: string }> {
   return getJson('/auth/request-password-reset', { method: 'POST', body: JSON.stringify(payload) })

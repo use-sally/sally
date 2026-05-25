@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { DOMParser } from '@xmldom/xmldom'
 import { SignedXml } from 'xml-crypto'
+import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server'
 import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
@@ -1172,6 +1173,9 @@ function buildOtpAuthUrl(input: { email: string; secret: string }) {
   return `otpauth://totp/${label}?secret=${input.secret}&issuer=Sally&algorithm=SHA1&digits=${TOTP_DIGITS}&period=${TOTP_STEP_SECONDS}`
 }
 function getTwoFactorChallengeExpiry() { return new Date(Date.now() + 10 * 60 * 1000) }
+function getWebAuthnChallengeExpiry() { return new Date(Date.now() + 10 * 60 * 1000) }
+function webAuthnRpId() { return new URL(process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || 'http://localhost:3000').hostname }
+function webAuthnOrigin() { return process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || 'http://localhost:3000' }
 
 const scryptAsync = promisify(crypto.scrypt)
 
@@ -2067,7 +2071,53 @@ const start = async () => {
       const account = (request as any).account as { id: string } | undefined
       if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
       const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: account.id } })
-      return { ok: true, enabled: Boolean(credential?.enabled), confirmedAt: credential?.confirmedAt?.toISOString() ?? null }
+      const passkeys = await prisma.accountWebAuthnCredential.findMany({ where: { accountId: account.id }, orderBy: { createdAt: 'desc' } })
+      return { ok: true, enabled: Boolean(credential?.enabled), confirmedAt: credential?.confirmedAt?.toISOString() ?? null, passkeys: passkeys.map((passkey) => ({ id: passkey.id, label: passkey.label, createdAt: passkey.createdAt.toISOString(), lastUsedAt: passkey.lastUsedAt?.toISOString() ?? null })) }
+    })
+
+    app.post('/auth/webauthn/register/options', async (request, reply) => {
+      const account = (request as any).account as { id: string; email: string; name?: string | null } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const existing = await prisma.accountWebAuthnCredential.findMany({ where: { accountId: account.id } })
+      const options = await generateRegistrationOptions({
+        rpName: 'Sally',
+        rpID: webAuthnRpId(),
+        userID: Buffer.from(account.id),
+        userName: account.email,
+        userDisplayName: account.name || account.email,
+        attestationType: 'none',
+        authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+        excludeCredentials: existing.map((credential) => ({ id: credential.credentialId, transports: credential.transports as any })),
+      })
+      const token = crypto.randomBytes(24).toString('base64url')
+      await prisma.accountWebAuthnChallenge.create({ data: { accountId: account.id, token, type: 'registration', challenge: options.challenge, expiresAt: getWebAuthnChallengeExpiry() } })
+      return { ok: true, token, options }
+    })
+
+    app.post('/auth/webauthn/register/verify', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const body = request.body as { token?: string; label?: string; response?: any }
+      const challenge = await prisma.accountWebAuthnChallenge.findFirst({ where: { accountId: account.id, token: body.token?.trim() || '', type: 'registration', usedAt: null, expiresAt: { gt: new Date() } } })
+      if (!challenge) return reply.code(400).send({ ok: false, error: 'Passkey registration challenge expired or invalid' })
+      const verification = await verifyRegistrationResponse({ response: body.response, expectedChallenge: challenge.challenge, expectedOrigin: webAuthnOrigin(), expectedRPID: webAuthnRpId(), requireUserVerification: false })
+      if (!verification.verified || !verification.registrationInfo) return reply.code(400).send({ ok: false, error: 'Passkey registration failed' })
+      const info = verification.registrationInfo
+      const created = await prisma.accountWebAuthnCredential.create({ data: { accountId: account.id, credentialId: info.credential.id, publicKey: Buffer.from(info.credential.publicKey), counter: BigInt(info.credential.counter), deviceType: info.credentialDeviceType, backedUp: info.credentialBackedUp, transports: info.credential.transports || [], label: body.label?.trim() || null } })
+      await prisma.accountWebAuthnChallenge.update({ where: { id: challenge.id }, data: { usedAt: new Date() } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.webauthn.registered', targetType: 'account', targetId: account.id, summary: 'Registered passkey' })
+      return { ok: true, passkey: { id: created.id, label: created.label, createdAt: created.createdAt.toISOString(), lastUsedAt: null } }
+    })
+
+    app.delete('/auth/webauthn/credentials/:credentialId', async (request, reply) => {
+      const account = (request as any).account as { id: string } | undefined
+      if (!account) return reply.code(401).send({ ok: false, error: 'Unauthorized' })
+      const { credentialId } = request.params as { credentialId: string }
+      const credential = await prisma.accountWebAuthnCredential.findFirst({ where: { id: credentialId, accountId: account.id } })
+      if (!credential) return reply.code(404).send({ ok: false, error: 'Passkey not found' })
+      await prisma.accountWebAuthnCredential.delete({ where: { id: credential.id } })
+      await writeAuditLog({ actorAccountId: account.id, action: 'audit.webauthn.deleted', targetType: 'account', targetId: account.id, summary: 'Deleted passkey' })
+      return { ok: true }
     })
 
     app.post('/auth/2fa/setup', async (request, reply) => {
@@ -2258,11 +2308,17 @@ const start = async () => {
       const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: account.id } })
       const requiresTwoFactor = Boolean(credential?.enabled || await twoFactorRequiredForAccount(account))
       if (requiresTwoFactor) {
-        if (!credential?.enabled) return reply.code(403).send({ ok: false, error: '2FA is required for this account but is not set up yet. Contact an administrator.' })
+        const passkeys = await prisma.accountWebAuthnCredential.findMany({ where: { accountId: account.id } })
+        if (!credential?.enabled && passkeys.length === 0) return reply.code(403).send({ ok: false, error: '2FA is required for this account but is not set up yet. Contact an administrator.' })
         const challengeToken = crypto.randomBytes(24).toString('base64url')
         const challenge = await prisma.accountTwoFactorChallenge.create({ data: { accountId: account.id, token: challengeToken, expiresAt: getTwoFactorChallengeExpiry() } })
+        let webAuthnOptions: any = null
+        if (passkeys.length > 0) {
+          webAuthnOptions = await generateAuthenticationOptions({ rpID: webAuthnRpId(), userVerification: 'preferred', allowCredentials: passkeys.map((passkey) => ({ id: passkey.credentialId, transports: passkey.transports as any })) })
+          await prisma.accountWebAuthnChallenge.create({ data: { accountId: account.id, token: challengeToken, type: 'authentication', challenge: webAuthnOptions.challenge, expiresAt: getWebAuthnChallengeExpiry() } })
+        }
         await writeAuditLog({ actorAccountId: account.id, action: 'audit.twoFactor.challengeCreated', targetType: 'account', targetId: account.id, summary: 'Created 2FA login challenge' })
-        return { ok: true, requiresTwoFactor: true, challengeToken: challenge.token, expiresAt: challenge.expiresAt.toISOString() }
+        return { ok: true, requiresTwoFactor: true, challengeToken: challenge.token, expiresAt: challenge.expiresAt.toISOString(), methods: { totp: Boolean(credential?.enabled), passkey: passkeys.length > 0 }, webAuthnOptions }
       }
       const sessionToken = generateSessionToken()
       const session = await prisma.accountSession.create({ data: { accountId: account.id, token: sessionToken, expiresAt: await getSessionExpiry() } })
@@ -2278,14 +2334,27 @@ const start = async () => {
     })
 
     app.post('/auth/login/2fa', async (request, reply) => {
-      const body = request.body as { challengeToken?: string; code?: string }
+      const body = request.body as { challengeToken?: string; code?: string; webAuthnResponse?: any }
       const challenge = await prisma.accountTwoFactorChallenge.findFirst({ where: { token: body.challengeToken?.trim() || '', usedAt: null, expiresAt: { gt: new Date() } }, include: { account: true } })
       if (!challenge) return reply.code(401).send({ ok: false, error: '2FA challenge expired or invalid' })
       if (challenge.account.archivedAt) return reply.code(403).send({ ok: false, error: 'Account archived' })
       const credential = await prisma.accountTwoFactorCredential.findUnique({ where: { accountId: challenge.accountId } })
-      if (!credential?.enabled || !verifyTotp(credential.secret, body.code || '')) {
+      let twoFactorVerified = Boolean(credential?.enabled && verifyTotp(credential.secret, body.code || ''))
+      if (!twoFactorVerified && body.webAuthnResponse) {
+        const webAuthnChallenge = await prisma.accountWebAuthnChallenge.findFirst({ where: { accountId: challenge.accountId, token: challenge.token, type: 'authentication', usedAt: null, expiresAt: { gt: new Date() } } })
+        const passkey = await prisma.accountWebAuthnCredential.findFirst({ where: { accountId: challenge.accountId, credentialId: body.webAuthnResponse.id } })
+        if (webAuthnChallenge && passkey) {
+          const verification = await verifyAuthenticationResponse({ response: body.webAuthnResponse, expectedChallenge: webAuthnChallenge.challenge, expectedOrigin: webAuthnOrigin(), expectedRPID: webAuthnRpId(), requireUserVerification: false, credential: { id: passkey.credentialId, publicKey: Buffer.from(passkey.publicKey), counter: Number(passkey.counter), transports: passkey.transports as any } })
+          if (verification.verified) {
+            twoFactorVerified = true
+            await prisma.accountWebAuthnCredential.update({ where: { id: passkey.id }, data: { counter: BigInt(verification.authenticationInfo.newCounter), lastUsedAt: new Date() } })
+            await prisma.accountWebAuthnChallenge.update({ where: { id: webAuthnChallenge.id }, data: { usedAt: new Date() } })
+          }
+        }
+      }
+      if (!twoFactorVerified) {
         await writeAuditLog({ actorAccountId: challenge.accountId, action: 'audit.twoFactor.challengeFailed', targetType: 'account', targetId: challenge.accountId, summary: 'Failed 2FA login challenge' })
-        return reply.code(401).send({ ok: false, error: 'Invalid 2FA code' })
+        return reply.code(401).send({ ok: false, error: 'Invalid 2FA code or passkey response' })
       }
       await prisma.accountTwoFactorChallenge.update({ where: { id: challenge.id }, data: { usedAt: new Date() } })
       const sessionToken = generateSessionToken()

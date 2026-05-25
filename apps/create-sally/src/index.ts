@@ -42,6 +42,8 @@ type EnterpriseSchemaState = {
   missingAuthenticationPolicyTable: boolean
   missingAccountTwoFactorCredentialTable: boolean
   missingAccountTwoFactorChallengeTable: boolean
+  missingAccountWebAuthnCredentialTable: boolean
+  missingAccountWebAuthnChallengeTable: boolean
 }
 
 type CliOptions = {
@@ -936,7 +938,9 @@ async function inspectEnterpriseSchemaState(targetDir: string, postgresUser: str
     "  'missingAuditLogPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuditLogPolicy'),",
     "  'missingAuthenticationPolicyTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AuthenticationPolicy'),",
     "  'missingAccountTwoFactorCredentialTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AccountTwoFactorCredential'),",
-    "  'missingAccountTwoFactorChallengeTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AccountTwoFactorChallenge')",
+    "  'missingAccountTwoFactorChallengeTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AccountTwoFactorChallenge'),",
+    "  'missingAccountWebAuthnCredentialTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AccountWebAuthnCredential'),",
+    "  'missingAccountWebAuthnChallengeTable', NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'AccountWebAuthnChallenge')",
     ');',
   ].join(' ')
 
@@ -1339,6 +1343,8 @@ async function doctorFlow(options: CliOptions) {
         enterpriseSchema.missingAuthenticationPolicyTable ? 'AuthenticationPolicy table missing' : null,
         enterpriseSchema.missingAccountTwoFactorCredentialTable ? 'AccountTwoFactorCredential table missing' : null,
         enterpriseSchema.missingAccountTwoFactorChallengeTable ? 'AccountTwoFactorChallenge table missing' : null,
+        enterpriseSchema.missingAccountWebAuthnCredentialTable ? 'AccountWebAuthnCredential table missing' : null,
+        enterpriseSchema.missingAccountWebAuthnChallengeTable ? 'AccountWebAuthnChallenge table missing' : null,
       ].filter(Boolean)
       console.log(`${paint('schema', color.brightYellow)}: ${problems.length ? paint(problems.join('; '), color.red) : paint('ok', color.green)}`)
     } catch (error) {

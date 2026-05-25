@@ -194,6 +194,8 @@ model Account {
   auditLogEvents          AuditLogEvent[]             @relation("AuditLogActor")
   twoFactorCredential     AccountTwoFactorCredential?
   twoFactorChallenges     AccountTwoFactorChallenge[]
+  webAuthnCredentials     AccountWebAuthnCredential[]
+  webAuthnChallenges      AccountWebAuthnChallenge[]
 
   @@index([archivedAt])
 }
@@ -213,6 +215,39 @@ model AccountTwoFactorChallenge {
   id        String    @id @default(cuid())
   accountId String
   token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
+}
+
+model AccountWebAuthnCredential {
+  id           String    @id @default(cuid())
+  accountId    String
+  credentialId String    @unique
+  publicKey    Bytes
+  counter      BigInt    @default(0)
+  deviceType   String?
+  backedUp     Boolean   @default(false)
+  transports   String[]  @default([])
+  label        String?
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model AccountWebAuthnChallenge {
+  id        String    @id @default(cuid())
+  accountId String
+  token     String    @unique
+  type      String
+  challenge String
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

@@ -81,7 +81,7 @@ test('Enterprise 2FA policy is enforcement-ready and exposes admin recovery rese
 })
 
 test('web client and login UI support the 2FA challenge flow', () => {
-  assert.match(webApiSource, /export type LoginResponse = LoginSuccess \| \{ ok: boolean; requiresTwoFactor: true; challengeToken: string; expiresAt: string \}/)
+  assert.match(webApiSource, /export type LoginResponse = LoginSuccess \| \{ ok: boolean; requiresTwoFactor: true; challengeToken: string; expiresAt: string; methods\?: \{ totp: boolean; passkey: boolean \}; webAuthnOptions\?: PublicKeyCredentialRequestOptionsJSON \}/)
   assert.match(webApiSource, /completeTwoFactorLogin/)
   assert.match(webApiSource, /getTwoFactorStatus/)
   assert.match(webApiSource, /startTwoFactorSetup/)
@@ -116,9 +116,29 @@ test('2FA policy UI no longer describes enforcement as a scaffold', () => {
   assert.doesNotMatch(policyPanelSource, /Enforcement will activate when user 2FA enrollment is available/)
 })
 
-test('doctor checks include Enterprise 2FA credential schema', () => {
+test('passkey WebAuthn schema and API support phishing-resistant second factors', () => {
+  assert.match(schemaSource, /model AccountWebAuthnCredential \{[\s\S]*credentialId\s+String\s+@unique/)
+  assert.match(schemaSource, /model AccountWebAuthnCredential \{[\s\S]*publicKey\s+Bytes/)
+  assert.match(schemaSource, /model AccountWebAuthnChallenge \{[\s\S]*type\s+String/)
+  assert.match(apiSource, /generateRegistrationOptions/)
+  assert.match(apiSource, /verifyRegistrationResponse/)
+  assert.match(apiSource, /generateAuthenticationOptions/)
+  assert.match(apiSource, /verifyAuthenticationResponse/)
+  assert.match(apiSource, /app\.post\('\/auth\/webauthn\/register\/options'/)
+  assert.match(apiSource, /app\.post\('\/auth\/webauthn\/register\/verify'/)
+  assert.match(apiSource, /app\.delete\('\/auth\/webauthn\/credentials\/:credentialId'/)
+  assert.match(authGateSource, /Use passkey \/ Face ID/)
+  assert.match(accountPanelSource, /Add passkey/)
+  assert.match(accountPanelSource, /Face ID, Touch ID, or Windows Hello/)
+})
+
+test('doctor checks include Enterprise 2FA and passkey schema', () => {
   assert.match(doctorSource, /missingAccountTwoFactorCredentialTable/)
   assert.match(doctorSource, /missingAccountTwoFactorChallengeTable/)
+  assert.match(doctorSource, /missingAccountWebAuthnCredentialTable/)
+  assert.match(doctorSource, /missingAccountWebAuthnChallengeTable/)
   assert.match(doctorSource, /AccountTwoFactorCredential table missing/)
   assert.match(doctorSource, /AccountTwoFactorChallenge table missing/)
+  assert.match(doctorSource, /AccountWebAuthnCredential table missing/)
+  assert.match(doctorSource, /AccountWebAuthnChallenge table missing/)
 })

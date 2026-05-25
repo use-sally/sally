@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { confirmTwoFactorSetup, disableTwoFactor, getTwoFactorStatus, startTwoFactorSetup } from '../lib/api'
+import { startRegistration } from '@simplewebauthn/browser'
+import { confirmTwoFactorSetup, deletePasskey, disableTwoFactor, getTwoFactorStatus, startPasskeyRegistration, startTwoFactorSetup, verifyPasskeyRegistration, type PasskeySummary } from '../lib/api'
 
 export function TwoFactorAccountPanel() {
   const [enabled, setEnabled] = useState(false)
@@ -12,6 +13,7 @@ export function TwoFactorAccountPanel() {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [disableCode, setDisableCode] = useState('')
+  const [passkeys, setPasskeys] = useState<PasskeySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -23,6 +25,7 @@ export function TwoFactorAccountPanel() {
       const status = await getTwoFactorStatus()
       setEnabled(status.enabled)
       setConfirmedAt(status.confirmedAt)
+      setPasskeys(status.passkeys ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load 2FA status')
     } finally {
@@ -77,6 +80,28 @@ export function TwoFactorAccountPanel() {
     finally { setWorking(false) }
   }
 
+  const addPasskey = async () => {
+    setWorking(true); setError(null); setMessage(null)
+    try {
+      const setup = await startPasskeyRegistration()
+      const response = await startRegistration({ optionsJSON: setup.options })
+      const result = await verifyPasskeyRegistration({ token: setup.token, response, label: 'Passkey' })
+      setPasskeys((items) => [result.passkey, ...items])
+      setMessage('Passkey added. You can use it as your second factor at login.')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to add passkey') }
+    finally { setWorking(false) }
+  }
+
+  const removePasskey = async (passkeyId: string) => {
+    setWorking(true); setError(null); setMessage(null)
+    try {
+      await deletePasskey(passkeyId)
+      setPasskeys((items) => items.filter((item) => item.id !== passkeyId))
+      setMessage('Passkey removed.')
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to remove passkey') }
+    finally { setWorking(false) }
+  }
+
   return (
     <div style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Two-factor authentication</div>
@@ -92,6 +117,12 @@ export function TwoFactorAccountPanel() {
         <input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" placeholder="123456" style={inputStyle} />
         <button type="submit" disabled={working} style={buttonStyle}>Confirm and enable 2FA</button>
       </form> : null}
+      <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: 12, display: 'grid', gap: 10 }}>
+        <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Passkeys</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Use a passkey, Face ID, Touch ID, or Windows Hello as a phishing-resistant second factor.</div>
+        <button type="button" disabled={working || loading} onClick={() => void addPasskey()} style={buttonStyle}>Add passkey</button>
+        {passkeys.length ? <div style={{ display: 'grid', gap: 8 }}>{passkeys.map((passkey) => <div key={passkey.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', border: '1px solid var(--panel-border)', borderRadius: 12, padding: '9px 10px' }}><span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{passkey.label || 'Passkey'} · added {new Date(passkey.createdAt).toLocaleDateString()}</span><button type="button" disabled={working} onClick={() => void removePasskey(passkey.id)} style={{ ...buttonStyle, background: 'transparent', color: '#fecaca', borderColor: 'rgba(248,113,113,0.45)' }}>Remove</button></div>)}</div> : <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No passkeys yet.</div>}
+      </div>
       {enabled ? <form onSubmit={disable} style={{ display: 'grid', gap: 10 }}>
         <input value={disableCode} onChange={(event) => setDisableCode(event.target.value)} inputMode="numeric" placeholder="2FA code to disable" style={inputStyle} />
         <button type="submit" disabled={working} style={{ ...buttonStyle, background: 'transparent', color: '#fecaca', borderColor: 'rgba(248,113,113,0.45)' }}>Disable 2FA</button>

@@ -3,6 +3,7 @@
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { startAuthentication, type PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 import { completeTwoFactorLogin, getMe, getSamlStatus, login, requestPasswordReset, samlLoginUrl } from '../lib/api'
 import { clearSession, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId, type Membership } from '../lib/auth'
 import { projectInputField } from '../lib/theme'
@@ -74,6 +75,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState('')
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [twoFactorChallengeToken, setTwoFactorChallengeToken] = useState<string | null>(null)
+  const [webAuthnOptions, setWebAuthnOptions] = useState<PublicKeyCredentialRequestOptionsJSON | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -139,6 +141,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       const response = await login({ email: email.trim(), password: password.trim() })
       if (!('sessionToken' in response)) {
         setTwoFactorChallengeToken(response.challengeToken)
+        setWebAuthnOptions(response.webAuthnOptions ?? null)
         setInfo('Enter your 2FA code to finish signing in.')
         return
       }
@@ -184,6 +187,30 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setStatus('authed')
     } catch (err) {
       setError(err instanceof Error ? err.message : '2FA verification failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePasskeyLogin = async () => {
+    if (!twoFactorChallengeToken || !webAuthnOptions) return
+    setLoading(true)
+    setError(null)
+    try {
+      const webAuthnResponse = await startAuthentication({ optionsJSON: webAuthnOptions })
+      const response = await completeTwoFactorLogin({ challengeToken: twoFactorChallengeToken, webAuthnResponse })
+      saveSession({ token: response.sessionToken, expiresAt: response.expiresAt, account: response.account, memberships: response.memberships })
+      setTwoFactorChallengeToken(null)
+      setTwoFactorCode('')
+      setWebAuthnOptions(null)
+      if (!response.memberships.length) {
+        setStatus('no-access')
+        return
+      }
+      setWorkspaceId(pickWorkspaceId(response.memberships))
+      setStatus('authed')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Passkey verification failed')
     } finally {
       setLoading(false)
     }
@@ -244,7 +271,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
             {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
             {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
             <button type="submit" disabled={loading} style={primaryButton}>{loading ? 'Verifying…' : 'Verify code'}</button>
-            <button type="button" onClick={() => { setTwoFactorChallengeToken(null); setTwoFactorCode(''); setError(null); setInfo(null) }} style={secondaryButton}>Back to sign in</button>
+            {webAuthnOptions ? <button type="button" onClick={() => void handlePasskeyLogin()} disabled={loading} style={secondaryButton}>Use passkey / Face ID</button> : null}
+            <button type="button" onClick={() => { setTwoFactorChallengeToken(null); setTwoFactorCode(''); setWebAuthnOptions(null); setError(null); setInfo(null) }} style={secondaryButton}>Back to sign in</button>
           </form>
         ) : null}
         {mode === 'login' && !twoFactorChallengeToken ? (

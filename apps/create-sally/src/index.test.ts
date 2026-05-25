@@ -90,6 +90,8 @@ test('doctor reports missing Enterprise schema after migration checks', () => {
   assert.ok(source.includes("'missingAuthenticationPolicyTable'"))
   assert.ok(source.includes("'missingAccountTwoFactorCredentialTable'"))
   assert.ok(source.includes("'missingAccountTwoFactorChallengeTable'"))
+  assert.ok(source.includes("'missingAccountWebAuthnCredentialTable'"))
+  assert.ok(source.includes("'missingAccountWebAuthnChallengeTable'"))
   assert.ok(source.includes("table_name = 'InstalledLicense'"))
   assert.ok(source.includes("table_name = 'ApiMcpKeyPolicy'"))
   assert.ok(source.includes("table_name = 'SessionPolicy'"))
@@ -98,6 +100,8 @@ test('doctor reports missing Enterprise schema after migration checks', () => {
   assert.ok(source.includes("table_name = 'AuthenticationPolicy'"))
   assert.ok(source.includes("table_name = 'AccountTwoFactorCredential'"))
   assert.ok(source.includes("table_name = 'AccountTwoFactorChallenge'"))
+  assert.ok(source.includes("table_name = 'AccountWebAuthnCredential'"))
+  assert.ok(source.includes("table_name = 'AccountWebAuthnChallenge'"))
   assert.ok(source.includes('InstalledLicense table missing'))
   assert.ok(source.includes('ApiMcpKeyPolicy table missing'))
   assert.ok(source.includes('SessionPolicy table missing'))
@@ -106,6 +110,8 @@ test('doctor reports missing Enterprise schema after migration checks', () => {
   assert.ok(source.includes('AuthenticationPolicy table missing'))
   assert.ok(source.includes('AccountTwoFactorCredential table missing'))
   assert.ok(source.includes('AccountTwoFactorChallenge table missing'))
+  assert.ok(source.includes('AccountWebAuthnCredential table missing'))
+  assert.ok(source.includes('AccountWebAuthnChallenge table missing'))
 })
 
 test('install and update run one ordered migration pipeline before starting services', () => {
