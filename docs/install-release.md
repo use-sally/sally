@@ -194,8 +194,9 @@ The same bootstrap step is rerun during managed updates so installer-managed ins
 8. Specifically test the initialized-schema / missing-`_prisma_migrations` recovery path during update
 9. Verify `create-sally doctor` applies pending migrations and reports Enterprise schema checks as ok
 10. Verify SMTP, login, invite flow, hosted MCP key UX, and hosted `/mcp` behavior
-11. Verify Enterprise install/activation unlocks Security policy modals and Community keeps them locked/read-only
-12. Verify reported Sally version after update matches the deployed image tag
+11. Verify TOTP 2FA enrollment from Profile, QR scanning, login challenge, disable flow, and Team admin recovery reset
+12. Verify Enterprise install/activation unlocks Security policy modals and Community keeps them locked/read-only
+13. Verify reported Sally version after update matches the deployed image tag
 
 ---
 
@@ -251,6 +252,7 @@ This release line adds the Enterprise feature foundation:
 - SAML SSO configuration, login flow, request state, signature verification, and account policy controls
 - API/MCP key expiry policy and Enterprise-gated personal key validity dates
 - automation governance policy for allowed agent runtimes, workflow start roles, approval requirements, and concurrency
-- Security policy modals for authentication, sessions, 2FA policy scaffold, API/MCP keys, audit log, SAML, and automation governance
+- authenticator-app TOTP 2FA with QR enrollment, login challenge handoff, user disable flow, Enterprise enforcement policy, and Team admin recovery reset
+- Security policy modals for authentication, sessions, 2FA enforcement, API/MCP keys, audit log, SAML, and automation governance
 
-Committed migrations add the required policy tables. `create-sally update` applies them through `prisma migrate deploy`; `create-sally doctor` starts Postgres, applies pending migrations for managed installs, and reports missing Enterprise tables if the schema is incomplete.
+Committed migrations add the required policy and 2FA credential/challenge tables. `create-sally update` applies them through `prisma migrate deploy`; `create-sally doctor` starts Postgres, applies pending migrations for managed installs, and reports missing Enterprise tables if the schema is incomplete.

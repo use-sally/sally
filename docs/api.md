@@ -40,6 +40,7 @@ Session records live in `AccountSession`.
 
 Session lifecycle:
 - created by `POST /auth/login`
+- when 2FA is enabled or required, completed by `POST /auth/login/2fa`
 - revoked by `POST /auth/logout`
 - expires after `SESSION_TTL_DAYS` days, default `30`
 
@@ -91,6 +92,7 @@ These are excluded from the main auth hook:
 - `GET /uploads/task-images/:taskId/:fileName`
 - `GET /uploads/profile-images/:accountId/:fileName`
 - `POST /auth/login`
+- `POST /auth/login/2fa`
 - `POST /auth/accept-invite`
 - `POST /auth/request-password-reset`
 - `POST /auth/reset-password`
@@ -135,6 +137,33 @@ Validation:
 
 Special case:
 - if the email matches configured `SUPERADMIN_EMAIL`, login can validate against `SUPERADMIN_PASSWORD_HASH` from env instead of the DB password hash
+
+2FA challenge response:
+```json
+{
+  "ok": true,
+  "requiresTwoFactor": true,
+  "challengeToken": "...",
+  "expiresAt": "2026-03-26T12:10:00.000Z"
+}
+```
+
+This response is returned instead of a session when the account has enabled TOTP 2FA or when an Enterprise 2FA policy requires it. If Enterprise policy requires 2FA but the account has not enrolled yet, password login is blocked until an admin helps the user enroll or adjusts policy.
+
+### `POST /auth/login/2fa`
+Completes a pending 2FA login challenge.
+
+Request:
+```json
+{ "challengeToken": "...", "code": "123456" }
+```
+
+Response mirrors successful `POST /auth/login` and returns a session.
+
+Validation:
+- challenge token must exist, be unused, and not expired
+- code must be the current six-digit TOTP code, with a small clock-skew window
+- successful completion marks the challenge used before issuing a session
 
 ### `POST /auth/logout`
 Requires a live session token.
@@ -370,6 +399,58 @@ Response:
 ```json
 { "ok": true, "url": "/uploads/profile-images/<accountId>/<file>" }
 ```
+
+### `GET /auth/2fa/status`
+Returns the current account's authenticator-app 2FA state.
+
+Response:
+```json
+{ "ok": true, "enabled": true, "confirmedAt": "2026-03-26T12:00:00.000Z" }
+```
+
+### `POST /auth/2fa/setup`
+Starts or restarts TOTP enrollment for the current account.
+
+Response:
+```json
+{
+  "ok": true,
+  "secret": "BASE32SECRET...",
+  "otpauthUrl": "otpauth://totp/Sally:alex%40example.com?..."
+}
+```
+
+The web Profile page renders `otpauthUrl` as a QR code and also shows the manual setup key.
+
+### `POST /auth/2fa/confirm`
+Confirms enrollment with the current six-digit TOTP code.
+
+Request:
+```json
+{ "code": "123456" }
+```
+
+Response:
+```json
+{ "ok": true, "enabled": true, "confirmedAt": "2026-03-26T12:00:00.000Z" }
+```
+
+### `POST /auth/2fa/disable`
+Disables 2FA for the current account after verifying a current code.
+
+Request:
+```json
+{ "code": "123456" }
+```
+
+### `POST /accounts/:accountId/2fa/reset`
+Platform-admin account recovery endpoint. Enterprise 2FA policy must allow admin recovery resets.
+
+Behavior:
+- deletes the target account's TOTP credential
+- deletes pending 2FA login challenges for the target account
+- writes an audit event
+- the user must enroll again from Profile before satisfying a required-2FA policy
 
 ### `POST /auth/invite`
 Workspace owner only.
