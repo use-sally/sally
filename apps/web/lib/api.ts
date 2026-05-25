@@ -91,6 +91,9 @@ export type AuditLogPolicy = { id: string; retentionDays: number; exportRequires
 export function getAuditLogPolicy(): Promise<{ ok: boolean; policy: AuditLogPolicy; stats: { totalEvents: number; retainedEvents: number; prunableEvents: number } }> { return getJson('/security/audit-log-policy') }
 export function saveAuditLogPolicy(payload: Omit<AuditLogPolicy, 'id'>): Promise<{ ok: boolean; policy: AuditLogPolicy }> { return getJson('/security/audit-log-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function pruneAuditLog(): Promise<{ ok: boolean; deletedEvents: number }> { return getJson('/security/audit-log-policy/prune', { method: 'POST', body: JSON.stringify({}) }) }
+export type AuthenticationPolicy = { id: string; minimumPasswordLength: number; requirePasswordUppercase: boolean; requirePasswordLowercase: boolean; requirePasswordNumber: boolean; requirePasswordSymbol: boolean; disablePasswordLoginForSso: boolean }
+export function getAuthenticationPolicy(): Promise<{ ok: boolean; policy: AuthenticationPolicy }> { return getJson('/security/authentication-policy') }
+export function saveAuthenticationPolicy(payload: Omit<AuthenticationPolicy, 'id'>): Promise<{ ok: boolean; policy: AuthenticationPolicy }> { return getJson('/security/authentication-policy', { method: 'PUT', body: JSON.stringify(payload) }) }
 export function getAuditLog(filters?: { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: number }): Promise<AuditLogEvent[]> {
   const params = new URLSearchParams()
   if (filters?.action) params.set('action', filters.action)

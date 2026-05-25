@@ -343,6 +343,18 @@ model AuditLogPolicy {
   updatedAt               DateTime @updatedAt
 }
 
+model AuthenticationPolicy {
+  id                         String   @id @default("instance")
+  minimumPasswordLength      Int      @default(12)
+  requirePasswordUppercase   Boolean  @default(true)
+  requirePasswordLowercase   Boolean  @default(true)
+  requirePasswordNumber      Boolean  @default(true)
+  requirePasswordSymbol      Boolean  @default(true)
+  disablePasswordLoginForSso Boolean  @default(false)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
 model SamlAuthRequest {
   id         String    @id
   relayState String    @unique

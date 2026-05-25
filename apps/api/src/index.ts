@@ -1850,6 +1850,18 @@ const start = async () => {
     const readTwoFactorPolicy = async () => (await prisma.twoFactorPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultTwoFactorPolicy()
     const defaultAuditLogPolicy = () => ({ id: 'instance', retentionDays: 365, exportRequiresAdmin: true, includeAuthEvents: true, includeAutomationEvents: true })
     const readAuditLogPolicy = async () => (await prisma.auditLogPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultAuditLogPolicy()
+    const defaultAuthenticationPolicy = () => ({ id: 'instance', minimumPasswordLength: 12, requirePasswordUppercase: true, requirePasswordLowercase: true, requirePasswordNumber: true, requirePasswordSymbol: true, disablePasswordLoginForSso: false })
+    const readAuthenticationPolicy = async () => (await prisma.authenticationPolicy.findUnique({ where: { id: 'instance' } })) ?? defaultAuthenticationPolicy()
+    const validatePasswordForPolicy = async (password: string) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (!edition.availableFeatures.includes('security.sessionPolicy')) return validateStrongPassword(password)
+      const policy = await readAuthenticationPolicy()
+      return password.length >= policy.minimumPasswordLength
+        && (!policy.requirePasswordLowercase || /[a-z]/.test(password))
+        && (!policy.requirePasswordUppercase || /[A-Z]/.test(password))
+        && (!policy.requirePasswordNumber || /\d/.test(password))
+        && (!policy.requirePasswordSymbol || /[^A-Za-z0-9]/.test(password))
+    }
     const requireAutomationPolicyFeature = async (_request: unknown, reply: any) => {
       const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
       if (edition.availableFeatures.includes('automation.workflowPolicies')) return true
@@ -2033,6 +2045,36 @@ const start = async () => {
       return { ok: true, deletedEvents: result.count }
     })
 
+    const requireAuthenticationPolicyFeature = async (_request: unknown, reply: any) => {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (edition.availableFeatures.includes('security.sessionPolicy')) return true
+      reply.code(402).send({ ok: false, error: 'Enterprise feature', feature: 'security.sessionPolicy', upgradeUrl: edition.upgradeUrl })
+      return false
+    }
+
+    app.get('/security/authentication-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireAuthenticationPolicyFeature(request, reply))) return
+      return { ok: true, policy: await readAuthenticationPolicy() }
+    })
+
+    app.put('/security/authentication-policy', async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!(await requireAuthenticationPolicyFeature(request, reply))) return
+      const body = request.body as Record<string, unknown>
+      const data = {
+        minimumPasswordLength: Math.max(8, Math.min(128, Math.floor(Number(body.minimumPasswordLength || 12)))),
+        requirePasswordUppercase: body.requirePasswordUppercase !== false,
+        requirePasswordLowercase: body.requirePasswordLowercase !== false,
+        requirePasswordNumber: body.requirePasswordNumber !== false,
+        requirePasswordSymbol: body.requirePasswordSymbol !== false,
+        disablePasswordLoginForSso: Boolean(body.disablePasswordLoginForSso),
+      }
+      const policy = await prisma.authenticationPolicy.upsert({ where: { id: 'instance' }, create: { id: 'instance', ...data }, update: data })
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.authenticationPolicy.updated', targetType: 'authenticationPolicy', targetId: policy.id, summary: 'Updated authentication policy', metadata: data })
+      return { ok: true, policy }
+    })
+
     app.get('/runtime-config', async () => ({
       ok: true,
       appBaseUrl: process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || null,
@@ -2080,6 +2122,11 @@ const start = async () => {
         return reply.code(403).send({ ok: false, error: 'Account archived' })
       }
       const samlConfig = await prisma.samlIdentityProvider.findUnique({ where: { id: 'default' } })
+      const authPolicy = await readAuthenticationPolicy()
+      if (samlConfig?.enabled && authPolicy.disablePasswordLoginForSso && account.platformRole !== PlatformRole.SUPERADMIN) {
+        await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginFailed', targetType: 'account', targetId: account.id, summary: `Blocked password login for ${account.email}`, metadata: { reason: 'password_login_disabled_for_sso' } })
+        return reply.code(403).send({ ok: false, error: 'Password login is disabled while SSO is enabled for this instance' })
+      }
       if (samlConfig?.enabled && samlConfig.enforceSso && account.platformRole !== PlatformRole.SUPERADMIN) {
         await writeAuditLog({ actorAccountId: account.id, action: 'audit.auth.loginFailed', targetType: 'account', targetId: account.id, summary: `Blocked password login for ${account.email}`, metadata: { reason: 'saml_enforced' } })
         return reply.code(403).send({ ok: false, error: 'SAML SSO is enforced for this instance' })
@@ -2492,7 +2539,7 @@ const start = async () => {
       const password = body.password?.trim()
       if (!token) return reply.code(400).send({ ok: false, error: 'token is required' })
       if (!password) return reply.code(400).send({ ok: false, error: 'password is required' })
-      if (!validateStrongPassword(password)) return reply.code(400).send({ ok: false, error: STRONG_PASSWORD_HINT })
+      if (!(await validatePasswordForPolicy(password))) return reply.code(400).send({ ok: false, error: STRONG_PASSWORD_HINT })
       const invite = await prisma.accountInvite.findFirst({ where: { token, acceptedAt: null, expiresAt: { gt: new Date() } } })
       if (!invite) return reply.code(400).send({ ok: false, error: 'Invite is invalid or expired' })
       let account = await prisma.account.findFirst({ where: { email: invite.email } })
@@ -2549,7 +2596,7 @@ const start = async () => {
       const inviteToken = body.inviteToken?.trim()
       if (!token) return reply.code(400).send({ ok: false, error: 'token is required' })
       if (!password) return reply.code(400).send({ ok: false, error: 'password is required' })
-      if (!validateStrongPassword(password)) return reply.code(400).send({ ok: false, error: STRONG_PASSWORD_HINT })
+      if (!(await validatePasswordForPolicy(password))) return reply.code(400).send({ ok: false, error: STRONG_PASSWORD_HINT })
       const reset = await prisma.passwordReset.findFirst({ where: { token, usedAt: null, expiresAt: { gt: new Date() } } })
       if (!reset) return reply.code(400).send({ ok: false, error: 'Reset token is invalid or expired' })
       const resetAccount = await prisma.account.findFirst({ where: { id: reset.accountId } })
