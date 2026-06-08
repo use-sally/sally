@@ -231,7 +231,7 @@ export function TaskModalHeader({
               ★
             </button>
           )
-        }) : <span style={{ color: '#f59e0b', fontSize: 22, lineHeight: 1 }}>{priorityStars(task.priority)}</span>}
+        }) : <span style={{ color: '#f59e0b', fontSize: 'var(--font-22)', lineHeight: 1 }}>{priorityStars(task.priority)}</span>}
       </div>
 
       <div onClick={() => startEdit('dueDate')} style={{ minHeight: 40, display: 'flex', alignItems: 'center', cursor: taskEditDecision.allowed ? 'pointer' : 'default' }}>
@@ -277,7 +277,7 @@ export function TaskModalHeader({
                   style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 10px', border: 'none', borderRadius: 9, background: selected ? 'color-mix(in srgb, var(--form-border-focus) 16%, transparent)' : 'transparent', color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}
                 >
                   <span className="status-chip" style={statusChipStyle(status.color)}>{status.name}</span>
-                  {selected ? <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>✓</span> : null}
+                  {selected ? <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>✓</span> : null}
                 </button>
               )
             })}
@@ -317,7 +317,7 @@ export function TaskModalHeader({
                 </button>
               ))}
               {canCreateLabel ? <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => addLabel(labelQuery)} style={{ width: '100%', border: '1px dashed var(--form-border-focus)', borderRadius: 9, padding: '8px 10px', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', fontWeight: 800 }}>Create “{labelQuery.trim()}”</button> : null}
-              {!filteredLabelOptions.length && !canCreateLabel ? <div style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: 12 }}>No more tags.</div> : null}
+              {!filteredLabelOptions.length && !canCreateLabel ? <div style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>No more tags.</div> : null}
             </div>
           </div>
         ) : task.labels?.length ? (
@@ -334,4 +334,4 @@ export function TaskModalHeader({
 }
 
 const inputStyle: React.CSSProperties = { ...projectInputField }
-const starBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 22, cursor: 'pointer', lineHeight: 1 }
+const starBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 'var(--font-22)', cursor: 'pointer', lineHeight: 1 }

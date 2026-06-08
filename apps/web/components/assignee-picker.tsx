@@ -128,7 +128,7 @@ export function AssigneePicker({ projectId, taskId, value, onChange, onSaved, pl
           </div>
         </div>
       )}
-      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{error}</div> : null}
+      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{error}</div> : null}
     </div>
   )
 }

@@ -55,7 +55,7 @@ export function EditableTaskRow({
           />
         </div>
 
-        <div style={{ display: 'flex', gap: 2, alignItems: 'center', color: '#f59e0b', fontSize: 22, lineHeight: 1 }}>
+        <div style={{ display: 'flex', gap: 2, alignItems: 'center', color: '#f59e0b', fontSize: 'var(--font-22)', lineHeight: 1 }}>
           {priorityStars(task.priority)}
         </div>
 

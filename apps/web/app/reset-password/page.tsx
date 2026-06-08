@@ -97,22 +97,22 @@ function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
+        <div style={{ fontSize: 'var(--font-28)', fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / password</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>Reset your password</div>
-      <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Choose a new password for your account.</div>
+      <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / password</div>
+      <div style={{ fontSize: 'var(--font-20)', fontWeight: 700, marginTop: 10, color: 'var(--heading-text)' }}>Reset your password</div>
+      <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Choose a new password for your account.</div>
       <label style={{ display: 'grid', gap: 6, marginTop: 18 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>New password</span>
+        <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>New password</span>
         <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
       </label>
-      <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 10 }}>Use at least 12 characters with uppercase, lowercase, number, and symbol.</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', marginTop: 10 }}>Use at least 12 characters with uppercase, lowercase, number, and symbol.</div>
       <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Confirm password</span>
+        <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Confirm password</span>
         <input value={confirm} onChange={(event) => setConfirm(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
       </label>
-      {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-      {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
+      {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+      {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 'var(--font-13)' }}>{info}</div> : null}
       <button type="submit" disabled={status === 'saving'} style={primaryButton}>
         {status === 'saving' ? 'Updating…' : 'Update password'}
       </button>
@@ -126,7 +126,7 @@ function ResetPasswordForm() {
 export default function ResetPasswordPage() {
   return (
     <div style={pageStyle}>
-      <Suspense fallback={<div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Loading…</div>}>
+      <Suspense fallback={<div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-14)' }}>Loading…</div>}>
         <ResetPasswordForm />
       </Suspense>
     </div>

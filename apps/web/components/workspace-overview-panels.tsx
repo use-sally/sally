@@ -79,13 +79,13 @@ function WorkspaceMemberAvatar({
             <AssigneeAvatar name={member.name || member.email} size={36} />
             <div>
               <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{member.name || (member.invited ? 'Invited user' : '—')}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{member.email}</div>
+              <div style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)', marginTop: 2 }}>{member.email}</div>
             </div>
           </div>
-          <div style={{ marginTop: 8, fontSize: 12, color: member.invited ? '#fcd34d' : 'var(--text-muted)' }}>
+          <div style={{ marginTop: 8, fontSize: 'var(--font-12)', color: member.invited ? '#fcd34d' : 'var(--text-muted)' }}>
             {member.invited ? 'Pending invite' : `Joined ${new Date(member.createdAt).toLocaleDateString()}`}
           </div>
-          {member.invited && member.inviteExpiresAt ? <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)' }}>Expires {new Date(member.inviteExpiresAt).toLocaleDateString()}</div> : null}
+          {member.invited && member.inviteExpiresAt ? <div style={{ marginTop: 2, fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>Expires {new Date(member.inviteExpiresAt).toLocaleDateString()}</div> : null}
           <div style={{ marginTop: 8, position: 'relative' }}>
             {canEditRole && !member.invited ? (
               <>
@@ -114,10 +114,10 @@ function WorkspaceMemberAvatar({
             ) : (
               <div style={memberRoleStatic}>{workspaceRoleLabel(member.role)}</div>
             )}
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>{workspaceRoleHelp(member.role)}</div>
+            <div style={{ marginTop: 6, fontSize: 'var(--font-12)', color: 'var(--text-muted)', lineHeight: 1.4 }}>{workspaceRoleHelp(member.role)}</div>
             {!member.invited ? (
               <div style={{ marginTop: 8, display: 'grid', gap: 5 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Platform role</div>
+                <div style={{ fontSize: 'var(--font-11)', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Platform role</div>
                 {canEditPlatformRole ? (
                   <select
                     value={(member.platformRole || 'NONE') as 'NONE' | 'ADMIN' | 'SUPERADMIN'}
@@ -251,14 +251,14 @@ export function WorkspaceOverviewPanels() {
                   )}>{project.status}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                  <div style={{ ...labelText, fontSize: 13 }}>{clientName} · {project.tasks} open items</div>
-                  <Link href={`/projects/${project.id}`} style={{ textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700 }}>Open →</Link>
+                  <div style={{ ...labelText, fontSize: 'var(--font-13)' }}>{clientName} · {project.tasks} open items</div>
+                  <Link href={`/projects/${project.id}`} style={{ textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', fontWeight: 700 }}>Open →</Link>
                 </div>
               </div>
             )
           })}
-          {!projects.length ? <div style={{ padding: '18px', ...labelText, fontSize: 13 }}>No projects yet.</div> : null}
-          {projectsError ? <div style={{ padding: '18px', color: 'var(--danger-text)', fontSize: 13 }}>{projectsError instanceof Error ? projectsError.message : 'Failed to load projects'}</div> : null}
+          {!projects.length ? <div style={{ padding: '18px', ...labelText, fontSize: 'var(--font-13)' }}>No projects yet.</div> : null}
+          {projectsError ? <div style={{ padding: '18px', color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{projectsError instanceof Error ? projectsError.message : 'Failed to load projects'}</div> : null}
         </div>
       </div>
     </div>
@@ -424,9 +424,9 @@ export function WorkspaceMembersCard() {
   return (
     <div style={{ ...panel, minHeight: 0 }}>
       <div style={sectionLabelText}>Members</div>
-      {loading ? <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div> : null}
-      {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-      {info ? <div style={{ marginTop: 12, color: '#34d399', fontSize: 12 }}>{info}</div> : null}
+      {loading ? <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>Loading…</div> : null}
+      {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+      {info ? <div style={{ marginTop: 12, color: '#34d399', fontSize: 'var(--font-12)' }}>{info}</div> : null}
       {!!members.length || inviteDecision.visible ? (
         <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           {members.map((member) => {
@@ -501,7 +501,7 @@ export function WorkspaceMembersCard() {
             </div>
           ) : null}
         </div>
-      ) : !loading ? <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 14 }}>No members yet.</div> : null}
+      ) : !loading ? <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 'var(--font-14)' }}>No members yet.</div> : null}
     </div>
   )
 }
@@ -509,16 +509,16 @@ export function WorkspaceMembersCard() {
 const inputStyle: React.CSSProperties = { ...projectInputField }
 const primaryButton: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
 const memberAvatarButton: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 999 }
-const memberAddButton: React.CSSProperties = { ...projectInputField, width: 'auto', padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`, background: 'var(--form-bg)', cursor: 'pointer' }
-const memberAddInput: React.CSSProperties = { ...projectInputField, width: 180, padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberAddButton: React.CSSProperties = { ...projectInputField, width: 'auto', padding: '6px 10px', fontSize: 'var(--font-12)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`, background: 'var(--form-bg)', cursor: 'pointer' }
+const memberAddInput: React.CSSProperties = { ...projectInputField, width: 180, padding: '6px 10px', fontSize: 'var(--font-12)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
 const memberAddMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 200, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
-const memberAddOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '7px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
-const memberRoleInlineSelect: React.CSSProperties = { ...projectInputField, width: 'auto', padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberAddOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '7px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 'var(--font-12)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberRoleInlineSelect: React.CSSProperties = { ...projectInputField, width: 'auto', padding: '6px 10px', fontSize: 'var(--font-12)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
 const memberPopover: React.CSSProperties = { position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 20, minWidth: 240, maxWidth: 280, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', boxShadow: 'var(--panel-shadow)' }
-const memberRoleTrigger: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', lineHeight: 1.2 }
-const memberRoleStatic: React.CSSProperties = { marginTop: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2 }
+const memberRoleTrigger: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 'var(--font-12)', cursor: 'pointer', textDecoration: 'underline', lineHeight: 1.2 }
+const memberRoleStatic: React.CSSProperties = { marginTop: 0, fontSize: 'var(--font-12)', color: 'var(--text-secondary)', lineHeight: 1.2 }
 const memberRoleMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 140, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
-const memberRoleOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12 }
-const memberRemoveText: React.CSSProperties = { marginTop: 8, padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 12, cursor: 'pointer', textAlign: 'left', lineHeight: 1.2 }
-const memberActionButton: React.CSSProperties = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '6px 10px', fontWeight: 700, background: 'rgba(3, 7, 18, 0.96)', color: 'var(--text-primary)', fontSize: 12 }
+const memberRoleOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 'var(--font-12)' }
+const memberRemoveText: React.CSSProperties = { marginTop: 8, padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 'var(--font-12)', cursor: 'pointer', textAlign: 'left', lineHeight: 1.2 }
+const memberActionButton: React.CSSProperties = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '6px 10px', fontWeight: 700, background: 'rgba(3, 7, 18, 0.96)', color: 'var(--text-primary)', fontSize: 'var(--font-12)' }
 const memberStatusDot: React.CSSProperties = { position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: 999, border: '2px solid var(--panel-bg)' }

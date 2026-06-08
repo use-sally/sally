@@ -57,7 +57,7 @@ export default function ProjectsPage() {
   return (
     <AppShell title="Projects" subtitle="Project portfolio with simple health and workload view.">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, ...labelText, color: 'var(--text-secondary)', fontSize: 13 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, ...labelText, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>
           Client
           <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} style={{ border: '1px solid var(--form-border)', borderRadius: 999, padding: '6px 12px', fontWeight: 600, background: 'var(--form-bg)', minWidth: 200 }}>
             <option value="">All clients</option>
@@ -66,7 +66,7 @@ export default function ProjectsPage() {
             ))}
           </select>
         </label>
-        <button onClick={() => setShowArchived((prev) => !prev)} style={{ background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 12 }}>
+        <button onClick={() => setShowArchived((prev) => !prev)} style={{ background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 'var(--font-12)' }}>
           {showArchived ? 'Hide archived' : 'Show archived'}
         </button>
       </div>
@@ -84,11 +84,11 @@ export default function ProjectsPage() {
               }}
               placeholder={creatingProject ? 'Creating project…' : 'Add project title and press Enter'}
               disabled={creatingProject || !projectEditDecision.allowed}
-              style={{ width: '100%', border: '1px solid var(--form-border)', borderRadius: 16, padding: '14px 16px', background: 'var(--form-bg)', fontSize: 14 }}
+              style={{ width: '100%', border: '1px solid var(--form-border)', borderRadius: 16, padding: '14px 16px', background: 'var(--form-bg)', fontSize: 'var(--font-14)' }}
             />
           </div>
         ) : null}
-        <div style={{ display: 'grid', gridTemplateColumns: showArchived ? '2fr 1.4fr 1fr 1fr 140px' : '2fr 1.4fr 1fr 1fr 1fr', padding: '14px 18px', ...labelText, fontSize: 13, borderBottom: '1px solid var(--panel-border)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: showArchived ? '2fr 1.4fr 1fr 1fr 140px' : '2fr 1.4fr 1fr 1fr 1fr', padding: '14px 18px', ...labelText, fontSize: 'var(--font-13)', borderBottom: '1px solid var(--panel-border)' }}>
           <div>Name</div><div>Client</div><div>Lead</div><div>Tasks</div><div>{showArchived ? 'Restore' : 'Status'}</div>
         </div>
         {filteredProjects.map((project) => (

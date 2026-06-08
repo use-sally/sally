@@ -90,7 +90,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
     <div style={overlay}>
       <div style={modal}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 22, fontWeight: 750 }}>New project</div>
+          <div style={{ fontSize: 'var(--font-22)', fontWeight: 750 }}>New project</div>
           <button onClick={onClose} style={ghostBtn}>Close</button>
         </div>
         <div style={{ display: 'grid', gap: 12 }}>
@@ -103,20 +103,20 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
               {defaultProjectMembers.map((member) => (
                 <div key={member.accountId} style={{ display: 'grid', gap: 2 }}>
                   <div style={{ fontWeight: 600 }}>{member.name ?? '—'}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{member.email} · {member.note}</div>
+                  <div style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{member.email} · {member.note}</div>
                 </div>
               ))}
             </div>
           </div>
           <div style={{ display: 'grid', gap: 8 }}>
             <div style={{ fontWeight: 700, color: 'rgba(209, 250, 229, 0.72)' }}>Additional project members</div>
-            {loadingMembers ? <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading workspace members…</div> : null}
+            {loadingMembers ? <div style={{ fontSize: 'var(--font-13)', color: 'var(--text-muted)' }}>Loading workspace members…</div> : null}
             {!loadingMembers && !availableProjectMembers.length ? (
-              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No additional workspace members available.</div>
+              <div style={{ fontSize: 'var(--font-13)', color: 'var(--text-muted)' }}>No additional workspace members available.</div>
             ) : null}
             <div style={{ display: 'grid', gap: 6, maxHeight: 180, overflow: 'auto', border: '1px solid var(--panel-border)', borderRadius: 12, padding: 10 }}>
               {availableProjectMembers.map((member) => (
-                <label key={member.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-primary)' }}>
+                <label key={member.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 'var(--font-14)', color: 'var(--text-primary)' }}>
                   <input
                     type="checkbox"
                     checked={selectedMemberSet.has(member.accountId)}
@@ -129,8 +129,8 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         </div>
-        {selectedMemberIds.length ? <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-secondary)' }}>Members will be added as project members after creation.</div> : null}
-        {!selectedMemberIds.length ? <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>Select workspace members to add them to this project.</div> : null}
+        {selectedMemberIds.length ? <div style={{ marginTop: 8, fontSize: 'var(--font-13)', color: 'var(--text-secondary)' }}>Members will be added as project members after creation.</div> : null}
+        {!selectedMemberIds.length ? <div style={{ marginTop: 8, fontSize: 'var(--font-13)', color: 'var(--text-muted)' }}>Select workspace members to add them to this project.</div> : null}
         {error ? <div style={{ color: 'var(--danger-text)', marginTop: 12 }}>{error}</div> : null}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
           <button onClick={onClose} style={ghostBtn}>Cancel</button>

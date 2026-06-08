@@ -32,9 +32,9 @@ export default function SamlCallbackPage() {
   return (
     <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--page-bg)', color: 'var(--text-primary)', fontFamily: `'JetBrains Mono', monospace`, padding: 24 }}>
       <section style={{ width: 420, border: '1px solid var(--panel-border)', borderRadius: 20, background: 'var(--panel-bg)', padding: 24, display: 'grid', gap: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / sso</div>
-        <h1 style={{ margin: 0, fontSize: 20 }}>SAML sign-in</h1>
-        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>{message}</p>
+        <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / sso</div>
+        <h1 style={{ margin: 0, fontSize: 'var(--font-20)' }}>SAML sign-in</h1>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>{message}</p>
       </section>
     </main>
   )

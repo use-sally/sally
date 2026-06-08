@@ -392,15 +392,15 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
 
       <div ref={tableRef} style={{ display: 'grid', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
-          <div style={{ ...labelText, fontSize: 13 }}>Tasks{showArchived ? ' · Archived' : ''}</div>
+          <div style={{ ...labelText, fontSize: 'var(--font-13)' }}>Tasks{showArchived ? ' · Archived' : ''}</div>
           {!archived ? (
-            <button onClick={() => { setShowArchived((prev) => !prev); setExpandedTaskParam(null) }} style={{ background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 12 }}>
+            <button onClick={() => { setShowArchived((prev) => !prev); setExpandedTaskParam(null) }} style={{ background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 999, padding: '6px 12px', fontWeight: 700, fontSize: 'var(--font-12)' }}>
               {showArchived ? 'Hide archived' : 'Show archived'}
             </button>
           ) : <div />}
         </div>
 
-        {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{statusError}</div> : null}
+        {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{statusError}</div> : null}
 
         {showArchived ? sortedTasks.map((task) => (
           <div key={task.id} style={{ border: '1px solid var(--panel-border)', borderRadius: 16, overflow: 'hidden', background: 'var(--form-bg)' }}>
@@ -507,10 +507,10 @@ function TaskStatusGroup({ status, count, children, reorderable, pinned, sortabl
               <option value="REVIEW">Review</option>
               <option value="DONE">Done</option>
             </select>
-          ) : status.type ? <span style={{ ...labelText, fontSize: 11 }}>{String(status.type).toLowerCase().replace(/_/g, ' ')}</span> : null}
-          {pinned ? <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Pinned</span> : null}
+          ) : status.type ? <span style={{ ...labelText, fontSize: 'var(--font-11)' }}>{String(status.type).toLowerCase().replace(/_/g, ' ')}</span> : null}
+          {pinned ? <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Pinned</span> : null}
         </div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 13, whiteSpace: 'nowrap' }}>{taskLabel}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)', whiteSpace: 'nowrap' }}>{taskLabel}</div>
       </div>
       {editing ? <StatusEditor draft={statusEditDraft} setDraft={setStatusEditDraft} saving={statusSaving} /> : null}
       {!collapsed ? children : null}
@@ -529,7 +529,7 @@ function AddTaskInStatus({ status, value, onChange, onAdd, creating }: { status:
         disabled={creating}
         style={{ ...inputStyle, padding: '10px 12px' }}
       />
-      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{creating ? 'Adding…' : 'Press Enter to create'}</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{creating ? 'Adding…' : 'Press Enter to create'}</div>
     </div>
   )
 }
@@ -551,7 +551,7 @@ function StatusEditor({ draft, setDraft, saving }: { draft: StatusEditDraft; set
           </button>
         ))}
       </div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{saving ? 'Saving…' : 'Changes save when focus leaves this editor.'}</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{saving ? 'Saving…' : 'Changes save when focus leaves this editor.'}</div>
     </div>
   )
 }
@@ -561,7 +561,7 @@ function statusGroupTextStyle(color?: string | null): React.CSSProperties {
   return {
     color: pair?.darkText ?? 'var(--text-primary)',
     fontWeight: 800,
-    fontSize: 14,
+    fontSize: 'var(--font-14)',
     lineHeight: 1.2,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -584,9 +584,9 @@ function statusGroupCardStyle(color?: string | null): React.CSSProperties {
 const addTaskInStatusStyle: React.CSSProperties = { display: 'grid', gap: 6, paddingTop: 2 }
 const statusTitleButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }
 const statusNameInputStyle: React.CSSProperties = { background: 'transparent', border: 'none', borderBottom: '1px solid currentColor', borderRadius: 0, padding: '2px 0', minWidth: 0, width: '100%', outline: 'none' }
-const statusTypeSelectStyle: React.CSSProperties = { ...inputStyle, width: 'auto', minWidth: 118, padding: '7px 28px 7px 10px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', borderRadius: 999 }
+const statusTypeSelectStyle: React.CSSProperties = { ...inputStyle, width: 'auto', minWidth: 118, padding: '7px 28px 7px 10px', fontSize: 'var(--font-11)', fontWeight: 800, textTransform: 'uppercase', borderRadius: 999 }
 const statusEditorStyle: React.CSSProperties = { display: 'grid', gap: 8, padding: 10, border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }
-const statusColorOptionButton: React.CSSProperties = { background: 'transparent', border: '1px solid var(--panel-border)', padding: '5px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 12, fontWeight: 700 }
+const statusColorOptionButton: React.CSSProperties = { background: 'transparent', border: '1px solid var(--panel-border)', padding: '5px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 'var(--font-12)', fontWeight: 700 }
 
 const statusGroupCollapseButton: React.CSSProperties = {
   width: 26,

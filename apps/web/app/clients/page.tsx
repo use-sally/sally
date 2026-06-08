@@ -80,4 +80,4 @@ export default function ClientsPage() {
 const field: React.CSSProperties = { display: 'grid', gap: 6 }
 const input: React.CSSProperties = { ...projectInputField, fontWeight: 500 }
 const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
-const panelHeader: React.CSSProperties = { padding: '16px 18px', fontWeight: 750, fontSize: 14, borderBottom: '1px solid rgba(16, 185, 129, 0.10)', color: 'var(--text-muted)' }
+const panelHeader: React.CSSProperties = { padding: '16px 18px', fontWeight: 750, fontSize: 'var(--font-14)', borderBottom: '1px solid rgba(16, 185, 129, 0.10)', color: 'var(--text-muted)' }

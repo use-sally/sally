@@ -187,13 +187,13 @@ export function TaskPeopleField({
         {!compact ? (
           <div style={{ minWidth: 0, textAlign: 'left' }}>
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }}>{ownerLabel}</div>
-            <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ marginTop: 2, fontSize: 'var(--font-12)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {collaboratorLabels.length ? `${collaboratorLabels.join(', ')}` : 'Click to add more people'}
             </div>
           </div>
         ) : null}
       </div>
-      {!compact ? <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>{open ? '−' : '+'}</span> : null}
+      {!compact ? <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 700 }}>{open ? '−' : '+'}</span> : null}
     </button>
   )
 
@@ -235,10 +235,10 @@ export function TaskPeopleField({
                           <TaskPeopleAvatarStack assignee={option.value} assigneeAvatarUrl={member?.avatarUrl ?? null} collaborators={[]} size={24} maxVisible={1} />
                           <div style={{ minWidth: 0, textAlign: 'left' }}>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }}>{option.label}</div>
-                            <div style={{ marginTop: 2, fontSize: 11, color: option.selected ? 'rgba(5, 46, 22, 0.76)' : 'var(--text-muted)' }}>{option.secondaryLabel}</div>
+                            <div style={{ marginTop: 2, fontSize: 'var(--font-11)', color: option.selected ? 'rgba(5, 46, 22, 0.76)' : 'var(--text-muted)' }}>{option.secondaryLabel}</div>
                           </div>
                         </div>
-                        <span style={{ color: option.selected ? '#052e16' : 'var(--text-muted)', fontSize: 11, fontWeight: 700 }}>
+                        <span style={{ color: option.selected ? '#052e16' : 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 700 }}>
                           {option.role === 'owner' ? 'FIRST' : option.selected ? 'ON' : 'ADD'}
                         </span>
                       </button>
@@ -263,7 +263,7 @@ export function TaskPeopleField({
         </div>
       ) : null}
 
-      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{error}</div> : null}
+      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{error}</div> : null}
     </div>
   )
 }
@@ -304,7 +304,7 @@ const compactBadgeButton: React.CSSProperties = {
   display: 'grid',
   placeItems: 'center',
   cursor: 'pointer',
-  fontSize: 12,
+  fontSize: 'var(--font-12)',
   lineHeight: 1,
   padding: 0,
 }
@@ -373,7 +373,7 @@ const promoteButton: React.CSSProperties = {
   background: 'transparent',
   color: 'inherit',
   padding: '4px 8px',
-  fontSize: 11,
+  fontSize: 'var(--font-11)',
   fontWeight: 700,
   cursor: 'pointer',
 }
@@ -385,7 +385,7 @@ const inviteButton: React.CSSProperties = {
   background: 'var(--form-bg)',
   color: 'var(--form-text)',
   padding: '6px 10px',
-  fontSize: 11,
+  fontSize: 'var(--font-11)',
   fontWeight: 700,
   cursor: 'pointer',
 }
@@ -397,7 +397,7 @@ const cancelButton: React.CSSProperties = {
   background: 'transparent',
   color: 'var(--text-secondary)',
   padding: '6px 10px',
-  fontSize: 11,
+  fontSize: 'var(--font-11)',
   fontWeight: 700,
   cursor: 'pointer',
 }
@@ -414,6 +414,6 @@ const personFlag: React.CSSProperties = {
   padding: '4px 10px',
   background: 'var(--form-bg)',
   color: 'var(--form-text)',
-  fontSize: 11,
+  fontSize: 'var(--font-11)',
   fontWeight: 700,
 }

@@ -136,7 +136,7 @@ export function CollaboratorPicker({
           {selectedLabels.map((label) => <span key={label} style={selectedFlag}>{label}</span>)}
         </div>
       ) : (
-        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Pick one or more project members. The assignee is excluded automatically.</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Pick one or more project members. The assignee is excluded automatically.</div>
       )}
 
       {open ? (
@@ -155,17 +155,17 @@ export function CollaboratorPicker({
                   <AssigneeAvatar name={option.value} avatarUrl={member?.avatarUrl} size={24} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }}>{option.label}</div>
-                    <div style={{ marginTop: 2, fontSize: 11, color: option.selected ? 'rgba(5, 46, 22, 0.75)' : 'var(--text-muted)' }}>{option.secondaryLabel}</div>
+                    <div style={{ marginTop: 2, fontSize: 'var(--font-11)', color: option.selected ? 'rgba(5, 46, 22, 0.75)' : 'var(--text-muted)' }}>{option.secondaryLabel}</div>
                   </div>
                 </div>
-                <span style={{ color: option.selected ? '#052e16' : 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>{option.selected ? 'ON' : 'ADD'}</span>
+                <span style={{ color: option.selected ? '#052e16' : 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 700 }}>{option.selected ? 'ON' : 'ADD'}</span>
               </button>
             )
-          }) : <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No project members available.</div>}
+          }) : <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>No project members available.</div>}
         </div>
       ) : null}
 
-      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{error}</div> : null}
+      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{error}</div> : null}
     </div>
   )
 }
@@ -212,7 +212,7 @@ const optionButton: React.CSSProperties = {
   color: 'var(--text-primary)',
   cursor: 'pointer',
   textAlign: 'left',
-  fontSize: 12,
+  fontSize: 'var(--font-12)',
 }
 
 const optionButtonSelected: React.CSSProperties = {
@@ -227,7 +227,7 @@ const selectedFlag: React.CSSProperties = {
   padding: '4px 10px',
   background: 'var(--form-bg)',
   color: 'var(--form-text)',
-  fontSize: 11,
+  fontSize: 'var(--font-11)',
   fontWeight: 700,
   fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`,
 }

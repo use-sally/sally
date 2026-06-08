@@ -260,14 +260,32 @@ function varsFor(mode: ThemeMode) {
     --tag-text: ${palette.tagText};
     --tag-border: ${palette.tagBorder};
     --task-row-active-bg: ${palette.taskRowActiveBg};
-    --font-2xs: 11px;
-    --font-xs: 12px;
-    --font-sm: 13px;
-    --font-md: 14px;
-    --font-lg: 16px;
-    --font-xl: 20px;
-    --font-2xl: 24px;
-    --font-3xl: 30px;
+    --heading-text: ${palette.taskTitle};
+    --font-10: 10px;
+    --font-11: 11px;
+    --font-12: 12px;
+    --font-13: 13px;
+    --font-14: 14px;
+    --font-15: 15px;
+    --font-16: 16px;
+    --font-18: 18px;
+    --font-20: 20px;
+    --font-22: 22px;
+    --font-24: 24px;
+    --font-26: 26px;
+    --font-28: 28px;
+    --font-30: 30px;
+    --font-32: 32px;
+    --font-34: 34px;
+    --font-42: 42px;
+    --font-2xs: var(--font-11);
+    --font-xs: var(--font-12);
+    --font-sm: var(--font-13);
+    --font-md: var(--font-14);
+    --font-lg: var(--font-16);
+    --font-xl: var(--font-20);
+    --font-2xl: var(--font-24);
+    --font-3xl: var(--font-30);
   `
 }
 
@@ -284,6 +302,10 @@ html, body {
   background: var(--app-bg);
   color: var(--text-primary);
   font-size: var(--font-md);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--heading-text);
 }
 
 input, textarea, select, button {

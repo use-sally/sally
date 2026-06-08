@@ -229,10 +229,10 @@ export default function ProfilePage() {
               <div style={sectionLabelText}>Profile</div>
               <InfoFlag text={profileInfoText} />
             </div>
-            {loading ? <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div> : null}
+            {loading ? <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-14)' }}>Loading…</div> : null}
           </div>
-          {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-          {info ? <div style={{ color: 'var(--text-primary)', fontSize: 13 }}>{info}</div> : null}
+          {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+          {info ? <div style={{ color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>{info}</div> : null}
           <div style={{ display: 'grid', gap: 12, maxWidth: 560 }}>
             <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
               <button
@@ -248,7 +248,7 @@ export default function ProfilePage() {
             </div>
             <label style={field}>
               <input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => void handleNameBlur()} placeholder="Name" aria-label="Name" style={inputStyle} />
-              <div style={{ ...labelText, fontSize: 12 }}>{savingName ? 'Saving name…' : showNameSaved ? 'Saved.' : ''}</div>
+              <div style={{ ...labelText, fontSize: 'var(--font-12)' }}>{savingName ? 'Saving name…' : showNameSaved ? 'Saved.' : ''}</div>
             </label>
             <label style={field}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -288,7 +288,7 @@ export default function ProfilePage() {
                 ) : null}
               </div>
             </label>
-            {profile?.pendingEmail ? <div style={{ ...labelText, fontSize: 13 }}>Pending email change: {profile.pendingEmail}</div> : null}
+            {profile?.pendingEmail ? <div style={{ ...labelText, fontSize: 'var(--font-13)' }}>Pending email change: {profile.pendingEmail}</div> : null}
           </div>
         </div>
 
@@ -317,7 +317,7 @@ export default function ProfilePage() {
                   )}
                 </div>
               ))}
-              {!integrations.length ? <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No storage integrations available.</div> : null}
+              {!integrations.length ? <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>No storage integrations available.</div> : null}
             </div>
           </div>
         ) : (
@@ -336,8 +336,8 @@ export default function ProfilePage() {
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{preference.eventType === 'comment.mentioned' ? 'Comment mentions' : 'Task assignments'}</div>
                   <div style={{ ...labelText, marginTop: 4 }}>{preference.eventType === 'comment.mentioned' ? 'Notify me when someone mentions me in a task comment.' : 'Notify me when I am assigned to a task.'}</div>
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={preference.inAppEnabled} onChange={(event) => void handlePreferenceToggle(preference.eventType, 'inAppEnabled', event.target.checked)} /> In-app</label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={preference.emailEnabled} onChange={(event) => void handlePreferenceToggle(preference.eventType, 'emailEnabled', event.target.checked)} /> Email</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}><input type="checkbox" checked={preference.inAppEnabled} onChange={(event) => void handlePreferenceToggle(preference.eventType, 'inAppEnabled', event.target.checked)} /> In-app</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}><input type="checkbox" checked={preference.emailEnabled} onChange={(event) => void handlePreferenceToggle(preference.eventType, 'emailEnabled', event.target.checked)} /> Email</label>
               </div>
             ))}
           </div>

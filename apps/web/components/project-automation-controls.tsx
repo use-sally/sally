@@ -242,7 +242,7 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
         <button type="button" disabled={!canManage || starting || saving} onClick={() => void handleWorkflowControlAction()} style={automationIslandControlStyle(workflowControl.tone)}>{workflowControl.label}</button>
       </div>
       {workflowControl.helper ? <div style={automationStatusHelperStyle(workflowControl.tone, compact)}>{workflowControl.helper}</div> : null}
-      {errorMessage ? <div style={{ color: 'var(--danger-text)', fontSize: 12, textAlign: compact ? 'right' : 'left' }}>{errorMessage}</div> : null}
+      {errorMessage ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)', textAlign: compact ? 'right' : 'left' }}>{errorMessage}</div> : null}
       {!canManage ? <div style={{ justifySelf: compact ? 'end' : 'start' }}><span style={pill('var(--form-bg)', 'var(--text-secondary)')}>read-only</span></div> : null}
     </div>
   )
@@ -266,15 +266,15 @@ function AgentConnectorModal({ modal, onClose }: { modal: AgentConnectorModalSta
       <div role="dialog" aria-modal="true" aria-labelledby="agent-connector-title" style={modalPanel}>
         <button type="button" aria-label="Close agent connector modal" onClick={onClose} style={modalCloseButton}>×</button>
         <div style={{ display: 'grid', gap: 10 }}>
-          <div id="agent-connector-title" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>{getAgentRuntimeOption(modal.runtime).label} connection instructions</div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+          <div id="agent-connector-title" style={{ fontWeight: 800, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>{getAgentRuntimeOption(modal.runtime).label} connection instructions</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>
             {modal.copied ? 'Background connector command copied to clipboard.' : `Copy this connector command and run it where ${getAgentRuntimeOption(modal.runtime).label} is installed.`}
           </div>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Pairing code: <code>{modal.pairingCode}</code></div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Expires {formatTime(modal.expiresAt)}. The default command starts a detached runner and writes pid/log files under <code>~/.sally</code>.</div>
-          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 13 }}>Background runner</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Expires {formatTime(modal.expiresAt)}. The default command starts a detached runner and writes pid/log files under <code>~/.sally</code>.</div>
+          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>Background runner</div>
           <pre style={modalCommandBlock}><code>{modal.pairingCommand}</code></pre>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Debug/foreground mode:</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Debug/foreground mode:</div>
           <pre style={modalCommandBlock}><code>{modal.foregroundCommand}</code></pre>
         </div>
       </div>
@@ -288,14 +288,14 @@ function AgentDisconnectModal({ hasActiveWorkflowWork, saving, onCancel, onConfi
       <div role="dialog" aria-modal="true" aria-labelledby="agent-disconnect-title" style={modalPanel}>
         <button type="button" aria-label="Close disconnect modal" onClick={onCancel} style={modalCloseButton}>×</button>
         <div style={{ display: 'grid', gap: 12 }}>
-          <div id="agent-disconnect-title" style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 18 }}>Disconnect agent and clear queue?</div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Disconnecting the agent removes this runtime from Sally and clears workflow work so no stale automation continues against the project.</div>
-          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: 13, display: 'grid', gap: 6 }}>
+          <div id="agent-disconnect-title" style={{ fontWeight: 800, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>Disconnect agent and clear queue?</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Disconnecting the agent removes this runtime from Sally and clears workflow work so no stale automation continues against the project.</div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', display: 'grid', gap: 6 }}>
             <li>Queued workflow jobs will be cancelled.</li>
             <li>Running workflow work will be marked cancelled.</li>
             <li>The agent can be connected again later with a new pairing code.</li>
           </ul>
-          {hasActiveWorkflowWork ? <div style={{ border: '1px solid rgba(239,68,68,0.28)', borderRadius: 12, padding: 10, background: 'rgba(239,68,68,0.08)', color: 'var(--danger-text)', fontSize: 13 }}>Active workflow work is present. Disconnecting will stop Sally from continuing the queued/running workflow.</div> : <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No queued or running workflow work is currently visible.</div>}
+          {hasActiveWorkflowWork ? <div style={{ border: '1px solid rgba(239,68,68,0.28)', borderRadius: 12, padding: 10, background: 'rgba(239,68,68,0.08)', color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>Active workflow work is present. Disconnecting will stop Sally from continuing the queued/running workflow.</div> : <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>No queued or running workflow work is currently visible.</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button type="button" onClick={onCancel} disabled={saving} style={secondaryModalButton}>Cancel</button>
             <button type="button" onClick={onConfirm} disabled={saving} style={dangerModalButton}>{saving ? 'Disconnecting…' : 'Disconnect and clear queue'}</button>
@@ -340,7 +340,7 @@ function automationStatusHelperStyle(tone: WorkflowControlTone, compact: boolean
     padding: tone === 'neutral' ? '0 2px' : '8px 10px',
     background: tone === 'neutral' ? 'transparent' : toneStyle.background,
     color: tone === 'neutral' ? 'var(--text-muted)' : toneStyle.color,
-    fontSize: 12,
+    fontSize: 'var(--font-12)',
     lineHeight: 1.35,
     textAlign: compact ? 'right' : 'left',
   }
@@ -353,14 +353,14 @@ const runtimePickerStyle: CSSProperties = {
   border: '1px solid var(--form-border)',
   background: 'var(--form-bg)',
   color: 'var(--text-secondary)',
-  fontSize: 14,
+  fontSize: 'var(--font-14)',
   fontWeight: 400,
 }
 
 const toastStyle: CSSProperties = { position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, border: '1px solid rgba(34,197,94,0.35)', borderRadius: 999, padding: '10px 14px', background: '#dcfce7', color: '#166534', fontWeight: 800, boxShadow: '0 12px 30px rgba(15,23,42,0.18)' }
 const modalBackdrop: CSSProperties = { position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: 18, background: 'rgba(15, 23, 42, 0.52)' }
 const modalPanel: CSSProperties = { position: 'relative', width: 'min(720px, calc(100vw - 36px))', maxHeight: 'min(720px, calc(100vh - 36px))', overflowY: 'auto', border: '1px solid var(--panel-border)', borderRadius: 18, padding: '22px 48px 22px 22px', background: 'var(--panel-bg)', color: 'var(--text-primary)', boxShadow: '0 28px 80px rgba(15,23,42,0.34)' }
-const modalCloseButton: CSSProperties = { position: 'absolute', top: 12, right: 14, border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 24, lineHeight: 1 }
-const modalCommandBlock: CSSProperties = { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', border: '1px solid var(--panel-border)', borderRadius: 12, padding: 12, background: 'rgba(15,23,42,0.05)', color: 'var(--text-primary)', fontSize: 12 }
+const modalCloseButton: CSSProperties = { position: 'absolute', top: 12, right: 14, border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 'var(--font-24)', lineHeight: 1 }
+const modalCommandBlock: CSSProperties = { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', border: '1px solid var(--panel-border)', borderRadius: 12, padding: 12, background: 'rgba(15,23,42,0.05)', color: 'var(--text-primary)', fontSize: 'var(--font-12)' }
 const secondaryModalButton: CSSProperties = { border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 14px', background: 'var(--form-bg)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }
 const dangerModalButton: CSSProperties = { border: '1px solid rgba(239,68,68,0.42)', borderRadius: 12, padding: '10px 14px', background: 'rgba(239,68,68,0.12)', color: 'var(--danger-text)', cursor: 'pointer', fontWeight: 700 }

@@ -114,7 +114,7 @@ export function PersonalApiKeysPanel() {
 
         <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 14, background: 'var(--form-bg)', border: '1px solid var(--panel-border)' }}>
           <div style={metaLabelText}>Recommended flow</div>
-          <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
+          <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>
             <li>Create a hosted MCP key.</li>
             <li>After creation, copy the generated MCP config that already contains the new Bearer token.</li>
             <li>Paste it into your MCP client.</li>
@@ -301,14 +301,14 @@ function KeySection({
           <div style={sectionLabelText}>{title}</div>
           {info ? <InfoFlag text={info} /> : null}
         </div>
-        {description ? <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{description}</div> : null}
+        {description ? <div style={{ ...labelText, fontSize: 'var(--font-13)', fontWeight: 500 }}>{description}</div> : null}
       </div>
-      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
+      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
       {secret ? (
         <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 14, background: 'var(--panel-bg)', border: '1px solid var(--panel-border)' }}>
           <div style={metaLabelText}>{secretTitle}</div>
           <button type="button" onClick={onCopy} style={{ ...copySurface, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }} title="Click to copy">
-            <code style={{ wordBreak: 'break-all', fontSize: 13 }}>{secret}</code>
+            <code style={{ wordBreak: 'break-all', fontSize: 'var(--font-13)' }}>{secret}</code>
           </button>
           <div style={{ ...labelText, color: copied ? 'var(--success-text)' : 'var(--text-muted)' }}>
             {copied ? 'Copied' : 'Click the key to copy it'}
@@ -342,7 +342,7 @@ function KeySection({
           <div key={key.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '12px', borderBottom: '1px solid var(--panel-border)' }}>
             <div style={{ display: 'grid', gap: 4 }}>
               <div style={{ fontWeight: 600, color: 'var(--task-title)' }}>{key.label}</div>
-              <div style={{ ...labelText, fontSize: 13, fontWeight: 500 }}>{renderMeta(key)}</div>
+              <div style={{ ...labelText, fontSize: 'var(--font-13)', fontWeight: 500 }}>{renderMeta(key)}</div>
             </div>
             <button
               onClick={() => void (async () => {
@@ -364,7 +364,7 @@ function KeySection({
             </button>
           </div>
         ))}
-        {!items.length && !loading ? <div style={{ ...labelText, fontSize: 14, fontWeight: 500 }}>{emptyText}</div> : null}
+        {!items.length && !loading ? <div style={{ ...labelText, fontSize: 'var(--font-14)', fontWeight: 500 }}>{emptyText}</div> : null}
       </div>
     </div>
   )
@@ -412,7 +412,7 @@ const scopePill: CSSProperties = {
   border: '1px solid var(--panel-border)',
   background: 'var(--form-bg)',
   color: 'var(--text-secondary)',
-  fontSize: 12,
+  fontSize: 'var(--font-12)',
   fontWeight: 700,
 }
 
@@ -422,6 +422,6 @@ const copySurface: CSSProperties = {
   border: '1px solid var(--panel-border)',
   background: 'var(--form-bg)',
   color: 'var(--text-primary)',
-  fontSize: 13,
+  fontSize: 'var(--font-13)',
   wordBreak: 'break-all',
 }

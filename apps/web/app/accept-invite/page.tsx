@@ -46,7 +46,7 @@ const inlineLinkButton: React.CSSProperties = {
   color: '#fde68a',
   textDecoration: 'underline',
   cursor: 'pointer',
-  fontSize: 13,
+  fontSize: 'var(--font-13)',
   fontFamily: monoFont,
 }
 
@@ -138,35 +138,35 @@ function AcceptInviteForm() {
   return (
     <form onSubmit={handleSubmit} style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
+        <div style={{ fontSize: 'var(--font-28)', fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / invite</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>Accept your invite</div>
-      <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / invite</div>
+      <div style={{ fontSize: 'var(--font-20)', fontWeight: 700, marginTop: 10, color: 'var(--heading-text)' }}>Accept your invite</div>
+      <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>
         {inviteInfo?.accountActivated
           ? 'This email already has an account. Enter your existing password to join this workspace.'
           : 'Set your name and password to join the workspace.'}
       </div>
-      {!(token || tokenFromParams) ? <div style={{ marginTop: 18, color: 'var(--danger-text)', fontSize: 13 }}>Invite token is missing from this link.</div> : null}
+      {!(token || tokenFromParams) ? <div style={{ marginTop: 18, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>Invite token is missing from this link.</div> : null}
       {!inviteInfo?.accountActivated ? (
         <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Name</span>
+          <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Name</span>
           <input value={name} onChange={(event) => setName(event.target.value)} type="text" placeholder="Optional" style={inputStyle} />
         </label>
       ) : null}
       <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Password</span>
+        <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Password</span>
         <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
       </label>
-      {!inviteInfo?.accountActivated ? <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 10 }}>Use at least 12 characters with uppercase, lowercase, number, and symbol.</div> : null}
+      {!inviteInfo?.accountActivated ? <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', marginTop: 10 }}>Use at least 12 characters with uppercase, lowercase, number, and symbol.</div> : null}
       {!inviteInfo?.accountActivated ? (
         <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Confirm password</span>
+          <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Confirm password</span>
           <input value={confirm} onChange={(event) => setConfirm(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
         </label>
       ) : null}
       {error ? (
-        <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>
+        <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>
           <div>{error}</div>
           {inviteInfo?.accountActivated && error.includes('reset it first') ? (
             <button type="button" onClick={() => void handlePasswordReset()} disabled={resetting} style={inlineLinkButton}>
@@ -175,7 +175,7 @@ function AcceptInviteForm() {
           ) : null}
         </div>
       ) : null}
-      {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
+      {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 'var(--font-13)' }}>{info}</div> : null}
       <button type="submit" disabled={loading} style={primaryButton}>
         {loading ? 'Accepting…' : inviteInfo?.accountActivated ? 'Join workspace' : 'Accept invite'}
       </button>
@@ -186,7 +186,7 @@ function AcceptInviteForm() {
 export default function AcceptInvitePage() {
   return (
     <div style={pageStyle}>
-      <Suspense fallback={<div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Loading…</div>}>
+      <Suspense fallback={<div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-14)' }}>Loading…</div>}>
         <AcceptInviteForm />
       </Suspense>
     </div>

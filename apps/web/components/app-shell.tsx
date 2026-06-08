@@ -269,7 +269,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
         placeItems: 'center',
         textDecoration: 'none',
         fontWeight: 750,
-        fontSize: 13,
+        fontSize: 'var(--font-13)',
         flex: '0 0 auto',
       }}
     >
@@ -288,7 +288,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
             borderRadius: 14,
             color: isAdminArea ? '#052e16' : 'var(--text-primary)',
             fontWeight: 700,
-            fontSize: 13,
+            fontSize: 'var(--font-13)',
             textDecoration: 'none',
             background: isAdminArea ? '#fcd34d' : 'var(--panel-bg)',
             border: isAdminArea ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--panel-border)',
@@ -331,11 +331,11 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           }}
         >
           <div>
-            <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
+            <div style={{ fontSize: 'var(--font-24)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
               sally<span style={{ color: '#34d399', animation: 'sally-cursor-blink 1s steps(1, end) infinite' }}>_</span>
             </div>
-            <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Minimal control surface for projects, tasks, clients, and time.</div>
-            <div title={appBuildTime || undefined} style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 11, fontWeight: 700 }}>
+            <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Minimal control surface for projects, tasks, clients, and time.</div>
+            <div title={appBuildTime || undefined} style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 700 }}>
               v{appVersionLabel()}
             </div>
           </div>
@@ -343,7 +343,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
             {!isAdminArea && workspaceOptions.length ? (
               <div ref={workspaceMenuRef} style={{ display: 'grid', gap: 6, position: 'relative' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Workspace</div>
+                <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Workspace</div>
                 <button
                   type="button"
                   onClick={() => setWorkspaceMenuOpen((value) => !value)}
@@ -391,19 +391,19 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                               cursor: selected ? 'default' : 'pointer',
                               textAlign: 'left',
                               fontFamily: monoFont,
-                              fontSize: 12,
+                              fontSize: 'var(--font-12)',
                               fontWeight: 700,
                             }}
                           >
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workspace.name}</span>
-                            <span style={{ color: selected ? '#052e16' : 'var(--text-muted)', fontSize: 11 }}>{workspaceRoleLabel(workspace.role)}</span>
+                            <span style={{ color: selected ? '#052e16' : 'var(--text-muted)', fontSize: 'var(--font-11)' }}>{workspaceRoleLabel(workspace.role)}</span>
                           </button>
                         )
                       })}
                     </div>
                     {isPlatformAdminSession ? (
                       <div style={{ display: 'grid', gap: 8, paddingTop: 8, borderTop: '1px solid var(--panel-border)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Create workspace</div>
+                        <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Create workspace</div>
                         <input
                           value={newWorkspaceName}
                           onChange={(event) => setNewWorkspaceName(event.target.value)}
@@ -414,14 +414,14 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                             }
                           }}
                           placeholder="New workspace"
-                          style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontFamily: monoFont, fontSize: 12 }}
+                          style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontFamily: monoFont, fontSize: 'var(--font-12)' }}
                         />
-                        {workspaceError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{workspaceError}</div> : null}
+                        {workspaceError ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{workspaceError}</div> : null}
                         <button
                           type="button"
                           onClick={() => void handleCreateWorkspace()}
                           disabled={creatingWorkspace}
-                          style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer', fontFamily: monoFont, fontSize: 12 }}
+                          style={{ borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer', fontFamily: monoFont, fontSize: 'var(--font-12)' }}
                         >
                           {creatingWorkspace ? 'Creating…' : 'Create workspace'}
                         </button>
@@ -429,17 +429,17 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                     ) : null}
                   </div>
                 ) : null}
-                {activeWorkspace ? <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{workspaceRoleLabel(activeWorkspace.role)}</span> : null}
+                {activeWorkspace ? <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, color: 'var(--text-muted)' }}>{workspaceRoleLabel(activeWorkspace.role)}</span> : null}
               </div>
             ) : null}
 
             <nav style={{ display: 'grid', gap: 8 }}>
               {isAdminArea ? (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Admin</div>
+                  <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Admin</div>
                   <Link
                     href="/projects"
-                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: 'var(--text-secondary)', fontWeight: 700, fontSize: 13, lineHeight: 1.2, textDecoration: 'none', background: 'transparent', border: '1px solid var(--panel-border)' }}
+                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: 'var(--text-secondary)', fontWeight: 700, fontSize: 'var(--font-13)', lineHeight: 1.2, textDecoration: 'none', background: 'transparent', border: '1px solid var(--panel-border)' }}
                   >
                     Back to app
                   </Link>
@@ -455,7 +455,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                           borderRadius: 12,
                           color: active ? '#052e16' : 'var(--text-secondary)',
                           fontWeight: 700,
-                          fontSize: 13,
+                          fontSize: 'var(--font-13)',
                           lineHeight: 1.2,
                           textDecoration: 'none',
                           background: active ? '#fcd34d' : 'transparent',
@@ -481,7 +481,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                           borderRadius: 12,
                           color: active ? '#052e16' : 'var(--text-secondary)',
                           fontWeight: 700,
-                          fontSize: 13,
+                          fontSize: 'var(--font-13)',
                           lineHeight: 1.2,
                           textDecoration: 'none',
                           background: active ? '#fcd34d' : 'transparent',
@@ -506,7 +506,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   borderRadius: 12,
                   color: pathname.startsWith('/projects') ? '#052e16' : 'var(--text-secondary)',
                   fontWeight: 700,
-                  fontSize: 13,
+                  fontSize: 'var(--font-13)',
                   lineHeight: 1.2,
                   textDecoration: 'none',
                   background: pathname.startsWith('/projects') ? '#fcd34d' : 'transparent',
@@ -530,7 +530,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                         borderRadius: 10,
                         color: projectActive ? 'var(--text-primary)' : 'var(--text-muted)',
                         fontWeight: projectActive ? 700 : 600,
-                        fontSize: 12,
+                        fontSize: 'var(--font-12)',
                         lineHeight: 1.35,
                         textDecoration: 'none',
                         background: projectActive ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
@@ -559,7 +559,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   gap: 8,
                   color: '#f472b6',
                   fontWeight: 400,
-                  fontSize: 13,
+                  fontSize: 'var(--font-13)',
                   textDecoration: 'none',
                   cursor: 'pointer',
                 }}
@@ -603,7 +603,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                     alignItems: 'center',
                     color: '#6ee7b7',
                     fontWeight: 400,
-                    fontSize: 13,
+                    fontSize: 'var(--font-13)',
                     textDecoration: 'none',
                     cursor: 'pointer',
                   }}
@@ -618,7 +618,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                     alignItems: 'center',
                     color: '#fca5a5',
                     fontWeight: 400,
-                    fontSize: 13,
+                    fontSize: 'var(--font-13)',
                     background: 'transparent',
                     border: 'none',
                     padding: 0,
@@ -637,9 +637,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
         <section style={{ padding: '28px 32px 40px', minWidth: 0, maxWidth: '100%', overflowX: 'hidden' }}>
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, gap: 16 }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#fcd34d', marginBottom: 8 }}>runtime / workspace</div>
-              <div style={{ fontSize: 30, fontWeight: 750, letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>{title}</div>
-              <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12, fontFamily: monoFont, letterSpacing: '0.04em' }}>{subtitle}</div>
+              <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#fcd34d', marginBottom: 8 }}>runtime / workspace</div>
+              <div style={{ fontSize: 'var(--font-30)', fontWeight: 750, letterSpacing: '-0.03em', color: 'var(--heading-text)' }}>{title}</div>
+              <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontFamily: monoFont, letterSpacing: '0.04em' }}>{subtitle}</div>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button
@@ -657,7 +657,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   color: 'var(--form-text)',
                   cursor: 'pointer',
                   fontWeight: 400,
-                  fontSize: 12,
+                  fontSize: 'var(--font-12)',
                 }}
               >
                 <span style={{ color: themeMode === 'dark' ? 'var(--text-primary)' : 'var(--text-muted)' }}>dark</span>
@@ -683,22 +683,22 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                     color: 'var(--form-text)',
                     cursor: 'pointer',
                     fontWeight: 400,
-                    fontSize: 12,
+                    fontSize: 'var(--font-12)',
                   }}
                 >
                   <span>🔔</span>
                   <span>Notifications</span>
-                  <span style={{ fontSize: 12, fontWeight: 400, color: unreadCount ? '#fcd34d' : 'var(--text-muted)' }}>{unreadCount || '0'}</span>
+                  <span style={{ fontSize: 'var(--font-12)', fontWeight: 400, color: unreadCount ? '#fcd34d' : 'var(--text-muted)' }}>{unreadCount || '0'}</span>
                 </button>
                 {notificationsOpen ? (
                   <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 360, maxWidth: 'min(420px, calc(100vw - 48px))', zIndex: 30, border: '1px solid var(--panel-border)', borderRadius: 14, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderBottom: '1px solid var(--panel-border)' }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>Latest notifications</div>
-                      <button type="button" onClick={() => void readAllNotifications().then(() => { setNotifications([]); setNotificationsOpen(false) })} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>Mark all read</button>
+                      <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, color: 'var(--text-secondary)' }}>Latest notifications</div>
+                      <button type="button" onClick={() => void readAllNotifications().then(() => { setNotifications([]); setNotificationsOpen(false) })} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: 'var(--font-12)', cursor: 'pointer' }}>Mark all read</button>
                     </div>
                     <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-                      {notificationsLoading ? <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>Loading…</div> : null}
-                      {!notificationsLoading && !notifications.length ? <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>No notifications yet.</div> : null}
+                      {notificationsLoading ? <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Loading…</div> : null}
+                      {!notificationsLoading && !notifications.length ? <div style={{ padding: 12, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>No notifications yet.</div> : null}
                       {notifications.map((notification) => (
                         <button
                           key={notification.id}
@@ -706,9 +706,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                           onClick={() => void handleNotificationClick(notification)}
                           style={{ width: '100%', textAlign: 'left', padding: '12px', border: 'none', borderBottom: '1px solid var(--panel-border)', background: notification.readAt ? 'transparent' : 'rgba(16, 185, 129, 0.08)', cursor: 'pointer' }}
                         >
-                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{notification.title}</div>
-                          <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-secondary)' }}>{notification.body}</div>
-                          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted)' }}>{new Date(notification.createdAt).toLocaleString()}</div>
+                          <div style={{ fontSize: 'var(--font-13)', fontWeight: 700, color: 'var(--text-primary)' }}>{notification.title}</div>
+                          <div style={{ marginTop: 4, fontSize: 'var(--font-12)', color: 'var(--text-secondary)' }}>{notification.body}</div>
+                          <div style={{ marginTop: 6, fontSize: 'var(--font-11)', color: 'var(--text-muted)' }}>{new Date(notification.createdAt).toLocaleString()}</div>
                         </button>
                       ))}
                     </div>
@@ -739,7 +739,7 @@ export const panel: React.CSSProperties = {
 export const panelHeader: React.CSSProperties = {
   padding: '16px 18px 12px',
   fontWeight: 750,
-  fontSize: 15,
+  fontSize: 'var(--font-15)',
   color: 'var(--text-primary)',
   borderBottom: '1px solid var(--panel-border)',
 }
@@ -750,7 +750,7 @@ export function pill(bg: string, color: string): React.CSSProperties {
     color,
     borderRadius: 999,
     padding: '5px 10px',
-    fontSize: 11,
+    fontSize: 'var(--font-11)',
     fontWeight: 700,
     border: '1px solid rgba(255,255,255,0.08)',
   }
@@ -765,7 +765,7 @@ export function tagStyle(): React.CSSProperties {
     border: '1px solid var(--tag-border)',
     borderRadius: 999,
     padding: '4px 10px',
-    fontSize: 11,
+    fontSize: 'var(--font-11)',
     fontWeight: 600,
   }
 }

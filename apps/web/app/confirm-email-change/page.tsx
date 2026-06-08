@@ -58,13 +58,13 @@ function ConfirmEmailChangeInner() {
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-        <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
+        <div style={{ fontSize: 'var(--font-28)', fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / email</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>
+      <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / email</div>
+      <div style={{ fontSize: 'var(--font-20)', fontWeight: 700, marginTop: 10, color: 'var(--heading-text)' }}>
         {status === 'done' ? 'Email confirmed' : status === 'error' ? 'Confirmation failed' : 'Confirming email change'}
       </div>
-      <div style={{ marginTop: 10, color: status === 'error' ? '#fca5a5' : 'rgba(209, 250, 229, 0.68)', fontSize: 14, lineHeight: 1.6 }}>{message}</div>
+      <div style={{ marginTop: 10, color: status === 'error' ? '#fca5a5' : 'rgba(209, 250, 229, 0.68)', fontSize: 'var(--font-14)', lineHeight: 1.6 }}>{message}</div>
     </div>
   )
 }
@@ -72,7 +72,7 @@ function ConfirmEmailChangeInner() {
 export default function ConfirmEmailChangePage() {
   return (
     <div style={pageStyle}>
-      <Suspense fallback={<div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Loading…</div>}>
+      <Suspense fallback={<div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-14)' }}>Loading…</div>}>
         <ConfirmEmailChangeInner />
       </Suspense>
     </div>

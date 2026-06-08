@@ -13,8 +13,8 @@ function formatDate(value?: string | null) {
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
     <div style={{ display: 'grid', gap: 4 }}>
-      <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{label}</span>
-      <span style={{ color: 'var(--text-primary)', fontSize: 14, overflowWrap: 'anywhere' }}>{value || '—'}</span>
+      <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>{label}</span>
+      <span style={{ color: 'var(--text-primary)', fontSize: 'var(--font-14)', overflowWrap: 'anywhere' }}>{value || '—'}</span>
     </div>
   )
 }
@@ -109,14 +109,14 @@ export default function EditionLicensePage() {
         <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
             <div>
-              <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>{loading ? 'Loading edition…' : editionLabel}</h2>
-              <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>
+              <h2 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>{loading ? 'Loading edition…' : editionLabel}</h2>
+              <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>
                 {license?.license?.source === 'env_override' ? 'Enterprise is enabled by environment override.' : license?.installed ? 'License certificate is stored in this Sally database.' : 'No installed license. This instance is running Community.'}
               </p>
             </div>
             <div style={{ color: license?.edition === 'ENTERPRISE' ? '#6ee7b7' : 'var(--text-secondary)', fontWeight: 750 }}>{lifecycleStatus}</div>
           </div>
-          <div style={{ border: '1px solid var(--panel-border)', background: 'var(--form-bg)', borderRadius: 12, padding: 12, color: 'var(--text-secondary)', fontSize: 13 }}>{statusCopy(license?.license?.status || license?.installed?.status || 'missing')}</div>
+          <div style={{ border: '1px solid var(--panel-border)', background: 'var(--form-bg)', borderRadius: 12, padding: 12, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>{statusCopy(license?.license?.status || license?.installed?.status || 'missing')}</div>
           {error ? <div style={{ border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.08)', color: '#fecaca', borderRadius: 12, padding: 12 }}>{error}</div> : null}
           {notice ? <div style={{ border: '1px solid rgba(110,231,183,0.35)', background: 'rgba(16,185,129,0.08)', color: '#bbf7d0', borderRadius: 12, padding: 12 }}>{notice}</div> : null}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
@@ -135,8 +135,8 @@ export default function EditionLicensePage() {
 
         {license?.installed ? (
           <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 10 }}>
-            <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Installed license</h2>
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>This instance has an installed license certificate. Sally checks license state when this page loads and automatically syncs with the license server before the next check time.</p>
+            <h2 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>Installed license</h2>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>This instance has an installed license certificate. Sally checks license state when this page loads and automatically syncs with the license server before the next check time.</p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button
                 type="button"
@@ -150,8 +150,8 @@ export default function EditionLicensePage() {
           </section>
         ) : (
           <form onSubmit={submitActivate} style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 12 }}>
-            <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Activate Enterprise</h2>
-            <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 }}>
+            <h2 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>Activate Enterprise</h2>
+            <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>
               Paste license key
               <input value={licenseKey} onChange={(event) => setLicenseKey(event.target.value)} placeholder="sally_live_…" autoComplete="off" style={{ padding: '11px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--text-primary)' }} />
             </label>

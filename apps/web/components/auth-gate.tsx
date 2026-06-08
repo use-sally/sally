@@ -263,13 +263,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div style={authPage}>
         {mode === 'login' && twoFactorChallengeToken ? (
           <form onSubmit={handleTwoFactorSubmit} style={authCard}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}><div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div></div>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / 2fa</div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>Two-factor authentication</div>
-            <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Enter the 6-digit code from your authenticator app.</div>
-            <label style={{ display: 'grid', gap: 6, marginTop: 18 }}><span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>2FA code</span><input value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} inputMode="numeric" placeholder="123456" style={inputStyle} /></label>
-            {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-            {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}><div style={{ fontSize: 'var(--font-28)', fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div></div>
+            <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / 2fa</div>
+            <div style={{ fontSize: 'var(--font-20)', fontWeight: 700, marginTop: 10, color: 'var(--heading-text)' }}>Two-factor authentication</div>
+            <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Enter the 6-digit code from your authenticator app.</div>
+            <label style={{ display: 'grid', gap: 6, marginTop: 18 }}><span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>2FA code</span><input value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value)} inputMode="numeric" placeholder="123456" style={inputStyle} /></label>
+            {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+            {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 'var(--font-13)' }}>{info}</div> : null}
             <button type="submit" disabled={loading} style={primaryButton}>{loading ? 'Verifying…' : 'Verify code'}</button>
             {webAuthnOptions ? <button type="button" onClick={() => void handlePasskeyLogin()} disabled={loading} style={secondaryButton}>Use passkey / Face ID</button> : null}
             <button type="button" onClick={() => { setTwoFactorChallengeToken(null); setTwoFactorCode(''); setWebAuthnOptions(null); setError(null); setInfo(null) }} style={secondaryButton}>Back to sign in</button>
@@ -278,21 +278,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
         {mode === 'login' && !twoFactorChallengeToken ? (
           <form onSubmit={handleSubmit} style={authCard}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-              <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
+              <div style={{ fontSize: 'var(--font-28)', fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / login</div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>Sign in</div>
-            <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Use your account email to access the workspace.</div>
+            <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / login</div>
+            <div style={{ fontSize: 'var(--font-20)', fontWeight: 700, marginTop: 10, color: 'var(--heading-text)' }}>Sign in</div>
+            <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Use your account email to access the workspace.</div>
             <label style={{ display: 'grid', gap: 6, marginTop: 18 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Email</span>
+              <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Email</span>
               <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="you@company.com" style={inputStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6, marginTop: 12 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Password</span>
+              <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Password</span>
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="••••••••" style={inputStyle} />
             </label>
-            {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-            {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
+            {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+            {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 'var(--font-13)' }}>{info}</div> : null}
             <button type="submit" disabled={loading} style={primaryButton}>
               {loading ? 'Signing in…' : 'Continue'}
             </button>
@@ -305,17 +305,17 @@ export function AuthGate({ children }: { children: ReactNode }) {
         {mode === 'forgot' ? (
           <form onSubmit={handleRequestReset} style={{ ...authCard, width: 420 }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-              <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
+              <div style={{ fontSize: 'var(--font-28)', fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / recovery</div>
-            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 10, color: 'var(--text-primary)' }}>Reset your password</div>
-            <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Enter your account email to get a reset link.</div>
+            <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / recovery</div>
+            <div style={{ fontSize: 'var(--font-20)', fontWeight: 700, marginTop: 10, color: 'var(--heading-text)' }}>Reset your password</div>
+            <div style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Enter your account email to get a reset link.</div>
             <label style={{ display: 'grid', gap: 6, marginTop: 18 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Email</span>
+              <span style={{ fontSize: 'var(--font-11)', fontWeight: 700, textTransform: 'uppercase', color: '#fcd34d' }}>Email</span>
               <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="you@company.com" style={inputStyle} />
             </label>
-            {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-            {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 13 }}>{info}</div> : null}
+            {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+            {info ? <div style={{ marginTop: 12, color: '#fde68a', fontSize: 'var(--font-13)' }}>{info}</div> : null}
             <button type="submit" disabled={loading} style={primaryButton}>
               {loading ? 'Requesting…' : 'Request reset'}
             </button>
@@ -333,11 +333,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
       <div style={authPage}>
         <div style={{ ...authCard, width: 440, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
-            <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
+            <div style={{ fontSize: 'var(--font-28)', fontWeight: 700, letterSpacing: '-0.04em', color: 'var(--text-primary)' }}>sally<span style={{ color: '#34d399' }}>_</span></div>
           </div>
-          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / access</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>Workspace access needed</div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>Your account exists, but it does not have access to a workspace yet. Ask an admin to grant access, then retry.</div>
+          <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#fcd34d' }}>auth / access</div>
+          <div style={{ fontSize: 'var(--font-20)', fontWeight: 700, color: 'var(--heading-text)' }}>Workspace access needed</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Your account exists, but it does not have access to a workspace yet. Ask an admin to grant access, then retry.</div>
           <div style={{ display: 'flex', gap: 12 }}>
             <button onClick={handleRetryAccess} style={{ ...primaryButton, marginTop: 0, width: 'auto' }}>Retry</button>
             <button onClick={handleSignOut} style={{ ...secondaryButton, marginTop: 0, width: 'auto' }}>Sign out</button>

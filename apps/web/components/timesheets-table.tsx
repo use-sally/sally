@@ -286,7 +286,7 @@ export function TimesheetsTable({
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: 10, alignItems: 'center', padding: '0 4px', color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: 10, alignItems: 'center', padding: '0 4px', color: 'var(--text-muted)', fontSize: 'var(--font-13)', fontWeight: 700 }}>
           <button onClick={() => toggleSort('date')} style={headerBtn(sortKey === 'date')}>Date{indicator('date')}</button>
           {effectiveShowCustomerColumn ? <button onClick={() => toggleSort('customer')} style={headerBtn(sortKey === 'customer')}>Customer{indicator('customer')}</button> : null}
           {effectiveShowProjectColumn ? <button onClick={() => toggleSort('project')} style={headerBtn(sortKey === 'project')}>Project{indicator('project')}</button> : null}

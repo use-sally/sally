@@ -16,9 +16,9 @@ export function TimesheetsSummaryBar({
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-        <div><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Entries</div><div style={{ fontSize: 24, fontWeight: 750 }}>{entries}</div></div>
-        <div><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Total minutes</div><div style={{ fontSize: 24, fontWeight: 750 }}>{totalMinutes}</div></div>
-        <div><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Billable minutes</div><div style={{ fontSize: 24, fontWeight: 750 }}>{billableMinutes}</div></div>
+        <div><div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>Entries</div><div style={{ fontSize: 'var(--font-24)', fontWeight: 750 }}>{entries}</div></div>
+        <div><div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>Total minutes</div><div style={{ fontSize: 'var(--font-24)', fontWeight: 750 }}>{totalMinutes}</div></div>
+        <div><div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>Billable minutes</div><div style={{ fontSize: 'var(--font-24)', fontWeight: 750 }}>{billableMinutes}</div></div>
       </div>
       <button onClick={onExport} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '10px 12px', fontWeight: 700 }}>Export CSV</button>
     </div>
@@ -79,7 +79,7 @@ export function TimesheetsFiltersBar({
         {!lockedProjectId ? <select value={clientId} onChange={(e) => onClientChange(e.target.value)} style={formControlSm}><option value="">All customers</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select> : null}
         {showTaskFilter ? <select value={taskId} onChange={(e) => onTaskChange(e.target.value)} style={formControlSm}><option value="">All tasks</option>{taskOptions.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select> : null}
         <select value={userId} onChange={(e) => onUserChange(e.target.value)} style={formControlSm}><option value="">All users</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 14, whiteSpace: 'nowrap', fontWeight: 600 }}><input type="checkbox" checked={showValidated} onChange={(e) => onShowValidatedChange(e.target.checked)} /> Show validated / restore</label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-14)', whiteSpace: 'nowrap', fontWeight: 600 }}><input type="checkbox" checked={showValidated} onChange={(e) => onShowValidatedChange(e.target.checked)} /> Show validated / restore</label>
       </div>
     </div>
   )

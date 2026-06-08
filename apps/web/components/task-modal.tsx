@@ -92,7 +92,7 @@ export function TaskModal({ taskId, projectId }: { taskId: string; projectId: st
       <div role="dialog" aria-modal="true" aria-label="Task" style={{ width: `min(calc(100vw - 32px), ${TASK_MODAL_MAX_WIDTH}px)`, maxWidth: 'calc(100vw - 32px)', maxHeight: TASK_MODAL_MAX_HEIGHT, background: 'var(--form-bg)', borderRadius: 20, boxShadow: '0 24px 80px rgba(15,23,42,0.34)', overflow: 'hidden', border: '1px solid var(--panel-border)', boxSizing: 'border-box', minWidth: 0, display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid var(--panel-border)', flex: '0 0 auto' }}>
           <div style={{ fontWeight: 750 }}>Task</div>
-          <button type="button" onClick={closeTaskModal} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer' }} aria-label="Close task modal">✕</button>
+          <button type="button" onClick={closeTaskModal} style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: 'var(--font-18)', cursor: 'pointer' }} aria-label="Close task modal">✕</button>
         </div>
         <TaskModalHeader task={rowTask} projectId={activeProjectId} statuses={project.statuses} availableLabels={project.labels} taskPermissionViewer={taskPermissionViewer} />
         <div data-task-modal-scroll-body="true" style={{ minWidth: 0, maxWidth: '100%', overflowX: 'hidden', overflowY: 'auto', overscrollBehavior: 'contain', position: 'relative', zIndex: 1 }}>

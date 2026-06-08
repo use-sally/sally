@@ -137,11 +137,11 @@ export function ProjectAutomationPanel({ projectId, canManage }: { projectId: st
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {['plan first', 'visible task plan', 'single connected agent', 'approval gates stay visible'].map((capability) => <span key={capability} style={pill('var(--form-bg)', 'var(--text-secondary)')}>{capability}</span>)}
       </div>
-      {errorMessage ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{errorMessage}</div> : null}
+      {errorMessage ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{errorMessage}</div> : null}
 
       {(blockers.length || approvalRequests.length) ? <div style={{ display: 'grid', gap: 8, border: '1px solid rgba(239,68,68,0.35)', borderRadius: 12, padding: 12, background: 'rgba(239,68,68,0.07)' }}>
         <div style={automationPanelHeadingText}>Attention required</div>
-        {approvalRequests.slice(0, 5).map((approval) => <div key={approval.id} style={{ display: 'grid', gap: 6, color: 'var(--text-primary)', fontSize: 13 }}>
+        {approvalRequests.slice(0, 5).map((approval) => <div key={approval.id} style={{ display: 'grid', gap: 6, color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
           <div><span style={pill('#fef3c7', '#92400e')}>APPROVAL</span> <strong>{approval.type}</strong> · {approval.question}</div>
           {approval.recommendation ? <div style={{ color: 'var(--text-muted)' }}>{approval.recommendation}</div> : null}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -149,7 +149,7 @@ export function ProjectAutomationPanel({ projectId, canManage }: { projectId: st
             <button type="button" disabled={!canManage || saving} onClick={() => void handleResolveApproval(approval.id, 'REJECTED')} style={dangerButton}>Deny</button>
           </div>
         </div>)}
-        {blockers.slice(0, 5).map((blocker) => <div key={blocker.id} style={{ display: 'grid', gap: 6, color: 'var(--text-primary)', fontSize: 13 }}>
+        {blockers.slice(0, 5).map((blocker) => <div key={blocker.id} style={{ display: 'grid', gap: 6, color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
           <div><span style={pill('#fee2e2', '#991b1b')}>BLOCKER</span> <strong>{blocker.type}</strong> · {blocker.summary}</div>
           {blocker.requiredInput ? <div style={{ color: 'var(--text-muted)' }}>Needed: {blocker.requiredInput}</div> : null}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -228,13 +228,13 @@ const dangerButton: CSSProperties = { border: '1px solid rgba(239,68,68,0.35)', 
 
 const automationPanelHeadingText: CSSProperties = { fontWeight: 800, color: 'var(--task-title)' }
 const automationSectionHeadingText: CSSProperties = { fontWeight: 750, color: 'var(--task-title)' }
-const automationUpdatedText: CSSProperties = { color: 'var(--text-muted)', fontSize: 12, fontWeight: 400, lineHeight: 1.35 }
-const smallLabel: CSSProperties = { color: 'var(--text-muted)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }
-const automationRowGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'max-content 170px 120px minmax(0, 1fr)', gap: 10, alignItems: 'start', padding: '10px 12px', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', fontSize: 13, minWidth: 0 }
+const automationUpdatedText: CSSProperties = { color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 400, lineHeight: 1.35 }
+const smallLabel: CSSProperties = { color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }
+const automationRowGrid: CSSProperties = { display: 'grid', gridTemplateColumns: 'max-content 170px 120px minmax(0, 1fr)', gap: 10, alignItems: 'start', padding: '10px 12px', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', fontSize: 'var(--font-13)', minWidth: 0 }
 const automationConnectionRowGrid: CSSProperties = { ...automationRowGrid, gridTemplateColumns: 'max-content 170px 140px minmax(0, 1fr) max-content' }
 function automationStatusText(color: string): CSSProperties {
-  return { color, fontSize: 12, fontWeight: 300, background: 'transparent', lineHeight: 1.35, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }
+  return { color, fontSize: 'var(--font-12)', fontWeight: 300, background: 'transparent', lineHeight: 1.35, textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }
 }
-const automationDateText: CSSProperties = { color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.35 }
-const automationRoleText: CSSProperties = { color: 'var(--text-secondary)', fontWeight: 500, fontSize: 12, lineHeight: 1.35, overflowWrap: 'anywhere', minWidth: 0 }
+const automationDateText: CSSProperties = { color: 'var(--text-muted)', fontSize: 'var(--font-12)', lineHeight: 1.35 }
+const automationRoleText: CSSProperties = { color: 'var(--text-secondary)', fontWeight: 500, fontSize: 'var(--font-12)', lineHeight: 1.35, overflowWrap: 'anywhere', minWidth: 0 }
 const automationCommentText: CSSProperties = { color: 'var(--text-primary)', overflowWrap: 'anywhere', lineHeight: 1.4, minWidth: 0 }

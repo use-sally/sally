@@ -32,7 +32,7 @@ const codeStyle: CSSProperties = {
   margin: 0,
   whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere',
-  fontSize: 12,
+  fontSize: 'var(--font-12)',
   lineHeight: 1.65,
   color: '#d1fae5',
 }
@@ -40,8 +40,8 @@ const codeStyle: CSSProperties = {
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section style={{ ...panelStyle, display: 'grid', gap: 14 }}>
-      <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em' }}>{title}</div>
-      <div style={{ display: 'grid', gap: 12, color: 'rgba(236, 253, 245, 0.88)', lineHeight: 1.7, fontSize: 14 }}>{children}</div>
+      <div style={{ fontSize: 'var(--font-20)', fontWeight: 800, letterSpacing: '-0.03em' }}>{title}</div>
+      <div style={{ display: 'grid', gap: 12, color: 'rgba(236, 253, 245, 0.88)', lineHeight: 1.7, fontSize: 'var(--font-14)' }}>{children}</div>
     </section>
   )
 }
@@ -54,15 +54,15 @@ export default function DocsPage() {
           <div style={{ ...panelStyle, padding: 28, display: 'grid', gap: 18 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#fcd34d' }}>sally docs</div>
-                <h1 style={{ margin: '10px 0 0', fontSize: 42, lineHeight: 1.05, letterSpacing: '-0.05em' }}>Documentation for humans, scripts, and agents.</h1>
+                <div style={{ fontSize: 'var(--font-12)', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#fcd34d' }}>sally docs</div>
+                <h1 style={{ margin: '10px 0 0', fontSize: 'var(--font-42)', lineHeight: 1.05, letterSpacing: '-0.05em' }}>Documentation for humans, scripts, and agents.</h1>
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <Link href="/" style={{ ...linkStyle, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(52, 211, 153, 0.18)', background: 'rgba(16, 185, 129, 0.08)' }}>Open app</Link>
                 <a href="https://github.com/use-sally/sally" target="_blank" rel="noreferrer" style={{ ...linkStyle, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(250, 204, 21, 0.24)', background: 'rgba(250, 204, 21, 0.08)', color: '#fde68a' }}>GitHub</a>
               </div>
             </div>
-            <p style={{ margin: 0, maxWidth: 860, color: 'rgba(236, 253, 245, 0.82)', lineHeight: 1.8, fontSize: 15 }}>
+            <p style={{ margin: 0, maxWidth: 860, color: 'rgba(236, 253, 245, 0.82)', lineHeight: 1.8, fontSize: 'var(--font-15)' }}>
               Sally is an API-first project management system with a low-noise web UI, a real HTTP API, and MCP support for agent workflows.
               This docs hub mirrors the current product shape and points to the implementation-backed reference docs in the repo.
             </p>
@@ -74,7 +74,7 @@ export default function DocsPage() {
               ].map(([title, body]) => (
                 <div key={title} style={{ border: '1px solid rgba(52, 211, 153, 0.14)', borderRadius: 14, padding: 16, background: 'rgba(4, 12, 10, 0.72)' }}>
                   <div style={{ fontWeight: 800, marginBottom: 8 }}>{title}</div>
-                  <div style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(236, 253, 245, 0.74)' }}>{body}</div>
+                  <div style={{ fontSize: 'var(--font-13)', lineHeight: 1.7, color: 'rgba(236, 253, 245, 0.74)' }}>{body}</div>
                 </div>
               ))}
             </div>

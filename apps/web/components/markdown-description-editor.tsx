@@ -397,7 +397,7 @@ export function MarkdownDescriptionEditor({
       <EditorContent editor={editor} />
       {slashCommand ? (
         <div onWheelCapture={(event) => { event.preventDefault(); event.stopPropagation() }} onWheel={(event) => { event.preventDefault(); event.stopPropagation(); slashWheelAccumulatorRef.current += event.deltaY; if (Math.abs(slashWheelAccumulatorRef.current) < 80) return; setSlashIndex((current) => current + (slashWheelAccumulatorRef.current > 0 ? 1 : -1)); slashWheelAccumulatorRef.current = 0 }} style={{ position: 'absolute', top: slashCommand.top, left: slashCommand.left, zIndex: 20, width: 340, maxWidth: 'min(360px, calc(100% - 12px))', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', overflow: 'hidden' }}>
-          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 12 }}>Markdown actions · ↑↓ Enter</div>
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Markdown actions · ↑↓ Enter</div>
           {(() => {
             const actions = slashActions.filter((action) => !slashCommand.query || action.command.includes(slashCommand.query) || action.label.toLowerCase().includes(slashCommand.query)).slice(0, 10)
             const start = actions.length ? slashIndex % actions.length : 0
@@ -407,7 +407,7 @@ export function MarkdownDescriptionEditor({
               return (
                 <button key={action.command} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertSlashAction(action)} style={{ width: '100%', border: 'none', borderBottom: '1px solid var(--panel-border)', padding: '10px 12px', background: index === 0 ? 'color-mix(in srgb, var(--form-border-focus) 18%, transparent)' : 'transparent', color: 'var(--text-primary)', textAlign: 'left', cursor: 'pointer' }}>
                   <div style={{ fontWeight: 800 }}>/{action.command} · {action.label}</div>
-                  <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 12 }}>{action.description}</div>
+                  <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{action.description}</div>
                 </button>
               )
             })
@@ -416,20 +416,20 @@ export function MarkdownDescriptionEditor({
       ) : null}
       {fileCommand ? (
         <div style={{ position: 'absolute', top: fileCommand.top, left: fileCommand.left, zIndex: 20, width: 340, maxWidth: 'min(360px, calc(100% - 12px))', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', overflow: 'hidden' }}>
-          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 12 }}>
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>
             {fileSearchLoading ? 'Searching connected files…' : fileCommand.query ? `/${fileCommand.providerCommand} files matching “${fileCommand.query}”` : `Type after /${fileCommand.providerCommand} to search connected files`}
           </div>
           {fileSearchError ? <div style={{ padding: 10, display: 'grid', gap: 8 }}>
-            <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{fileSearchError}</div>
+            <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{fileSearchError}</div>
             {shouldOfferConnect(fileSearchError) ? <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => void connectProvider(fileCommand.providerCommand)} disabled={connectingProvider === fileCommand.providerCommand} style={{ border: '1px solid var(--form-border-focus)', borderRadius: 10, padding: '8px 10px', background: 'color-mix(in srgb, var(--form-border-focus) 14%, transparent)', color: 'var(--text-primary)', fontWeight: 800, cursor: 'pointer' }}>{connectingProvider === fileCommand.providerCommand ? 'Opening connection…' : `Connect ${providerNameForCommand(fileCommand.providerCommand)}`}</button> : null}
           </div> : null}
           {!fileSearchError && fileResults.length ? fileResults.slice(0, 8).map((resource) => (
             <button key={`${resource.provider}:${resource.externalId}`} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertFileResource(resource)} style={{ width: '100%', border: 'none', borderBottom: '1px solid var(--panel-border)', padding: '10px 12px', background: 'transparent', color: 'var(--text-primary)', textAlign: 'left', cursor: 'pointer' }}>
               <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resource.name}</div>
-              <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 12 }}>{resource.provider.replace('_', ' ').toLowerCase()} · {resource.kind.toLowerCase()}</div>
+              <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{resource.provider.replace('_', ' ').toLowerCase()} · {resource.kind.toLowerCase()}</div>
             </button>
           )) : null}
-          {!fileSearchLoading && !fileSearchError && !fileResults.length ? <div style={{ padding: 10, color: 'var(--text-muted)', fontSize: 13 }}>No files found. If this is your first time using {providerNameForCommand(fileCommand.providerCommand)}, connect your account here and try again.</div> : null}
+          {!fileSearchLoading && !fileSearchError && !fileResults.length ? <div style={{ padding: 10, color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>No files found. If this is your first time using {providerNameForCommand(fileCommand.providerCommand)}, connect your account here and try again.</div> : null}
         </div>
       ) : null}
     </div>

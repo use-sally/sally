@@ -11,8 +11,8 @@ import { labelText, metaLabelText, projectInputField } from '../lib/theme'
 import { appVersion } from '../lib/version'
 import { compareVersions, normalizeVersion, updateManifestUrl, type UpdateManifest } from '../lib/update-manifest'
 
-const workspaceHeaderNameButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, textAlign: 'left', color: 'var(--text-primary)', fontSize: 34, lineHeight: 1.1, fontWeight: 800, cursor: 'text' }
-const workspaceHeaderNameInput: React.CSSProperties = { ...projectInputField, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 34, lineHeight: 1.1, fontWeight: 800 }
+const workspaceHeaderNameButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, textAlign: 'left', color: 'var(--heading-text)', fontSize: 'var(--font-34)', lineHeight: 1.1, fontWeight: 800, cursor: 'text' }
+const workspaceHeaderNameInput: React.CSSProperties = { ...projectInputField, padding: 0, border: 'none', background: 'transparent', color: 'var(--heading-text)', fontSize: 'var(--font-34)', lineHeight: 1.1, fontWeight: 800 }
 const workspaceHeaderMetaText: React.CSSProperties = { ...labelText }
 
 export default function Home() {
@@ -93,7 +93,7 @@ export default function Home() {
   }
 
   return (
-    <AppShell title="" subtitle="" actions={workspaceRoleLine ? <div style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700 }}>{workspaceRoleLine}</div> : undefined}>
+    <AppShell title="" subtitle="" actions={workspaceRoleLine ? <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)', fontWeight: 700 }}>{workspaceRoleLine}</div> : undefined}>
       <div style={{ display: 'grid', gap: 6, marginBottom: 18 }}>
         {editingWorkspaceName ? (
           <input
@@ -122,15 +122,15 @@ export default function Home() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
         <div style={panel}>
           <div style={metaLabelText}>Active projects</div>
-          <div style={{ marginTop: 12, fontSize: 30, fontWeight: 750, color: 'var(--text-primary)' }}>{summary?.activeProjects ?? '—'}</div>
+          <div style={{ marginTop: 12, fontSize: 'var(--font-30)', fontWeight: 750, color: 'var(--text-primary)' }}>{summary?.activeProjects ?? '—'}</div>
         </div>
         <div style={panel}>
           <div style={metaLabelText}>Open tasks</div>
-          <div style={{ marginTop: 12, fontSize: 30, fontWeight: 750, color: 'var(--text-primary)' }}>{summary?.openTasks ?? '—'}</div>
+          <div style={{ marginTop: 12, fontSize: 'var(--font-30)', fontWeight: 750, color: 'var(--text-primary)' }}>{summary?.openTasks ?? '—'}</div>
         </div>
         <div style={panel}>
           <div style={metaLabelText}>Cycle health</div>
-          <div style={{ marginTop: 12, fontSize: 30, fontWeight: 750, color: 'var(--text-primary)' }}>{summary?.cycleHealth ?? '—'}</div>
+          <div style={{ marginTop: 12, fontSize: 'var(--font-30)', fontWeight: 750, color: 'var(--text-primary)' }}>{summary?.cycleHealth ?? '—'}</div>
         </div>
         <WorkspaceMembersCard />
         <div style={panel}>
@@ -144,7 +144,7 @@ export default function Home() {
           <div style={{ marginTop: 8, ...labelText }}>{health?.timestamp ? `Last check: ${new Date(health.timestamp).toLocaleTimeString()}` : error ?? 'Waiting for API'}</div>
           {updateAvailable ? <div style={{ marginTop: 6, ...labelText }}>{`Current version: v${appVersion}`}</div> : null}
           {updateAvailable && updateManifest?.summary ? <div style={{ marginTop: 4, ...labelText }}>{updateManifest.summary}</div> : null}
-          {updateAvailable && updateManifest?.docsUrl ? <a href={updateManifest.docsUrl} target="_blank" rel="noreferrer" style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}>View update notes →</a> : null}
+          {updateAvailable && updateManifest?.docsUrl ? <a href={updateManifest.docsUrl} target="_blank" rel="noreferrer" style={{ marginTop: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', fontWeight: 700, textDecoration: 'none', display: 'inline-block' }}>View update notes →</a> : null}
         </div>
       </div>
 

@@ -44,17 +44,17 @@ const cardStyle = (active: boolean): CSSProperties => ({
 
 const modalBackdrop: CSSProperties = { position: 'fixed', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', padding: 18, background: 'rgba(15, 23, 42, 0.58)' }
 const modalPanel: CSSProperties = { width: 'min(920px, calc(100vw - 36px))', maxHeight: 'min(820px, calc(100vh - 36px))', overflow: 'hidden', border: '1px solid var(--panel-border)', borderRadius: 20, background: 'var(--form-bg)', color: 'var(--text-primary)', boxShadow: '0 28px 90px rgba(15,23,42,0.38)', display: 'flex', flexDirection: 'column' }
-const modalCloseButton: CSSProperties = { border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 26, lineHeight: 1, padding: '0 4px' }
+const modalCloseButton: CSSProperties = { border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 'var(--font-26)', lineHeight: 1, padding: '0 4px' }
 
 function SecurityIslandCard({ island, active, onOpen }: { island: SecurityIsland; active: boolean; onOpen: () => void }) {
   return (
     <button type="button" onClick={onOpen} aria-pressed={active} style={cardStyle(active)}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-        <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 16 }}>{island.title}</h3>
-        {island.badge ? <span style={{ border: '1px solid rgba(250,204,21,0.32)', borderRadius: 999, padding: '4px 8px', color: 'var(--task-title)', fontSize: 11, fontWeight: 700 }}>{island.badge}</span> : null}
+        <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>{island.title}</h3>
+        {island.badge ? <span style={{ border: '1px solid rgba(250,204,21,0.32)', borderRadius: 999, padding: '4px 8px', color: 'var(--task-title)', fontSize: 'var(--font-11)', fontWeight: 700 }}>{island.badge}</span> : null}
       </div>
-      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>{island.description}</p>
-      <span style={{ color: 'var(--task-title)', fontSize: 12, fontWeight: 750 }}>{active ? 'Modal open' : 'Open modal'} →</span>
+      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>{island.description}</p>
+      <span style={{ color: 'var(--task-title)', fontSize: 'var(--font-12)', fontWeight: 750 }}>{active ? 'Modal open' : 'Open modal'} →</span>
     </button>
   )
 }
@@ -62,9 +62,9 @@ function SecurityIslandCard({ island, active, onOpen }: { island: SecurityIsland
 function PlainIslandPanel({ title, description }: { title: string; description: string }) {
   return (
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20, display: 'grid', gap: 10 }}>
-      <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>{title}</h2>
-      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>{description}</p>
-      <div style={{ border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', padding: 12, color: 'var(--text-secondary)', fontSize: 13 }}>
+      <h2 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>{title}</h2>
+      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.6 }}>{description}</p>
+      <div style={{ border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', padding: 12, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>
         Configuration for this area will live here as it becomes editable. The card grid stays compact while this modal owns the detailed controls.
       </div>
     </section>
@@ -74,7 +74,7 @@ function PlainIslandPanel({ title, description }: { title: string; description: 
 function EnterprisePlaceholderPanel({ title, description }: { title: string; description: string }) {
   return (
     <EnterpriseLockedCard title={title} description={description}>
-      <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>This policy area opens as its own modal so Enterprise controls do not expand the card grid.</div>
+      <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>This policy area opens as its own modal so Enterprise controls do not expand the card grid.</div>
     </EnterpriseLockedCard>
   )
 }
@@ -98,8 +98,8 @@ function SecurityIslandModal({ islandKey, onClose }: { islandKey: SecurityIsland
       <div role="dialog" aria-modal="true" aria-labelledby="security-island-title" style={modalPanel} onClick={(event) => event.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', padding: '18px 20px', borderBottom: '1px solid var(--panel-border)', flex: '0 0 auto' }}>
           <div>
-            <h2 id="security-island-title" style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>{island.title}</h2>
-            <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>{island.description}</p>
+            <h2 id="security-island-title" style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>{island.title}</h2>
+            <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>{island.description}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close security policy modal" style={modalCloseButton}>×</button>
         </div>
@@ -118,8 +118,8 @@ export default function SecurityPage() {
     <AppShell title="Security" subtitle="Global authentication, identity, and compliance policy for this Sally instance.">
       <div style={{ display: 'grid', gap: 18 }}>
         <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20 }}>
-          <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Global Security</h2>
-          <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>
+          <h2 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>Global Security</h2>
+          <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.6 }}>
             Security is for instance-wide policy and compliance. Runtime diagnostics belong in System. Select a compact card to open its focused policy modal.
           </p>
         </section>

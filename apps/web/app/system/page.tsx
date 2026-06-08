@@ -15,8 +15,8 @@ const runtimeCards = [
 function SystemCard({ title, description }: { title: string; description: string }) {
   return (
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 8 }}>
-      <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 16 }}>{title}</h3>
-      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>{description}</p>
+      <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>{title}</h3>
+      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>{description}</p>
     </section>
   )
 }
@@ -26,8 +26,8 @@ export default function SystemPage() {
     <AppShell title="System" subtitle="Runtime health, installation state, and safe diagnostics for this Sally instance.">
       <div style={{ display: 'grid', gap: 18 }}>
         <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 20 }}>
-          <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>Global System</h2>
-          <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6 }}>
+          <h2 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-18)' }}>Global System</h2>
+          <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.6 }}>
             System is for runtime and installation health. Security policy belongs in Security.
           </p>
         </section>

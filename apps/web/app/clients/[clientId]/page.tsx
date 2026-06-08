@@ -75,7 +75,7 @@ export default function ClientDetailPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
             <div>
               <div style={{ fontWeight: 750 }}>Client details</div>
-              <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 13 }}>ID: {client?.id ?? '—'}</div>
+              <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>ID: {client?.id ?? '—'}</div>
             </div>
             <Link href="/clients" style={{ color: 'var(--text-secondary)', fontWeight: 700, textDecoration: 'none' }}>← Back to clients</Link>
           </div>
@@ -122,4 +122,4 @@ export default function ClientDetailPage() {
 const field: React.CSSProperties = { display: 'grid', gap: 6 }
 const input: React.CSSProperties = { ...projectInputField, fontWeight: 500 }
 const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
-const panelHeader: React.CSSProperties = { padding: '16px 18px', fontWeight: 750, fontSize: 14, borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)' }
+const panelHeader: React.CSSProperties = { padding: '16px 18px', fontWeight: 750, fontSize: 'var(--font-14)', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)' }

@@ -80,13 +80,13 @@ export default function WorkspacesAdminPage() {
     <AppShell title="Workspaces" subtitle="Create, archive, restore, and permanently delete Sally workspaces.">
       <div style={{ display: 'grid', gap: 18 }}>
         <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>Add workspace</div>
+          <div style={{ fontSize: 'var(--font-16)', fontWeight: 800, color: 'var(--text-primary)' }}>Add workspace</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 10, alignItems: 'end' }}>
-            <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700 }}>
+            <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700 }}>
               Name
               <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Workspace name" style={{ borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--form-text)', padding: '10px 12px', fontFamily: 'inherit' }} />
             </label>
-            <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700 }}>
+            <label style={{ display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700 }}>
               Slug optional
               <input value={slug} onChange={(event) => setSlug(event.target.value)} placeholder="workspace-slug" style={{ borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--form-text)', padding: '10px 12px', fontFamily: 'inherit' }} />
             </label>
@@ -94,14 +94,14 @@ export default function WorkspacesAdminPage() {
               {saving === 'create' ? 'Adding…' : 'Add workspace'}
             </button>
           </div>
-          {message ? <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{message}</div> : null}
+          {message ? <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>{message}</div> : null}
         </section>
 
         <section style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', overflow: 'hidden' }}>
           <div style={{ padding: 16, borderBottom: '1px solid var(--panel-border)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>Workspace admin</div>
-              <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 12 }}>Archived workspaces stay recoverable. Delete is permanent.</div>
+              <div style={{ fontSize: 'var(--font-16)', fontWeight: 800, color: 'var(--text-primary)' }}>Workspace admin</div>
+              <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Archived workspaces stay recoverable. Delete is permanent.</div>
             </div>
             <button type="button" onClick={loadWorkspaces} style={{ borderRadius: 12, border: '1px solid var(--panel-border)', background: 'transparent', color: 'var(--text-secondary)', padding: '9px 12px', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer' }}>Refresh</button>
           </div>
@@ -116,9 +116,9 @@ export default function WorkspacesAdminPage() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{workspace.name}</span>
-                        {archived ? <span style={{ color: '#fcd34d', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>Archived</span> : <span style={{ color: '#34d399', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>Active</span>}
+                        {archived ? <span style={{ color: '#fcd34d', fontSize: 'var(--font-11)', fontWeight: 800, textTransform: 'uppercase' }}>Archived</span> : <span style={{ color: '#34d399', fontSize: 'var(--font-11)', fontWeight: 800, textTransform: 'uppercase' }}>Active</span>}
                       </div>
-                      <div style={{ marginTop: 5, color: 'var(--text-muted)', fontSize: 12 }}>/{workspace.slug} · {workspace.id}</div>
+                      <div style={{ marginTop: 5, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>/{workspace.slug} · {workspace.id}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {archived ? (

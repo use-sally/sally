@@ -99,7 +99,7 @@ export function StatusSettings({ projectId, statuses, canManage = true }: { proj
 
   return (
     <div style={{ display: 'grid', gap: 10 }}>
-      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
+      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <div style={cardsGrid}>
           {pinnedStatus ? <PinnedStatusCard status={pinnedStatus} /> : null}
@@ -125,7 +125,7 @@ export function StatusSettings({ projectId, statuses, canManage = true }: { proj
           </SortableContext>
           {canManage ? (
             <div style={addCard}>
-              <div style={{ ...labelText, fontSize: 14 }}>New status</div>
+              <div style={{ ...labelText, fontSize: 'var(--font-14)' }}>New status</div>
               <input value={newStatus} onChange={(e) => setNewStatus(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add() }} placeholder="Add new status" style={projectInputField} />
               <select value={newStatusType} onChange={(e) => setNewStatusType(e.target.value as StatusType)} style={projectInputField}>
                 <option value="BACKLOG">Backlog</option>
@@ -135,7 +135,7 @@ export function StatusSettings({ projectId, statuses, canManage = true }: { proj
                 <option value="REVIEW">Review</option>
                 <option value="DONE">Done</option>
               </select>
-              <div style={{ ...labelText, fontSize: 13 }}>Choose semantic type, then press Enter to create</div>
+              <div style={{ ...labelText, fontSize: 'var(--font-13)' }}>Choose semantic type, then press Enter to create</div>
             </div>
           ) : null}
         </div>
@@ -153,7 +153,7 @@ function PinnedStatusCard({ status }: { status: StatusItem }) {
           <div style={{ ...colorSummaryText, color: resolveStatusPair(status.color)?.darkText ?? 'var(--text-secondary)' }}>{resolveStatusPair(status.color)?.id ?? 'default'}</div>
           <div style={statusMetaText}>{status.taskCount ?? 0} {(status.taskCount ?? 0) === 1 ? 'task' : 'tasks'}</div>
         </div>
-        <div style={{ ...labelText, fontSize: 12 }}>Pinned first status</div>
+        <div style={{ ...labelText, fontSize: 'var(--font-12)' }}>Pinned first status</div>
       </div>
     </div>
   )
@@ -252,12 +252,12 @@ const statusNameInput: React.CSSProperties = { ...projectInputField, fontWeight:
 const statusNameButton: React.CSSProperties = { ...projectInputField, textAlign: 'left', fontWeight: 700, cursor: 'text', background: 'transparent' }
 const statusNameStatic: React.CSSProperties = { ...projectInputField, textAlign: 'left', fontWeight: 700, cursor: 'default', background: 'transparent' }
 const statusInfoRow: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }
-const statusMetaText: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 13, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`, textAlign: 'right' }
-const colorSummaryText: React.CSSProperties = { listStyle: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 400, textTransform: 'lowercase' }
+const statusMetaText: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 'var(--font-13)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`, textAlign: 'right' }
+const colorSummaryText: React.CSSProperties = { listStyle: 'none', cursor: 'pointer', fontSize: 'var(--font-13)', fontWeight: 400, textTransform: 'lowercase' }
 const colorMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 8px)', zIndex: 10, minWidth: 140, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
-const colorOptionButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 13, fontWeight: 400 }
+const colorOptionButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 'var(--font-13)', fontWeight: 400 }
 const deleteRowText: React.CSSProperties = { ...deleteTextAction, justifySelf: 'end' }
-const dragHandle: React.CSSProperties = { background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'grab', fontSize: 18, lineHeight: 1, padding: 4 }
+const dragHandle: React.CSSProperties = { background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'grab', fontSize: 'var(--font-18)', lineHeight: 1, padding: 4 }
 
 function statusCardStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)

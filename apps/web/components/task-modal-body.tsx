@@ -647,7 +647,7 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
       `}</style>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16, alignItems: 'start', minWidth: 0, maxWidth: '100%' }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Description</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)', fontWeight: 700, marginBottom: 6 }}>Description</div>
           <MarkdownDescriptionEditor
             value={description}
             onCommit={(nextValue) => {
@@ -661,13 +661,13 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
             onFileSearch={taskEditDecision.allowed ? searchDescriptionFiles : undefined}
             busy={busy}
           />
-          {busy ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>Saving…</div> : null}
+          {busy ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Saving…</div> : null}
         </div>
         <div style={{ display: 'grid', gap: 10, minWidth: 0 }}>
-          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Checklist</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)', fontWeight: 700 }}>Checklist</div>
           {taskEditDecision.visible ? <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && taskEditDecision.allowed) { e.preventDefault(); void addTodo() } }} style={inputStyle} placeholder="Add checklist item and press Enter" disabled={!taskEditDecision.allowed} /> : null}
           <div style={{ display: 'grid', gap: 8 }}>
-            {task.todos.map((todo) => <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" checked={todo.done} onChange={() => taskEditDecision.allowed ? void toggleTodo(todo.id, todo.done) : undefined} disabled={!taskEditDecision.allowed} /> <span style={{ textDecoration: todo.done ? 'line-through' : 'none', opacity: todo.done ? 0.55 : 1 }}>{todo.text}</span></label>{taskEditDecision.visible ? <button onClick={() => void removeTodo(todo.id)} style={deleteTextAction}>Delete</button> : null}</div>)}
+            {task.todos.map((todo) => <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-13)' }}><input type="checkbox" checked={todo.done} onChange={() => taskEditDecision.allowed ? void toggleTodo(todo.id, todo.done) : undefined} disabled={!taskEditDecision.allowed} /> <span style={{ textDecoration: todo.done ? 'line-through' : 'none', opacity: todo.done ? 0.55 : 1 }}>{todo.text}</span></label>{taskEditDecision.visible ? <button onClick={() => void removeTodo(todo.id)} style={deleteTextAction}>Delete</button> : null}</div>)}
           </div>
         </div>
       </div>
@@ -680,8 +680,8 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
           onClick={() => setCommentsOpen((current) => !current)}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit' }}
         >
-          <span style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Comments{task.comments.length ? ` (${task.comments.length})` : ''}</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{commentsOpen ? 'Hide' : 'Show'}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)', fontWeight: 700 }}>Comments{task.comments.length ? ` (${task.comments.length})` : ''}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{commentsOpen ? 'Hide' : 'Show'}</span>
         </button>
         {commentsOpen ? <>
           <div style={{ display: 'grid', gap: 8 }}>
@@ -690,11 +690,11 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <AssigneeAvatar name={comment.author} avatarUrl={comment.authorAvatarUrl} size={28} />
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>{comment.author}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(comment.createdAt).toLocaleString()}</div>
+                    <div style={{ fontWeight: 700, fontSize: 'var(--font-13)', color: 'var(--text-primary)' }}>{comment.author}</div>
+                    <div style={{ fontSize: 'var(--font-11)', color: 'var(--text-muted)' }}>{new Date(comment.createdAt).toLocaleString()}</div>
                   </div>
                 </div>
-                <div className="comment-markdown" style={{ marginTop: 8, color: 'rgba(209, 250, 229, 0.72)', fontSize: 14, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(comment.body) }} />
+                <div className="comment-markdown" style={{ marginTop: 8, color: 'rgba(209, 250, 229, 0.72)', fontSize: 'var(--font-14)', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(comment.body) }} />
               </div>
             ))}
           </div>
@@ -711,7 +711,7 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
               compact
             />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Use the rich Markdown editor. Type <strong>/</strong> for formatting, images, and connected file search.</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Use the rich Markdown editor. Type <strong>/</strong> for formatting, images, and connected file search.</div>
               <button type="button" onClick={() => void addComment()} style={btnStyle} disabled={busy || !commentBody.trim() || !taskEditDecision.allowed}>Comment</button>
             </div>
           </div>
@@ -726,14 +726,14 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
                   style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', borderBottom: '1px solid var(--panel-border)', background: index === mentionIndex ? 'color-mix(in srgb, var(--form-border-focus) 18%, transparent)' : 'transparent', cursor: 'pointer' }}
                 >
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user.name || user.email}</div>
-                  <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)' }}>{user.email}</div>
+                  <div style={{ marginTop: 2, fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{user.email}</div>
                 </button>
               ))}
             </div>
           ) : null}
           {commentSlashCommand ? (
             <div onWheelCapture={(event) => { event.preventDefault(); event.stopPropagation() }} onWheel={(event) => { event.preventDefault(); event.stopPropagation(); commentSlashWheelAccumulatorRef.current += event.deltaY; if (Math.abs(commentSlashWheelAccumulatorRef.current) < 80) return; setCommentSlashIndex((current) => current + (commentSlashWheelAccumulatorRef.current > 0 ? 1 : -1)); commentSlashWheelAccumulatorRef.current = 0 }} style={{ position: 'absolute', top: commentSlashCommand.top, left: commentSlashCommand.left, width: 340, maxWidth: 'min(360px, calc(100% - 12px))', zIndex: 10, border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', overflow: 'hidden' }}>
-              <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 12 }}>Markdown actions · ↑↓ Enter</div>
+              <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Markdown actions · ↑↓ Enter</div>
               {(() => {
                 const actions = commentSlashActions.filter((action) => !commentSlashCommand.query || action.command.includes(commentSlashCommand.query) || action.label.toLowerCase().includes(commentSlashCommand.query)).slice(0, 10)
                 const start = actions.length ? commentSlashIndex % actions.length : 0
@@ -743,7 +743,7 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
                   return (
                     <button key={action.command} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertCommentSlashAction(action)} style={{ width: '100%', border: 'none', borderBottom: '1px solid var(--panel-border)', padding: '10px 12px', background: index === 0 ? 'color-mix(in srgb, var(--form-border-focus) 18%, transparent)' : 'transparent', color: 'var(--text-primary)', textAlign: 'left', cursor: 'pointer' }}>
                       <div style={{ fontWeight: 800 }}>/{action.command} · {action.label}</div>
-                      <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 12 }}>{action.description}</div>
+                      <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{action.description}</div>
                     </button>
                   )
                 })
@@ -752,17 +752,17 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
           ) : null}
           {commentFileCommand ? (
             <div style={{ position: 'absolute', top: commentFileCommand.top, left: commentFileCommand.left, width: 340, maxWidth: 'min(360px, calc(100% - 12px))', zIndex: 10, border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', overflow: 'hidden' }}>
-              <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 12 }}>
+              <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--panel-border)', color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>
                 {commentFileLoading ? 'Searching connected files…' : commentFileCommand.query ? `/${commentFileCommand.providerCommand} files matching “${commentFileCommand.query}”` : `Type after /${commentFileCommand.providerCommand} to search connected files`}
               </div>
-              {commentFileError ? <div style={{ padding: 10, color: 'var(--danger-text)', fontSize: 13 }}>{commentFileError}</div> : null}
+              {commentFileError ? <div style={{ padding: 10, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{commentFileError}</div> : null}
               {!commentFileError && commentFileResults.length ? commentFileResults.slice(0, 8).map((resource) => (
                 <button key={`${resource.provider}:${resource.externalId}`} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertCommentFileResource(resource)} style={{ width: '100%', border: 'none', borderBottom: '1px solid var(--panel-border)', padding: '10px 12px', background: 'transparent', color: 'var(--text-primary)', textAlign: 'left', cursor: 'pointer' }}>
                   <div style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resource.name}</div>
-                  <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 12 }}>{resource.provider.replace('_', ' ').toLowerCase()} · {resource.kind.toLowerCase()}</div>
+                  <div style={{ marginTop: 2, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{resource.provider.replace('_', ' ').toLowerCase()} · {resource.kind.toLowerCase()}</div>
                 </button>
               )) : null}
-              {!commentFileLoading && !commentFileError && !commentFileResults.length ? <div style={{ padding: 10, color: 'var(--text-muted)', fontSize: 13 }}>No files found. Make sure your account is connected in Profile → Connected storage.</div> : null}
+              {!commentFileLoading && !commentFileError && !commentFileResults.length ? <div style={{ padding: 10, color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>No files found. Make sure your account is connected in Profile → Connected storage.</div> : null}
             </div>
           ) : null}
           </div> : null}
@@ -777,8 +777,8 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
           onClick={() => setTimesheetsOpen((current) => !current)}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit' }}
         >
-          <span style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Timesheets</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{timesheetsOpen ? 'Hide' : 'Show'}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)', fontWeight: 700 }}>Timesheets</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{timesheetsOpen ? 'Hide' : 'Show'}</span>
         </button>
         {timesheetsOpen ? <TimesheetsTable lockedProjectId={projectId} lockedTaskId={taskId} lockedProjectName={project?.name} showProjectColumn={false} showCustomerColumn={false} showTaskColumn={false} showValidationColumn={false} /> : null}
       </div>

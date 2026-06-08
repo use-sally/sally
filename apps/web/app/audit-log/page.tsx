@@ -90,9 +90,9 @@ export default function AuditLogPage() {
       <section style={{ display: 'grid', gap: 16 }}>
         <div style={{ border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', borderRadius: 18, padding: 18 }}>
           <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Audit Log</div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 }}>Searchable Enterprise history for security, license, key, admin, and automation events.</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)', marginTop: 6 }}>Searchable Enterprise history for security, license, key, admin, and automation events.</div>
         </div>
-        {error ? <div style={{ color: '#fca5a5', fontSize: 13 }}>{error}</div> : null}
+        {error ? <div style={{ color: '#fca5a5', fontSize: 'var(--font-13)' }}>{error}</div> : null}
         {loading && !edition ? <div style={{ color: 'var(--text-muted)' }}>Loading audit events…</div> : !auditLogEnabled ? (
           <EnterpriseLockedCard
             title="Audit Log"
@@ -121,10 +121,10 @@ export default function AuditLogPage() {
                 <button key={event.id} type="button" onClick={() => setSelected(event)} style={{ border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', borderRadius: 14, padding: 14, display: 'grid', gap: 8, textAlign: 'left', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                     <strong style={{ color: 'var(--text-primary)' }}>{event.action}</strong>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{formatDate(event.createdAt)}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{formatDate(event.createdAt)}</span>
                   </div>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{event.summary || 'No summary'}</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>{event.summary || 'No summary'}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     <span>actor: {event.actor?.email || 'system'}</span>
                     <span>target: {event.targetType || '—'} {event.targetId || ''}</span>
                   </div>
@@ -137,7 +137,7 @@ export default function AuditLogPage() {
                   <strong style={{ color: 'var(--text-primary)' }}>Event detail</strong>
                   <button type="button" onClick={() => setSelected(null)} style={secondaryButtonStyle}>Close</button>
                 </div>
-                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto', color: 'var(--text-secondary)', fontSize: 12 }}>{JSON.stringify(selected, null, 2)}</pre>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowX: 'auto', color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>{JSON.stringify(selected, null, 2)}</pre>
               </div>
             ) : null}
           </>
@@ -150,7 +150,7 @@ export default function AuditLogPage() {
 function FilterInput({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
   return (
     <label style={{ display: 'grid', gap: 6 }}>
-      <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
       <input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} style={{ border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', color: 'var(--text-primary)', padding: '10px 12px' }} />
     </label>
   )

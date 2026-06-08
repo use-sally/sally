@@ -156,7 +156,7 @@ function ProjectMemberAvatar({ member, canEditRole, canRemove, onChangeRole, onR
       {open ? (
         <div style={memberPopover}>
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{member.name || '—'}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{member.email}</div>
+          <div style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)', marginTop: 2 }}>{member.email}</div>
           <div style={{ marginTop: 8, position: 'relative' }}>
             {canEditRole && !member.locked ? (
               <>
@@ -212,7 +212,7 @@ function ArchivedProjectTimesheets({ entries }: { entries: { id: string; userNam
           <div>{String(entry.date).slice(0, 10)}</div>
           <div>
             <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{entry.taskTitle || 'Project only'}</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{entry.userName}</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{entry.userName}</div>
           </div>
           <div style={{ fontWeight: 700 }}>{entry.minutes} min</div>
           <div><span style={pill(entry.billable ? '#ecfeff' : 'var(--form-bg)', entry.billable ? '#155e75' : 'var(--text-secondary)')}>{entry.billable ? 'Billable' : 'Non-billable'}</span></div>
@@ -581,7 +581,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                       onImageUpload={(file) => projectEditDecision.allowed ? handleProjectDescriptionImageUpload(file) : Promise.resolve(null)}
                       busy={projectHeaderSaving}
                     />
-                    {projectHeaderSaving ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 12 }}>Saving…</div> : null}
+                    {projectHeaderSaving ? <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Saving…</div> : null}
                   </div>
                 ) : (
                   <button
@@ -634,7 +634,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                     </button>
                     {clientPickerOpen && clientChangeDecision.allowed ? (
                       <div style={clientPickerMenu}>
-                        <div style={{ padding: '5px 8px 7px', color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Client</div>
+                        <div style={{ padding: '5px 8px 7px', color: 'var(--text-muted)', fontSize: 'var(--font-11)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Client</div>
                         <button
                           type="button"
                           onClick={() => void handleClientChange('')}
@@ -715,8 +715,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                     </div>
                   ) : null}
                 </div>
-                {memberActionInfo ? <div style={{ color: '#34d399', fontSize: 12 }}>{memberActionInfo}</div> : null}
-                {memberActionError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{memberActionError}</div> : null}
+                {memberActionInfo ? <div style={{ color: '#34d399', fontSize: 'var(--font-12)' }}>{memberActionInfo}</div> : null}
+                {memberActionError ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{memberActionError}</div> : null}
               </section>
 
               {projectEditDecision.visible ? (
@@ -763,7 +763,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                     <div style={labelText}>Depends on</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {project.dependencies.map((dep: { projectId: string; name: string }) => (
-                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{dep.name}</a>
+                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)', fontWeight: 600 }}>{dep.name}</a>
                       ))}
                     </div>
                   </div>
@@ -773,7 +773,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                     <div style={labelText}>Blocks</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {project.dependedOnBy.map((dep: { projectId: string; name: string }) => (
-                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{dep.name}</a>
+                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)', fontWeight: 600 }}>{dep.name}</a>
                       ))}
                     </div>
                   </div>
@@ -790,7 +790,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
               ) : (
                 <div style={panel}>
                   <div style={{ fontWeight: 750 }}>Agent automation</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>Agent automation is not available for your current project role.</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)', marginTop: 6 }}>Agent automation is not available for your current project role.</div>
                 </div>
               )
             ) : currentView === 'timesheets' ? (
@@ -840,12 +840,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                   {activity.length ? (
                     <div style={{ maxHeight: 360, overflowY: 'auto', border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }}>
                       {[...activity].reverse().map((event, index, items) => (
-                        <div key={event.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, alignItems: 'start', padding: '10px 12px', borderBottom: index === items.length - 1 ? 'none' : '1px solid var(--panel-border)', fontSize: 13, lineHeight: 1.45, minWidth: 0 }}>
+                        <div key={event.id} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12, alignItems: 'start', padding: '10px 12px', borderBottom: index === items.length - 1 ? 'none' : '1px solid var(--panel-border)', fontSize: 'var(--font-13)', lineHeight: 1.45, minWidth: 0 }}>
                           <div style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatActivityTimestamp(event.createdAt)}</div>
                           <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{formatActivityActor(event)}</div>
                           <div style={{ display: 'grid', gap: 4 }}>
                             <div style={{ color: 'var(--text-primary)' }}>{event.summary}</div>
-                            {event.details.length ? <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{event.details.join(' · ')}</div> : null}
+                            {event.details.length ? <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>{event.details.join(' · ')}</div> : null}
                           </div>
                         </div>
                       ))}
@@ -860,7 +860,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
         <div style={{ ...panel, border: '1px solid var(--panel-border)', color: 'var(--danger-text)', display: 'grid', gap: 8 }}>
           <div style={{ fontWeight: 700 }}>{"This project doesn't exist or you don't have access to it."}</div>
           {error instanceof Error && error.message && error.message !== 'Project not found' ? (
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{error.message}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>{error.message}</div>
           ) : null}
         </div>
       ) : projectLoading ? (
@@ -879,22 +879,22 @@ const projectHeaderGrid: React.CSSProperties = { display: 'grid', gridTemplateCo
 const smallActionBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 12px', fontWeight: 700, whiteSpace: 'nowrap' }
 const memberAvatarButton: React.CSSProperties = { padding: 2, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', cursor: 'pointer', borderRadius: 999, display: 'inline-grid', placeItems: 'center', width: 34, height: 34 }
 const clientAvatarButton: React.CSSProperties = { ...memberAvatarButton }
-const clientInitialAvatar: React.CSSProperties = { width: 28, height: 28, borderRadius: 999, display: 'grid', placeItems: 'center', background: 'var(--panel-bg)', border: '1px solid var(--panel-border)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 800 }
+const clientInitialAvatar: React.CSSProperties = { width: 28, height: 28, borderRadius: 999, display: 'grid', placeItems: 'center', background: 'var(--panel-bg)', border: '1px solid var(--panel-border)', color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 800 }
 const clientPickerMenu: React.CSSProperties = { position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 240, maxWidth: 'min(320px, calc(100vw - 32px))', display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)', textAlign: 'left' }
-const clientPickerOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '7px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }
-const clientOptionInitial: React.CSSProperties = { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center', flex: '0 0 auto', background: 'var(--form-bg)', border: '1px solid var(--panel-border)', color: 'var(--text-secondary)', fontSize: 10, fontWeight: 800 }
+const clientPickerOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '7px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 'var(--font-12)', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }
+const clientOptionInitial: React.CSSProperties = { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center', flex: '0 0 auto', background: 'var(--form-bg)', border: '1px solid var(--panel-border)', color: 'var(--text-secondary)', fontSize: 'var(--font-10)', fontWeight: 800 }
 const memberPopover: React.CSSProperties = { position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 20, minWidth: 220, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--form-bg)', boxShadow: 'var(--panel-shadow)', textAlign: 'left' }
-const memberRoleTrigger: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline', lineHeight: 1.2 }
-const memberRoleStatic: React.CSSProperties = { marginTop: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.2 }
+const memberRoleTrigger: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--text-secondary)', fontSize: 'var(--font-12)', cursor: 'pointer', textDecoration: 'underline', lineHeight: 1.2 }
+const memberRoleStatic: React.CSSProperties = { marginTop: 0, fontSize: 'var(--font-12)', color: 'var(--text-secondary)', lineHeight: 1.2 }
 const memberRoleMenu: React.CSSProperties = { position: 'absolute', left: 0, top: 'calc(100% + 6px)', zIndex: 21, minWidth: 140, display: 'grid', gap: 2, padding: 8, borderRadius: 12, border: '1px solid var(--panel-border)', background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
-const memberRoleOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12 }
-const memberAddButton: React.CSSProperties = { width: 34, height: 34, padding: 0, border: '1px solid var(--panel-border)', borderRadius: 999, background: 'var(--form-bg)', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-grid', placeItems: 'center', fontSize: 20, lineHeight: 1, fontWeight: 700 }
-const memberAddInput: React.CSSProperties = { ...projectInputField, width: 220, padding: '6px 10px', fontSize: 12, fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
-const memberRemoveText: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 12, cursor: 'pointer', textAlign: 'left', lineHeight: 1.2 }
-const projectHeaderNameText: React.CSSProperties = { fontSize: 30, fontWeight: 750, color: 'var(--text-primary)', lineHeight: 1.1 }
+const memberRoleOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 'var(--font-12)' }
+const memberAddButton: React.CSSProperties = { width: 34, height: 34, padding: 0, border: '1px solid var(--panel-border)', borderRadius: 999, background: 'var(--form-bg)', color: 'var(--heading-text)', cursor: 'pointer', display: 'inline-grid', placeItems: 'center', fontSize: 'var(--font-20)', lineHeight: 1, fontWeight: 700 }
+const memberAddInput: React.CSSProperties = { ...projectInputField, width: 220, padding: '6px 10px', fontSize: 'var(--font-12)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberRemoveText: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 'var(--font-12)', cursor: 'pointer', textAlign: 'left', lineHeight: 1.2 }
+const projectHeaderNameText: React.CSSProperties = { fontSize: 'var(--font-30)', fontWeight: 750, color: 'var(--heading-text)', lineHeight: 1.1 }
 const projectHeaderNameButton: React.CSSProperties = { ...projectHeaderNameText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
-const projectHeaderNameInput: React.CSSProperties = { ...projectInputField, fontSize: 30, fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
-const projectHeaderDescriptionText: React.CSSProperties = { marginTop: 8, color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.45 }
+const projectHeaderNameInput: React.CSSProperties = { ...projectInputField, fontSize: 'var(--font-30)', fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
+const projectHeaderDescriptionText: React.CSSProperties = { marginTop: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-14)', lineHeight: 1.45 }
 const projectHeaderDescriptionButton: React.CSSProperties = { ...projectHeaderDescriptionText, display: 'block', width: '100%', maxHeight: 88, overflow: 'hidden', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }
 const archiveHeaderButton: React.CSSProperties = { ...archiveTextAction }
 const deleteHeaderButton: React.CSSProperties = { ...deleteTextAction }

@@ -9,8 +9,8 @@ import { archiveTextAction, deleteTextAction, restoreTextAction } from '../../li
 
 const monoFont = `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace`
 const panelStyle = { border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', boxShadow: 'var(--panel-shadow)' }
-const inputStyle = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontFamily: monoFont, fontSize: 12 }
-const smallButtonStyle = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '8px 10px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer', fontFamily: monoFont, fontSize: 12 }
+const inputStyle = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '9px 10px', background: 'var(--form-bg)', color: 'var(--form-text)', fontFamily: monoFont, fontSize: 'var(--font-12)' }
+const smallButtonStyle = { borderRadius: 10, border: '1px solid var(--form-border)', padding: '8px 10px', fontWeight: 700, background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer', fontFamily: monoFont, fontSize: 'var(--font-12)' }
 
 async function compressTeamAvatar(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
   const imageUrl = URL.createObjectURL(file)
@@ -125,14 +125,14 @@ export default function TeamPage() {
         <section style={{ ...panelStyle, padding: 18, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ color: '#fcd34d', fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Team section</div>
-              <h1 style={{ margin: '6px 0 0', color: 'var(--text-primary)', fontSize: 22 }}>Every user in this Sally instance</h1>
-              <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5 }}>Central hub to add, archive, permanently delete, promote or demote users, and manage their workspace and project access.</p>
+              <div style={{ color: '#fcd34d', fontSize: 'var(--font-12)', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Team section</div>
+              <h1 style={{ margin: '6px 0 0', color: 'var(--heading-text)', fontSize: 'var(--font-22)' }}>Every user in this Sally instance</h1>
+              <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Central hub to add, archive, permanently delete, promote or demote users, and manage their workspace and project access.</p>
             </div>
             <button type="button" onClick={() => void refresh()} disabled={loading} style={smallButtonStyle}>{loading ? 'Loading…' : 'Refresh'}</button>
           </div>
-          {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-          {notice ? <div style={{ color: '#6ee7b7', fontSize: 13 }}>{notice}</div> : null}
+          {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+          {notice ? <div style={{ color: '#6ee7b7', fontSize: 'var(--font-13)' }}>{notice}</div> : null}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(240px, 1fr) auto', gap: 10, alignItems: 'center' }}>
             <input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Name" style={inputStyle} />
             <input value={newEmail} onChange={(event) => setNewEmail(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void handleCreate() }} placeholder="email@example.com" style={inputStyle} />
@@ -140,7 +140,7 @@ export default function TeamPage() {
           </div>
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search users" style={{ ...inputStyle, maxWidth: 420, flex: '1 1 260px' }} />
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 700 }}>
               <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
               Show archived users
             </label>
@@ -211,19 +211,19 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
         </label>
         <div style={{ minWidth: 0 }}>
           <div style={{ color: 'var(--text-primary)', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name || account.email}</div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email}</div>
-          {archived ? <div style={{ color: 'var(--danger-text)', fontSize: 11, fontWeight: 800, marginTop: 5 }}>Archived</div> : null}
-          <div style={{ color: account.twoFactorEnabled ? '#6ee7b7' : 'var(--text-muted)', fontSize: 11, fontWeight: 800, marginTop: 5 }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email}</div>
+          {archived ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-11)', fontWeight: 800, marginTop: 5 }}>Archived</div> : null}
+          <div style={{ color: account.twoFactorEnabled ? '#6ee7b7' : 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 800, marginTop: 5 }}>
             2FA {account.twoFactorEnabled ? 'enabled' : 'not enabled'}{account.twoFactorConfirmedAt ? ` · TOTP ${new Date(account.twoFactorConfirmedAt).toLocaleDateString()}` : ''}{account.passkeyCount ? ` · ${account.passkeyCount} passkey${account.passkeyCount === 1 ? '' : 's'}` : ''}
           </div>
         </div>
         {isSuperadminAccount ? (
-          <div style={{ display: 'grid', gap: 5, color: 'var(--text-muted)', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
+          <div style={{ display: 'grid', gap: 5, color: 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 800, textTransform: 'uppercase' }}>
             Platform role
-            <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, textTransform: 'none' }}>{platformRoleLabel(account.platformRole)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'none' }}>{platformRoleLabel(account.platformRole)}</div>
           </div>
         ) : (
-          <label style={{ display: 'grid', gap: 5, color: 'var(--text-muted)', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
+          <label style={{ display: 'grid', gap: 5, color: 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 800, textTransform: 'uppercase' }}>
             Platform role
             <select
               value={account.platformRole}
@@ -237,7 +237,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
             </select>
           </label>
         )}
-        <div style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700 }}>{platformRoleLabel(account.platformRole)}</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700 }}>{platformRoleLabel(account.platformRole)}</div>
         <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
           {isSuperadminAccount ? null : archived ? (
             <button
@@ -289,7 +289,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
       </div>
 
       <div style={{ display: 'grid', gap: 10 }}>
-        <div style={{ color: '#fcd34d', fontSize: 12, fontWeight: 800 }}>Workspaces & projects</div>
+        <div style={{ color: '#fcd34d', fontSize: 'var(--font-12)', fontWeight: 800 }}>Workspaces & projects</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 112px auto', gap: 8 }}>
           <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} style={inputStyle}><option value="">Add workspace</option>{availableWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select>
           <select value={workspaceRole} onChange={(event) => setWorkspaceRole(event.target.value)} style={inputStyle}><option value="MEMBER">Member</option><option value="OWNER">Owner</option></select>
@@ -307,10 +307,10 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: 10, alignItems: 'center', padding: 12 }}>
                   <button type="button" onClick={() => setExpandedWorkspaceId(expanded ? null : membership.workspaceId)} style={{ border: 0, background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', display: 'grid', gap: 3, justifyItems: 'start', padding: 0, textAlign: 'left' }}>
                     <span style={{ fontWeight: 850 }}>{expanded ? '▾' : '▸'} {membership.workspaceName}</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{membership.role.toLowerCase()} · {projectsInWorkspace.length} active project{projectsInWorkspace.length === 1 ? '' : 's'}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{membership.role.toLowerCase()} · {projectsInWorkspace.length} active project{projectsInWorkspace.length === 1 ? '' : 's'}</span>
                   </button>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700 }}>{membership.role.toLowerCase()}</span>
-                  <button type="button" onClick={() => void onAction(`rmw:${membership.id}`, () => removeTeamAccountFromWorkspace(account.id, membership.id), 'Workspace access removed.')} style={{ ...deleteTextAction, fontSize: 12 }}>Remove workspace</button>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700 }}>{membership.role.toLowerCase()}</span>
+                  <button type="button" onClick={() => void onAction(`rmw:${membership.id}`, () => removeTeamAccountFromWorkspace(account.id, membership.id), 'Workspace access removed.')} style={{ ...deleteTextAction, fontSize: 'var(--font-12)' }}>Remove workspace</button>
                 </div>
                 {expanded ? (
                   <div style={{ borderTop: '1px solid var(--panel-border)', padding: 12, display: 'grid', gap: 10 }}>
@@ -325,19 +325,19 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
                     <div style={{ display: 'grid', gap: 6 }}>
                       {projectsInWorkspace.map((project) => (
                         <div key={project.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: 8, alignItems: 'center', border: '1px solid var(--panel-border)', borderRadius: 10, padding: '8px 10px' }}>
-                          <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.projectName}</span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{project.role.toLowerCase()}</span>
-                          <button type="button" onClick={() => void onAction(`rmp:${project.id}`, () => removeTeamAccountFromProject(account.id, project.id), 'Project access removed.')} style={{ ...deleteTextAction, fontSize: 12 }}>Remove</button>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.projectName}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{project.role.toLowerCase()}</span>
+                          <button type="button" onClick={() => void onAction(`rmp:${project.id}`, () => removeTeamAccountFromProject(account.id, project.id), 'Project access removed.')} style={{ ...deleteTextAction, fontSize: 'var(--font-12)' }}>Remove</button>
                         </div>
                       ))}
-                      {projectsInWorkspace.length === 0 ? <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No active projects in this workspace.</div> : null}
+                      {projectsInWorkspace.length === 0 ? <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>No active projects in this workspace.</div> : null}
                     </div>
                   </div>
                 ) : null}
               </div>
             )
           })}
-          {visibleWorkspaceMemberships.length === 0 ? <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No workspace access yet.</div> : null}
+          {visibleWorkspaceMemberships.length === 0 ? <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>No workspace access yet.</div> : null}
         </div>
       </div>
     </article>

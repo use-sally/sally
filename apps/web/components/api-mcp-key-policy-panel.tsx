@@ -6,7 +6,7 @@ import { hasFeature, type EditionInfo } from '../lib/edition'
 import { EnterpriseLockedCard } from './enterprise-locked-card'
 
 const inputStyle = { padding: '11px 12px', borderRadius: 12, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--text-primary)' }
-const labelStyle = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 }
+const labelStyle = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }
 
 function parseDays(value: string) {
   const trimmed = value.trim()
@@ -86,7 +86,7 @@ export function ApiMcpKeyPolicyPanel() {
   if (!loading && !enabled) {
     return (
       <EnterpriseLockedCard title="API & MCP key policy" description="Control API and MCP key creation, expiry, rotation, and admin-only restrictions.">
-        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Visible in Community; editable in Enterprise.</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Visible in Community; editable in Enterprise.</div>
       </EnterpriseLockedCard>
     )
   }
@@ -94,8 +94,8 @@ export function ApiMcpKeyPolicyPanel() {
   return (
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div>
-        <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 16 }}>API & MCP key policy</h3>
-        <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>Enterprise defaults and guardrails for personal API keys and hosted MCP keys.</p>
+        <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>API & MCP key policy</h3>
+        <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>Enterprise defaults and guardrails for personal API keys and hosted MCP keys.</p>
       </div>
       {error ? <div style={{ border: '1px solid rgba(248,113,113,0.45)', background: 'rgba(248,113,113,0.08)', color: '#fecaca', borderRadius: 12, padding: 12 }}>{error}</div> : null}
       {notice ? <div style={{ border: '1px solid rgba(110,231,183,0.35)', background: 'rgba(16,185,129,0.08)', color: '#bbf7d0', borderRadius: 12, padding: 12 }}>{notice}</div> : null}
@@ -106,10 +106,10 @@ export function ApiMcpKeyPolicyPanel() {
           <label style={labelStyle}>MCP default expiry days<input inputMode="numeric" value={mcpKeyDefaultExpiresInDays} onChange={(event) => setMcpKeyDefaultExpiresInDays(event.target.value)} placeholder="No default" style={inputStyle} /></label>
           <label style={labelStyle}>MCP max expiry days<input inputMode="numeric" value={mcpKeyMaxExpiresInDays} onChange={(event) => setMcpKeyMaxExpiresInDays(event.target.value)} placeholder="No maximum" style={inputStyle} /></label>
         </div>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={requireApiKeyExpiry} onChange={(event) => setRequireApiKeyExpiry(event.target.checked)} /> Require API keys to expire</label>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={requireMcpKeyExpiry} onChange={(event) => setRequireMcpKeyExpiry(event.target.checked)} /> Require MCP keys to expire</label>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={restrictApiKeyCreationToAdmins} onChange={(event) => setRestrictApiKeyCreationToAdmins(event.target.checked)} /> Restrict API key creation to platform admins</label>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 13 }}><input type="checkbox" checked={restrictMcpKeyCreationToAdmins} onChange={(event) => setRestrictMcpKeyCreationToAdmins(event.target.checked)} /> Restrict MCP key creation to platform admins</label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}><input type="checkbox" checked={requireApiKeyExpiry} onChange={(event) => setRequireApiKeyExpiry(event.target.checked)} /> Require API keys to expire</label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}><input type="checkbox" checked={requireMcpKeyExpiry} onChange={(event) => setRequireMcpKeyExpiry(event.target.checked)} /> Require MCP keys to expire</label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}><input type="checkbox" checked={restrictApiKeyCreationToAdmins} onChange={(event) => setRestrictApiKeyCreationToAdmins(event.target.checked)} /> Restrict API key creation to platform admins</label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}><input type="checkbox" checked={restrictMcpKeyCreationToAdmins} onChange={(event) => setRestrictMcpKeyCreationToAdmins(event.target.checked)} /> Restrict MCP key creation to platform admins</label>
         <button type="submit" disabled={working || loading} style={{ justifySelf: 'start', border: '1px solid rgba(250,204,21,0.45)', background: '#fcd34d', color: '#052e16', borderRadius: 12, padding: '10px 14px', fontWeight: 750, opacity: working || loading ? 0.5 : 1 }}>Save key policy</button>
       </form>
     </section>

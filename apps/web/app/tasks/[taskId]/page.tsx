@@ -332,10 +332,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                         <span style={tagStyle()}>{resourceProviderLabel(resource.provider)}</span>
                         <span style={tagStyle()}>{resource.kind.toLowerCase()}</span>
                       </div>
-                      <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resource.webUrl}</div>
+                      <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 'var(--font-12)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resource.webUrl}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                      <a href={resource.webUrl} target="_blank" rel="noreferrer" style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 10px', fontWeight: 700, textDecoration: 'none', fontSize: 13 }}>Open</a>
+                      <a href={resource.webUrl} target="_blank" rel="noreferrer" style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '8px 10px', fontWeight: 700, textDecoration: 'none', fontSize: 'var(--font-13)' }}>Open</a>
                       {taskEditDecision.visible ? <button type="button" onClick={() => void deleteTaskResource(task.id, resource.id).then(refreshTask).catch((err) => setError(err instanceof Error ? err.message : 'Failed to remove resource'))} style={{ ...taskMiniDelete, padding: '8px 0' }}>Remove</button> : null}
                     </div>
                   </div>
@@ -362,7 +362,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                           <option value="sharepoint">SharePoint</option>
                         </select>
                         {microsoftSource === 'sharepoint' && (sharePointSiteId || sharePointDriveId) ? <button type="button" onClick={() => { setSharePointSiteId(null); setSharePointDriveId(null); setSharePointItemId(null); setResourceResults([]) }} style={{ ...taskMiniDelete, color: 'var(--text-muted)' }}>Back to sites</button> : null}
-                        {microsoftSource === 'sharepoint' ? <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{sharePointDriveId ? 'Browsing document library' : sharePointSiteId ? 'Select a document library' : 'Search SharePoint sites'}</span> : null}
+                        {microsoftSource === 'sharepoint' ? <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{sharePointDriveId ? 'Browsing document library' : sharePointSiteId ? 'Select a document library' : 'Search SharePoint sites'}</span> : null}
                       </div>
                     ) : null}
                     <input value={resourceName} onChange={(event) => setResourceName(event.target.value)} placeholder="Name, optional" disabled={!taskEditDecision.allowed || savingResource} style={projectInputField} />
@@ -379,12 +379,12 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                         {resourceResults.map((resource) => (
                           <button key={`${resource.provider}:${resource.externalId}`} type="button" onClick={() => void handleAttachProviderResource(resource)} disabled={savingResource} style={{ border: '1px solid var(--panel-border)', borderRadius: 10, padding: 10, background: 'var(--panel-bg)', color: 'var(--text-primary)', textAlign: 'left', cursor: savingResource ? 'progress' : 'pointer' }}>
                             <div style={{ fontWeight: 800 }}>{resource.name}</div>
-                            <div style={{ marginTop: 3, color: 'var(--text-muted)', fontSize: 12 }}>{resourceProviderLabel(resource.provider)} · {resourceResultLabel(resource)}</div>
+                            <div style={{ marginTop: 3, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{resourceProviderLabel(resource.provider)} · {resourceResultLabel(resource)}</div>
                           </button>
                         ))}
                       </div>
                     ) : null}
-                    <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Paste a URL manually or search connected storage. Connect providers from Profile → Connected storage.</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Paste a URL manually or search connected storage. Connect providers from Profile → Connected storage.</div>
                   </div>
                 ) : null}
               </div>
@@ -415,7 +415,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                 style={{ ...sectionLabel, marginTop: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: 0, background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit' }}
               >
                 <span>Comments{task.comments.length ? ` (${task.comments.length})` : ''}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12, textTransform: 'none', letterSpacing: 0 }}>{commentsOpen ? 'Hide' : 'Show'}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', textTransform: 'none', letterSpacing: 0 }}>{commentsOpen ? 'Hide' : 'Show'}</span>
               </button>
               {commentsOpen ? <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
                 {task.comments.length ? task.comments.map((comment) => (
@@ -424,7 +424,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                       <AssigneeAvatar name={comment.author} avatarUrl={comment.authorAvatarUrl} size={32} />
                       <div>
                         <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{comment.author}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{new Date(comment.createdAt).toLocaleString()}</div>
+                        <div style={{ fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{new Date(comment.createdAt).toLocaleString()}</div>
                       </div>
                     </div>
                     <div className="comment-markdown" style={{ marginTop: 10, color: 'var(--text-secondary)', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(comment.body) }} />
@@ -449,13 +449,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                         {mentionOptions.map((user) => (
                           <button key={user.accountId} type="button" onClick={() => insertMention(user)} style={{ width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', borderBottom: '1px solid var(--panel-border)', background: 'transparent', cursor: 'pointer' }}>
                             <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user.name || user.email}</div>
-                            <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)' }}>{user.email}</div>
+                            <div style={{ marginTop: 2, fontSize: 'var(--font-12)', color: 'var(--text-muted)' }}>{user.email}</div>
                           </button>
                         ))}
                       </div>
                     ) : null}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Use the rich Markdown editor. Type <strong>/</strong> for formatting and images.</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Use the rich Markdown editor. Type <strong>/</strong> for formatting and images.</div>
                       <button type="button" onClick={() => void handleSubmitComment()} disabled={!taskEditDecision.allowed || submittingComment || !commentBody.trim()} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }}>
                         {submittingComment ? 'Posting…' : 'Post comment'}
                       </button>
@@ -469,16 +469,16 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
               <div style={{ display: 'grid', gap: 12 }}>
                 <div><div style={sectionLabel}>Project</div><div style={{ marginTop: 4 }}><Link href={`/projects/${task.project.id}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontWeight: 700 }}>{task.project.name}</Link></div></div>
                 <div><div style={sectionLabel}>People</div><div style={{ marginTop: 6 }}><TaskPeopleAvatarStack owner={task.owner} ownerAvatarUrl={task.ownerAvatarUrl} participants={task.participants} assignee={task.assignee} assigneeAvatarUrl={task.assigneeAvatarUrl} collaborators={task.collaborators} size={36} /></div></div>
-                <div><div style={sectionLabel}>Priority</div><div style={{ marginTop: 4, fontSize: 18, color: 'var(--text-primary)' }}>{priorityStars(task.priority)}</div></div>
+                <div><div style={sectionLabel}>Priority</div><div style={{ marginTop: 4, fontSize: 'var(--font-18)', color: 'var(--text-primary)' }}>{priorityStars(task.priority)}</div></div>
                 <div><div style={sectionLabel}>Status</div><div style={{ marginTop: 4 }}><span style={tagStyle()}>{task.status}</span></div></div>
-                <div><div style={sectionLabel}>Created</div><div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-secondary)' }}>{new Date(task.createdAt).toLocaleDateString()}</div></div>
-                <div><div style={sectionLabel}>Last updated</div><div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-secondary)' }}>{new Date(task.updatedAt).toLocaleDateString()}</div></div>
+                <div><div style={sectionLabel}>Created</div><div style={{ marginTop: 4, fontSize: 'var(--font-13)', color: 'var(--text-secondary)' }}>{new Date(task.createdAt).toLocaleDateString()}</div></div>
+                <div><div style={sectionLabel}>Last updated</div><div style={{ marginTop: 4, fontSize: 'var(--font-13)', color: 'var(--text-secondary)' }}>{new Date(task.updatedAt).toLocaleDateString()}</div></div>
                 {task.dependencies?.length ? (
                   <div>
                     <div style={sectionLabel}>Depends on</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {task.dependencies.map((dep) => (
-                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
+                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
                           {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
                         </Link>
                       ))}
@@ -490,7 +490,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                     <div style={sectionLabel}>Blocks</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {task.dependedOnBy.map((dep) => (
-                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
+                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
                           {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
                         </Link>
                       ))}
@@ -538,8 +538,8 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-const sectionLabel: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }
-const taskHeaderTitleText: React.CSSProperties = { fontSize: 30, fontWeight: 750, color: 'var(--text-primary)', lineHeight: 1.1, overflowWrap: 'anywhere', wordBreak: 'break-word' }
+const sectionLabel: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }
+const taskHeaderTitleText: React.CSSProperties = { fontSize: 'var(--font-30)', fontWeight: 750, color: 'var(--heading-text)', lineHeight: 1.1, overflowWrap: 'anywhere', wordBreak: 'break-word' }
 const taskHeaderTitleButton: React.CSSProperties = { ...taskHeaderTitleText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', textAlign: 'left', cursor: 'text' }
-const taskHeaderTitleInput: React.CSSProperties = { ...projectInputField, fontSize: 30, fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
-const taskMiniDelete: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 12, cursor: 'pointer' }
+const taskHeaderTitleInput: React.CSSProperties = { ...projectInputField, fontSize: 'var(--font-30)', fontWeight: 750, lineHeight: 1.1, padding: '8px 10px' }
+const taskMiniDelete: React.CSSProperties = { padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 'var(--font-12)', cursor: 'pointer' }

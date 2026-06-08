@@ -80,7 +80,7 @@ export function CreateTaskModal({ projects, defaultProjectId, onClose, onCreated
     <div style={overlay}>
       <div style={modal}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 22, fontWeight: 750 }}>New task</div>
+          <div style={{ fontSize: 'var(--font-22)', fontWeight: 750 }}>New task</div>
           <button onClick={onClose} style={ghostBtn}>Close</button>
         </div>
         <div style={{ display: 'grid', gap: 12 }}>
@@ -142,7 +142,7 @@ const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 
 const modal: React.CSSProperties = { width: '100%', maxWidth: 560, background: 'var(--form-bg)', borderRadius: 20, padding: 22, boxShadow: '0 20px 50px rgba(15,23,42,0.18)' }
 const field: React.CSSProperties = { display: 'grid', gap: 6, fontWeight: 600, color: 'rgba(209, 250, 229, 0.72)' }
 const input: React.CSSProperties = { ...formControlMd, fontWeight: 500 }
-const hintText: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 12, fontWeight: 500 }
-const starIconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 24, cursor: 'pointer', lineHeight: 1 }
+const hintText: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 500 }
+const starIconBtn: React.CSSProperties = { background: 'transparent', border: 'none', padding: '2px', fontSize: 'var(--font-24)', cursor: 'pointer', lineHeight: 1 }
 const primaryBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--form-text)', border: 'none', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }
 const ghostBtn: React.CSSProperties = { background: 'var(--form-bg)', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 12, padding: '11px 14px', fontWeight: 700 }

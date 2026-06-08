@@ -5,8 +5,8 @@ import { useProjectTasksQuery } from '../lib/query'
 import { deleteTextAction, formControlCell, formControlSm } from '../lib/theme'
 
 const filterInputStyle: React.CSSProperties = formControlSm
-const cellInputStyle: React.CSSProperties = { ...formControlCell, margin: 0, minHeight: 32, height: 32, fontSize: 14 }
-const rowCellStyle: React.CSSProperties = { minHeight: 32, display: 'flex', alignItems: 'center', fontSize: 14 }
+const cellInputStyle: React.CSSProperties = { ...formControlCell, margin: 0, minHeight: 32, height: 32, fontSize: 'var(--font-14)' }
+const rowCellStyle: React.CSSProperties = { minHeight: 32, display: 'flex', alignItems: 'center', fontSize: 'var(--font-14)' }
 
 export type EditableField = 'date' | 'userId' | 'minutes' | 'billable' | 'taskId' | 'description'
 export type ActiveCell = { entryId: string; field: EditableField } | null
@@ -93,10 +93,10 @@ export function TimesheetsAddRow({
           <input type="date" value={newDate} onChange={(e) => onDateChange(e.target.value)} onKeyDown={handleEnterSubmit} style={filterInputStyle} disabled={!canManage} />
           <input value={newMinutes} onChange={(e) => onMinutesChange(e.target.value)} onKeyDown={handleEnterSubmit} inputMode="numeric" placeholder="Minutes" style={filterInputStyle} disabled={!canManage} />
           <input value={newDescription} onChange={(e) => onDescriptionChange(e.target.value)} onKeyDown={handleEnterSubmit} placeholder="What was done" style={filterInputStyle} disabled={!canManage} />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 40, color: 'var(--text-muted)', fontSize: 12 }}><input type="checkbox" checked={newBillable} onChange={(e) => onBillableChange(e.target.checked)} disabled={!canManage} /> Billable</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 40, color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}><input type="checkbox" checked={newBillable} onChange={(e) => onBillableChange(e.target.checked)} disabled={!canManage} /> Billable</label>
           <button type="submit" disabled={!canManage || newBusy} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--form-border)', background: 'var(--form-bg)', color: 'var(--form-text)', cursor: 'pointer' }}>{newBusy ? 'Saving…' : 'Add'}</button>
         </form>
-        {newEntryError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{newEntryError}</div> : null}
+        {newEntryError ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{newEntryError}</div> : null}
       </div>
     )
   }
@@ -135,9 +135,9 @@ export function TimesheetsAddRow({
       <input value={newDescription} onChange={(e) => onDescriptionChange(e.target.value)} onKeyDown={handleEnterSubmit} placeholder="What was done" style={filterInputStyle} disabled={!canManage} />
       {showValidationColumn ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><input type="checkbox" checked={newValidated} onChange={(e) => onValidatedChange(e.target.checked)} disabled={!canManage} /></div> : null}
       <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 40 }}><input type="checkbox" checked={newBillable} onChange={(e) => onBillableChange(e.target.checked)} disabled={!canManage} /></label>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: 'var(--text-muted)', fontSize: 12 }}>{newBusy ? 'Saving…' : 'Press Enter'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{newBusy ? 'Saving…' : 'Press Enter'}</div>
       </form>
-      {newEntryError ? <div style={{ color: 'var(--danger-text)', fontSize: 12 }}>{newEntryError}</div> : null}
+      {newEntryError ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{newEntryError}</div> : null}
     </div>
   )
 }
@@ -224,7 +224,7 @@ export function TimesheetsEntryRow({
         </div>
       ) : null}
       <div onClick={() => { if (canEditEntry) onStartEdit('description') }} style={{ ...rowCellStyle, cursor: canEditEntry ? 'pointer' : 'default' }}>
-        {activeField === 'description' && canEditEntry ? <input ref={setInputRef} value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('description')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('description') } }} style={cellInputStyle} /> : <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{entry.description || '—'}</div>}
+        {activeField === 'description' && canEditEntry ? <input ref={setInputRef} value={String(draftValue)} onChange={(e) => onDraftValueChange(e.target.value)} onBlur={() => onSave('description')} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave('description') } }} style={cellInputStyle} /> : <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-14)' }}>{entry.description || '—'}</div>}
       </div>
       {showValidationColumn ? <div style={{ ...rowCellStyle, justifyContent: 'center' }}><input type="checkbox" checked={entry.validated} onChange={(e) => onToggleValidated(e.target.checked)} disabled={!canValidateEntry} /></div> : null}
       <div onClick={() => { if (canEditEntry) onStartEdit('billable') }} style={{ ...rowCellStyle, cursor: canEditEntry ? 'pointer' : 'default', justifyContent: 'center' }}>

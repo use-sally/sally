@@ -105,23 +105,23 @@ export function TwoFactorAccountPanel() {
   return (
     <div style={{ border: '1px solid var(--panel-border)', borderRadius: 18, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Two-factor authentication</div>
-      <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{loading ? 'Loading…' : enabled ? `Enabled${confirmedAt ? ` since ${new Date(confirmedAt).toLocaleString()}` : ''}.` : 'Not enabled.'}</div>
-      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{error}</div> : null}
-      {message ? <div style={{ color: 'var(--text-primary)', fontSize: 13 }}>{message}</div> : null}
+      <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>{loading ? 'Loading…' : enabled ? `Enabled${confirmedAt ? ` since ${new Date(confirmedAt).toLocaleString()}` : ''}.` : 'Not enabled.'}</div>
+      {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
+      {message ? <div style={{ color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>{message}</div> : null}
       {!enabled && !secret ? <button type="button" disabled={working || loading} onClick={start} style={buttonStyle}>Set up authenticator app</button> : null}
       {secret ? <form onSubmit={confirm} style={{ display: 'grid', gap: 10 }}>
-        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Scan this QR code with your authenticator app, or enter the setup key manually.</div>
-        {qrCodeDataUrl ? <img src={qrCodeDataUrl} alt="QR code for authenticator app setup" width={192} height={192} style={{ borderRadius: 12, border: '1px solid var(--panel-border)', background: '#fff', padding: 10 }} /> : <div style={{ width: 192, height: 192, borderRadius: 12, border: '1px solid var(--panel-border)', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>Generating QR…</div>}
-        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Setup key: <code style={{ color: 'var(--text-primary)', wordBreak: 'break-all' }}>{secret}</code></div>
-        {otpauthUrl ? <a href={otpauthUrl} style={{ color: 'var(--task-title)', fontSize: 13 }}>Open authenticator app</a> : null}
+        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Scan this QR code with your authenticator app, or enter the setup key manually.</div>
+        {qrCodeDataUrl ? <img src={qrCodeDataUrl} alt="QR code for authenticator app setup" width={192} height={192} style={{ borderRadius: 12, border: '1px solid var(--panel-border)', background: '#fff', padding: 10 }} /> : <div style={{ width: 192, height: 192, borderRadius: 12, border: '1px solid var(--panel-border)', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>Generating QR…</div>}
+        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Setup key: <code style={{ color: 'var(--text-primary)', wordBreak: 'break-all' }}>{secret}</code></div>
+        {otpauthUrl ? <a href={otpauthUrl} style={{ color: 'var(--task-title)', fontSize: 'var(--font-13)' }}>Open authenticator app</a> : null}
         <input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" placeholder="123456" style={inputStyle} />
         <button type="submit" disabled={working} style={buttonStyle}>Confirm and enable 2FA</button>
       </form> : null}
       <div style={{ borderTop: '1px solid var(--panel-border)', paddingTop: 12, display: 'grid', gap: 10 }}>
         <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Passkeys</div>
-        <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Use a passkey, Face ID, Touch ID, or Windows Hello as a phishing-resistant second factor.</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Use a passkey, Face ID, Touch ID, or Windows Hello as a phishing-resistant second factor.</div>
         <button type="button" disabled={working || loading} onClick={() => void addPasskey()} style={buttonStyle}>Add passkey</button>
-        {passkeys.length ? <div style={{ display: 'grid', gap: 8 }}>{passkeys.map((passkey) => <div key={passkey.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', border: '1px solid var(--panel-border)', borderRadius: 12, padding: '9px 10px' }}><span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{passkey.label || 'Passkey'} · added {new Date(passkey.createdAt).toLocaleDateString()}</span><button type="button" disabled={working} onClick={() => void removePasskey(passkey.id)} style={{ ...buttonStyle, background: 'transparent', color: '#fecaca', borderColor: 'rgba(248,113,113,0.45)' }}>Remove</button></div>)}</div> : <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No passkeys yet.</div>}
+        {passkeys.length ? <div style={{ display: 'grid', gap: 8 }}>{passkeys.map((passkey) => <div key={passkey.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', border: '1px solid var(--panel-border)', borderRadius: 12, padding: '9px 10px' }}><span style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>{passkey.label || 'Passkey'} · added {new Date(passkey.createdAt).toLocaleDateString()}</span><button type="button" disabled={working} onClick={() => void removePasskey(passkey.id)} style={{ ...buttonStyle, background: 'transparent', color: '#fecaca', borderColor: 'rgba(248,113,113,0.45)' }}>Remove</button></div>)}</div> : <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>No passkeys yet.</div>}
       </div>
       {enabled ? <form onSubmit={disable} style={{ display: 'grid', gap: 10 }}>
         <input value={disableCode} onChange={(event) => setDisableCode(event.target.value)} inputMode="numeric" placeholder="2FA code to disable" style={inputStyle} />

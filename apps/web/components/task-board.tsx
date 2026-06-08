@@ -221,7 +221,7 @@ export function TaskBoard({ columns, taskBaseHref, projectId, canReorderStatuses
     <DndContext sensors={sensors} onDragOver={onDragOver} onDragEnd={(e) => { void onDragEnd(e) }}>
       <SortableContext items={movableColumns.map((column) => column.id)} strategy={horizontalListSortingStrategy}>
         <div style={{ display: 'grid', gap: 10, minWidth: 0 }}>
-          {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 13 }}>{statusError}</div> : null}
+          {statusError ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{statusError}</div> : null}
           <div data-board-scroll="true" style={{ overflowX: 'auto', overflowY: 'hidden', maxWidth: '100%', paddingBottom: 8 }}>
             <div data-board-columns="true" style={{ display: 'flex', alignItems: 'flex-start', gap: 14, width: 'max-content', minWidth: '100%' }}>
               {pinnedColumn ? <BoardColumnView key={pinnedColumn.id} column={pinnedColumn} taskBaseHref={taskBaseHref || ''} drafts={drafts} setDrafts={setDrafts} addInlineTask={addInlineTask} savingFor={savingFor} automationOverview={automationOverview} pinned canManageStatuses={canManageStatuses} statusTypeLabel={statusTypeLabel} statusSaving={statusSaving} editingStatusId={editingStatusId} statusEditDraft={statusEditDraft} setStatusEditDraft={setStatusEditDraft} openStatusEditor={openStatusEditor} saveStatusEdit={saveStatusEdit} cancelStatusEdit={cancelStatusEdit} /> : null}
@@ -270,9 +270,9 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
                 {column.title}
               </button>
             ) : <div style={statusGroupTextStyle(displayColor)}>{column.title}</div>}
-            {pinned ? <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Pinned</span> : null}
+            {pinned ? <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Pinned</span> : null}
           </div>
-          <div style={{ color: colorPair?.darkText ?? 'var(--text-muted)', fontSize: 13 }}>{column.cards.length}</div>
+          <div style={{ color: colorPair?.darkText ?? 'var(--text-muted)', fontSize: 'var(--font-13)' }}>{column.cards.length}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
           {isEditing ? (
@@ -290,7 +290,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
               <option value="REVIEW">Review</option>
               <option value="DONE">Done</option>
             </select>
-          ) : <span style={{ ...labelText, fontSize: 11 }}>{statusTypeLabel ? statusTypeLabel(column.type) : column.type}</span>}
+          ) : <span style={{ ...labelText, fontSize: 'var(--font-11)' }}>{statusTypeLabel ? statusTypeLabel(column.type) : column.type}</span>}
         </div>
         {isEditing ? (
           <StatusEditor
@@ -315,7 +315,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
           placeholder={`Add to ${column.title}`}
           style={boardInput}
         />
-        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{savingFor === column.id ? 'Adding…' : 'Press Enter to create'}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{savingFor === column.id ? 'Adding…' : 'Press Enter to create'}</div>
       </div>
     </div>
   )
@@ -338,7 +338,7 @@ function StatusEditor({ draft, setDraft, saving }: { draft: StatusEditDraft; set
           </button>
         ))}
       </div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{saving ? 'Saving…' : 'Changes save when focus leaves this editor.'}</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>{saving ? 'Saving…' : 'Changes save when focus leaves this editor.'}</div>
     </div>
   )
 }
@@ -347,7 +347,7 @@ function AddStatusColumn({ newStatus, setNewStatus, newStatusType, setNewStatusT
   return (
     <div style={addStatusColumnStyle}>
       <div style={{ display: 'grid', gap: 8 }}>
-        <div style={{ ...labelText, fontSize: 12 }}>New status</div>
+        <div style={{ ...labelText, fontSize: 'var(--font-12)' }}>New status</div>
         <input
           value={newStatus}
           onChange={(event) => setNewStatus(event.target.value)}
@@ -365,7 +365,7 @@ function AddStatusColumn({ newStatus, setNewStatus, newStatusType, setNewStatusT
           <option value="DONE">Done</option>
         </select>
         <button type="button" onClick={() => void addStatus()} disabled={statusSaving || !newStatus.trim()} style={addStatusButton}>{statusSaving ? 'Adding…' : 'Add status'}</button>
-        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Creates a new board column here.</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Creates a new board column here.</div>
       </div>
     </div>
   )
@@ -384,7 +384,7 @@ function SortableTaskCard({ card, taskBaseHref, automationOverview }: { card: Bo
           <div {...attributes} {...listeners} style={{ cursor: 'grab', minWidth: 0 }}>
             <div style={{ ...taskTitleText, fontWeight: 600, lineHeight: 1.35, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{card.number != null ? <span style={{ color: 'var(--text-muted)', fontWeight: 500, marginRight: 6 }}>#{card.number}</span> : null}{card.title}</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>
             <TaskPeopleAvatarStack owner={card.owner} ownerAvatarUrl={card.ownerAvatarUrl} participants={card.participants} assignee={card.assignee} assigneeAvatarUrl={card.assigneeAvatarUrl} collaborators={card.collaborators} size={28} maxVisible={3} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
               <span style={{ color: 'var(--text-primary)' }}>{priorityStars(card.priority)}</span>
@@ -404,13 +404,13 @@ function SortableTaskCard({ card, taskBaseHref, automationOverview }: { card: Bo
 }
 
 const boardInput: React.CSSProperties = { ...projectInputField, padding: '10px 12px' }
-const boardDragHandle: React.CSSProperties = { background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'grab', fontSize: 18, lineHeight: 1, padding: 2 }
-const boardColorOptionButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 13, fontWeight: 500 }
+const boardDragHandle: React.CSSProperties = { background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'grab', fontSize: 'var(--font-18)', lineHeight: 1, padding: 2 }
+const boardColorOptionButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 'var(--font-13)', fontWeight: 500 }
 const statusTitleButton: React.CSSProperties = { background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }
 const statusNameInputStyle: React.CSSProperties = { background: 'transparent', border: 'none', borderBottom: '1px solid currentColor', borderRadius: 0, padding: '2px 0', minWidth: 0, width: '100%', outline: 'none' }
-const statusTypeSelectStyle: React.CSSProperties = { ...projectInputField, width: 'auto', minWidth: 118, padding: '7px 28px 7px 10px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', borderRadius: 999 }
+const statusTypeSelectStyle: React.CSSProperties = { ...projectInputField, width: 'auto', minWidth: 118, padding: '7px 28px 7px 10px', fontSize: 'var(--font-11)', fontWeight: 800, textTransform: 'uppercase', borderRadius: 999 }
 const statusEditorStyle: React.CSSProperties = { display: 'grid', gap: 8, padding: 10, border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)' }
-const statusColorOptionButton: React.CSSProperties = { background: 'transparent', border: '1px solid var(--panel-border)', padding: '5px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 12, fontWeight: 700 }
+const statusColorOptionButton: React.CSSProperties = { background: 'transparent', border: '1px solid var(--panel-border)', padding: '5px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, textTransform: 'lowercase', fontSize: 'var(--font-12)', fontWeight: 700 }
 const addStatusColumnStyle: React.CSSProperties = { border: '1px dashed var(--panel-border)', borderRadius: 16, background: 'var(--form-bg)', padding: 12, flex: `0 0 ${BOARD_COLUMN_WIDTH}px`, width: BOARD_COLUMN_WIDTH, minWidth: BOARD_COLUMN_WIDTH, alignSelf: 'start', boxSizing: 'border-box' }
 const addStatusButton: React.CSSProperties = { background: '#34d399', color: '#052e16', border: 'none', borderRadius: 10, padding: '10px 12px', fontWeight: 800, cursor: 'pointer' }
 
@@ -419,7 +419,7 @@ function statusGroupTextStyle(color?: string | null): React.CSSProperties {
   return {
     color: pair?.darkText ?? 'var(--text-primary)',
     fontWeight: 800,
-    fontSize: 14,
+    fontSize: 'var(--font-14)',
     lineHeight: 1.2,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
