@@ -571,9 +571,10 @@ function statusGroupTextStyle(color?: string | null): React.CSSProperties {
 
 function statusGroupCardStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)
+  const statusColor = pair?.darkBg ?? color
   const border = pair?.darkText ?? 'var(--panel-border)'
   return {
-    background: 'var(--panel-bg)',
+    background: statusColor ? `color-mix(in srgb, ${statusColor} 55%, var(--panel-bg))` : 'var(--panel-bg)',
     border: `1px solid ${border}`,
     boxShadow: `0 10px 24px color-mix(in srgb, ${border} 12%, transparent)`,
     minWidth: 0,

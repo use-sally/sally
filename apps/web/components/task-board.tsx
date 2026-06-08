@@ -429,9 +429,10 @@ function statusGroupTextStyle(color?: string | null): React.CSSProperties {
 
 function boardColumnStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)
+  const statusColor = pair?.darkBg ?? color
   const border = pair?.darkText ?? 'var(--panel-border)'
   return {
-    background: 'var(--panel-bg)',
+    background: statusColor ? `color-mix(in srgb, ${statusColor} 55%, var(--panel-bg))` : 'var(--panel-bg)',
     border: `1px solid ${border}`,
     borderRadius: 16,
     padding: 12,
