@@ -88,8 +88,8 @@ const spacing = {
 } as const
 
 const fontSize = {
-  xs: 12,
-  sm: 14,
+  xs: 'var(--font-xs)',
+  sm: 'var(--font-md)',
 } as const
 
 export const projectInputField: CSSProperties = {
@@ -149,7 +149,7 @@ export function sortableHeaderButton(active: boolean): CSSProperties {
     border: 'none',
     textAlign: 'left',
     color: active ? 'var(--sort-header-active)' : 'var(--sort-header-inactive)',
-    fontSize: 13,
+    fontSize: 'var(--font-sm)',
     fontWeight: active ? 800 : 700,
     padding: 0,
     cursor: 'pointer',
@@ -174,7 +174,7 @@ export const metaLabelText: CSSProperties = {
 
 export const sectionLabelText: CSSProperties = {
   ...labelText,
-  fontSize: 14,
+  fontSize: 'var(--font-md)',
   fontWeight: 750,
 }
 
@@ -197,7 +197,7 @@ export const infoFlagIconButton: CSSProperties = {
   placeItems: 'center',
   cursor: 'pointer',
   color: 'var(--text-muted)',
-  fontSize: 12,
+  fontSize: 'var(--font-xs)',
   fontWeight: 700,
   lineHeight: 1,
   userSelect: 'none',
@@ -219,7 +219,7 @@ export const infoFlagPopover: CSSProperties = {
 
 export const infoFlagText: CSSProperties = {
   color: 'var(--text-muted)',
-  fontSize: 12,
+  fontSize: 'var(--font-xs)',
   fontWeight: 500,
   textTransform: 'none',
   letterSpacing: 'normal',
@@ -260,6 +260,14 @@ function varsFor(mode: ThemeMode) {
     --tag-text: ${palette.tagText};
     --tag-border: ${palette.tagBorder};
     --task-row-active-bg: ${palette.taskRowActiveBg};
+    --font-2xs: 11px;
+    --font-xs: 12px;
+    --font-sm: 13px;
+    --font-md: 14px;
+    --font-lg: 16px;
+    --font-xl: 20px;
+    --font-2xl: 24px;
+    --font-3xl: 30px;
   `
 }
 
@@ -275,6 +283,7 @@ ${varsFor('light')}
 html, body {
   background: var(--app-bg);
   color: var(--text-primary);
+  font-size: var(--font-md);
 }
 
 input, textarea, select, button {
@@ -418,7 +427,7 @@ optgroup {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--font-xs);
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
@@ -497,7 +506,7 @@ html[data-theme='light'] { --accent: #0ea5e9; }
   border: none;
   color: var(--text-primary);
   font: inherit;
-  font-size: 16px;
+  font-size: var(--font-lg);
   font-weight: 700;
   line-height: 1;
   padding: 6px 12px;
@@ -533,6 +542,6 @@ html[data-theme='light'] { --accent: #0ea5e9; }
   color: var(--text-primary);
   border-left: 1px solid var(--form-border);
   border-right: 1px solid var(--form-border);
-  font-size: 13px;
+  font-size: var(--font-sm);
 }
 `;

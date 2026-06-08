@@ -60,10 +60,29 @@ export function writeStoredTheme(value: ThemeMode) {
   window.localStorage.setItem(STORAGE_THEME, value)
 }
 
+const FONT_SIZE_BASE = {
+  '2xs': 11,
+  xs: 12,
+  sm: 13,
+  md: 14,
+  lg: 16,
+  xl: 20,
+  '2xl': 24,
+  '3xl': 30,
+} as const
+
+export function scaledFontSize(size: keyof typeof FONT_SIZE_BASE, scale: number) {
+  return `${Math.round(FONT_SIZE_BASE[size] * clampFontScale(scale) * 100) / 100}px`
+}
+
 export function applyFontScale(value: number) {
   if (typeof document === 'undefined') return
   const scale = clampFontScale(value)
-  document.documentElement.style.setProperty('zoom', String(scale))
+  const root = document.documentElement
+  root.style.removeProperty('zoom')
+  for (const size of Object.keys(FONT_SIZE_BASE) as Array<keyof typeof FONT_SIZE_BASE>) {
+    root.style.setProperty(`--font-${size}`, scaledFontSize(size, scale))
+  }
 }
 
 export function applyTheme(value: ThemeMode) {

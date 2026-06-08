@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { panel } from './app-shell'
 import { InfoFlag } from './info-flag'
 import { labelText, sectionLabelText } from '../lib/theme'
@@ -21,21 +21,6 @@ export function DesignAppearancePanel({
   onChange: (next: number) => void
 }) {
   const [hoverScale, setHoverScale] = useState<number | null>(null)
-  const [viewport, setViewport] = useState<{ width: number; height: number } | null>(null)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const measure = () => {
-      const zoom = Number((document.documentElement.style as unknown as { zoom?: string }).zoom) || 1
-      setViewport({
-        width: Math.round(window.innerWidth * zoom),
-        height: Math.round(window.innerHeight * zoom),
-      })
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
 
   const enterCustom = () => {
     if (matchPreset(fontScale) === 'custom') return
@@ -45,9 +30,6 @@ export function DesignAppearancePanel({
   }
 
   const customSelected = matchPreset(fontScale) === 'custom'
-  const activeScale = hoverScale ?? fontScale
-  const effectiveWidth = viewport ? Math.round(viewport.width / activeScale) : null
-  const effectiveHeight = viewport ? Math.round(viewport.height / activeScale) : null
 
   return (
     <div style={{ ...panel, display: 'grid', gap: 12 }}>
@@ -56,7 +38,7 @@ export function DesignAppearancePanel({
         <InfoFlag text="Font size is applied immediately and saved to your account. Theme switcher lives in the header." />
       </div>
       <div style={{ display: 'grid', gap: 10 }}>
-        <div style={{ ...labelText, fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ ...labelText, fontSize: 'var(--font-2xs)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <span>Font size</span>
           <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{Math.round(fontScale * 100)}%</span>
           {customSelected ? <span style={{ color: 'var(--text-muted)' }}>· custom</span> : null}
@@ -96,7 +78,7 @@ export function DesignAppearancePanel({
             <FontScaleStepper fontScale={fontScale} onChange={onChange} />
             <div
               style={{
-                fontSize: 11,
+                fontSize: 'var(--font-2xs)',
                 fontWeight: customSelected ? 700 : 500,
                 color: customSelected ? 'var(--text-primary)' : 'var(--text-muted)',
                 textAlign: 'center',
@@ -108,11 +90,9 @@ export function DesignAppearancePanel({
           </div>
         </div>
 
-        {effectiveWidth !== null && effectiveHeight !== null ? (
-          <div style={{ ...labelText, fontSize: 11, color: 'var(--text-muted)', minHeight: 16 }}>
-            {effectiveWidth} × {effectiveHeight}
-          </div>
-        ) : null}
+        <div style={{ ...labelText, fontSize: 'var(--font-2xs)', color: 'var(--text-muted)', minHeight: 16 }}>
+          Text size changes do not resize layout, spacing, or sections.
+        </div>
       </div>
     </div>
   )
@@ -151,7 +131,7 @@ function FontScalePresetTile({
       <FontScalePreview scale={previewScale} active={selected} />
       <div
         style={{
-          fontSize: 11,
+          fontSize: 'var(--font-2xs)',
           fontWeight: selected ? 700 : 500,
           color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
           textAlign: 'center',

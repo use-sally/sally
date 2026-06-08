@@ -7,6 +7,7 @@ import {
   clampFontScale,
   matchPreset,
   roundFontScale,
+  applyFontScale,
 } from './appearance'
 
 test('clampFontScale: clamps below min', () => {
@@ -52,4 +53,28 @@ test('matchPreset: returns custom for off-preset values', () => {
 
 test('matchPreset: tolerates floating-point noise', () => {
   assert.equal(matchPreset(0.8 + 0.0001), 'small')
+})
+
+test('applyFontScale sets font variables without browser zoom', () => {
+  const values = new Map<string, string>()
+  const removed: string[] = []
+  const previousDocument = globalThis.document
+  ;(globalThis as any).document = {
+    documentElement: {
+      style: {
+        setProperty: (name: string, value: string) => values.set(name, value),
+        removeProperty: (name: string) => { removed.push(name); values.delete(name) },
+      },
+    },
+  }
+
+  try {
+    applyFontScale(1.25)
+    assert.deepEqual(removed, ['zoom'])
+    assert.equal(values.get('--font-xs'), '15px')
+    assert.equal(values.get('--font-md'), '17.5px')
+    assert.equal(values.get('--font-3xl'), '37.5px')
+  } finally {
+    ;(globalThis as any).document = previousDocument
+  }
 })
