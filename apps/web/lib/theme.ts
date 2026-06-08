@@ -208,7 +208,7 @@ export const infoFlagIconButton: CSSProperties = {
 export const infoFlagPopover: CSSProperties = {
   position: 'absolute',
   top: 20,
-  zIndex: 20,
+  zIndex: 1000,
   width: 280,
   padding: 10,
   borderRadius: 12,
