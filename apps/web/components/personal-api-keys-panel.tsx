@@ -63,7 +63,7 @@ export function PersonalApiKeysPanel() {
     if (typeof window === 'undefined') return endpoint
     return new URL(endpoint, window.location.origin).toString()
   }, [endpoint, appBaseUrl])
-  const hostedConfig = useMemo(() => JSON.stringify({ sally: { type: 'http', url: displayEndpoint, headers: { Authorization: 'Bearer YOUR_HOSTED_MCP_KEY' } } }, null, 2), [displayEndpoint])
+  const hostedConfig = useMemo(() => mcpKeySecret ? JSON.stringify({ sally: { type: 'http', url: displayEndpoint, headers: { Authorization: `Bearer ${mcpKeySecret}` } } }, null, 2) : null, [displayEndpoint, mcpKeySecret])
   const restrictedWorkspace = memberships.find((membership) => membership.workspaceId === mcpWorkspaceId)
   const keyExpiryEnabled = hasFeature(edition, 'security.apiMcpKeyPolicy')
   const showKeyExpiryUpgrade = (kind: 'API' | 'MCP') => setError(`${kind} key validity dates are an Enterprise feature. Upgrade to Enterprise to set expiry dates for personal ${kind} keys.`)
@@ -110,15 +110,14 @@ export function PersonalApiKeysPanel() {
 
         <div style={{ display: 'grid', gap: 10 }}>
           <CopyRow label="Hosted endpoint" value={displayEndpoint} copied={copied === 'endpoint'} onCopy={() => void copyValue(displayEndpoint, 'endpoint')} />
-          <CopyBlock label="Example MCP config" value={hostedConfig} copied={copied === 'config'} onCopy={() => void copyValue(hostedConfig, 'config')} />
         </div>
 
         <div style={{ display: 'grid', gap: 8, padding: 12, borderRadius: 14, background: 'var(--form-bg)', border: '1px solid var(--panel-border)' }}>
           <div style={metaLabelText}>Recommended flow</div>
           <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>
             <li>Create a hosted MCP key.</li>
-            <li>Copy the endpoint or config snippet.</li>
-            <li>Paste the new key into your MCP client as a Bearer token.</li>
+            <li>After creation, copy the generated MCP config that already contains the new Bearer token.</li>
+            <li>Paste it into your MCP client.</li>
             <li>If you want stricter scope, create the key with a workspace restriction.</li>
           </ol>
         </div>
@@ -183,6 +182,7 @@ export function PersonalApiKeysPanel() {
           await loadKeys()
         }}
         onCopy={() => mcpKeySecret ? void copyValue(mcpKeySecret, 'mcp') : undefined}
+        secretExtra={hostedConfig ? <CopyBlock label="Example MCP config" value={hostedConfig} copied={copied === 'mcp-config'} onCopy={() => void copyValue(hostedConfig, 'mcp-config')} /> : null}
         emptyText="No hosted MCP keys yet."
         secretTitle="New hosted MCP key"
         placeholder="e.g. Claude hosted MCP, OpenClaw"
@@ -267,6 +267,7 @@ function KeySection({
   renderMeta,
   onRevoke,
   beforeForm,
+  secretExtra,
 }: {
   title: string
   description?: string
@@ -286,6 +287,7 @@ function KeySection({
   renderMeta: (key: any) => string
   onRevoke: (id: string) => Promise<void>
   beforeForm?: ReactNode
+  secretExtra?: ReactNode
 }) {
   const [revokingId, setRevokingId] = useState<string | null>(null)
   const submitIfReady = () => {
@@ -311,6 +313,7 @@ function KeySection({
           <div style={{ ...labelText, color: copied ? 'var(--success-text)' : 'var(--text-muted)' }}>
             {copied ? 'Copied' : 'Click the key to copy it'}
           </div>
+          {secretExtra}
         </div>
       ) : null}
       <form onSubmit={(event) => { event.preventDefault(); if (createLabel.trim()) void onCreate() }} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
