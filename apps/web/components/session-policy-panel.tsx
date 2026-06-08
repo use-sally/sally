@@ -85,7 +85,7 @@ export function SessionPolicyPanel() {
   return (
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div>
-        <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>Sessions</h3>
+        <h3 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-16)' }}>Sessions</h3>
         <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>Enterprise session lifetime and force-logout controls. New sessions use the configured lifetime.</p>
       </div>
       <div style={{ border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', padding: 12, color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Active sessions: <strong style={{ color: 'var(--text-primary)' }}>{activeSessions}</strong></div>

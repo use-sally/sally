@@ -103,7 +103,7 @@ export function SamlSsoPanel() {
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <div>
-          <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>SAML / SSO</h3>
+          <h3 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-16)' }}>SAML / SSO</h3>
           <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>Enterprise identity provider configuration. Login flow wiring comes next.</p>
         </div>
         <span style={{ border: '1px solid rgba(110,231,183,0.35)', borderRadius: 999, padding: '4px 8px', color: '#6ee7b7', fontSize: 'var(--font-11)', fontWeight: 700 }}>Enterprise</span>

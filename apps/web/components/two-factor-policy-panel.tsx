@@ -70,7 +70,7 @@ export function TwoFactorPolicyPanel() {
   return (
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div>
-        <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>2FA enforcement</h3>
+        <h3 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-16)' }}>2FA enforcement</h3>
         <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>Require TOTP authenticator-app 2FA by role. Users manage their authenticator setup from Profile.</p>
       </div>
       <div style={{ border: '1px solid var(--panel-border)', borderRadius: 12, background: 'var(--form-bg)', padding: 12, color: enforcementReady ? '#bbf7d0' : 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>

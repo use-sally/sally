@@ -225,6 +225,14 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
       actions={task ? <Link href={`/projects/${task.project.id}/board`} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', borderRadius: 12, padding: '11px 14px', fontWeight: 700, textDecoration: 'none' }}>Back to board</Link> : null}
     >
       <style>{`
+        .comment-markdown h1,
+        .comment-markdown h2,
+        .comment-markdown h3,
+        .comment-markdown h4,
+        .comment-markdown h5,
+        .comment-markdown h6 {
+          color: var(--task-title);
+        }
         .comment-markdown blockquote {
           margin: 10px 0;
           padding: 9px 12px;

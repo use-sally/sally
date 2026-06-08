@@ -617,6 +617,14 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
   return (
     <div data-description-saving={busy ? 'true' : 'false'} style={{ borderTop: '1px solid color-mix(in srgb, var(--form-border-focus) 24%, var(--panel-border))', background: 'color-mix(in srgb, var(--panel-bg) 94%, white)', padding: 18, display: 'grid', gap: 16, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       <style>{`
+        .comment-markdown h1,
+        .comment-markdown h2,
+        .comment-markdown h3,
+        .comment-markdown h4,
+        .comment-markdown h5,
+        .comment-markdown h6 {
+          color: var(--task-title);
+        }
         .comment-markdown blockquote {
           margin: 10px 0;
           padding: 9px 12px;

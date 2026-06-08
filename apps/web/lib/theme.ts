@@ -260,7 +260,7 @@ function varsFor(mode: ThemeMode) {
     --tag-text: ${palette.tagText};
     --tag-border: ${palette.tagBorder};
     --task-row-active-bg: ${palette.taskRowActiveBg};
-    --heading-text: ${palette.taskTitle};
+    --heading-text: ${palette.textPrimary};
     --font-10: 10px;
     --font-11: 11px;
     --font-12: 12px;

@@ -58,7 +58,7 @@ export function SystemCloudStorageCard() {
     <>
       <button type="button" onClick={() => setModalOpen(true)} aria-pressed={modalOpen} style={cardStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>Cloud storage integrations</h3>
+          <h3 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-16)' }}>Cloud storage integrations</h3>
           <span style={{ border: '1px solid rgba(250,204,21,0.32)', borderRadius: 999, padding: '4px 8px', color: 'var(--task-title)', fontSize: 'var(--font-11)', fontWeight: 700 }}>Enterprise</span>
         </div>
         <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>{description}</p>

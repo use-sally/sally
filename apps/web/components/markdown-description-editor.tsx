@@ -365,6 +365,14 @@ export function MarkdownDescriptionEditor({
           height: auto;
           border-radius: 12px;
         }
+        .markdown-description-editor .ProseMirror h1,
+        .markdown-description-editor .ProseMirror h2,
+        .markdown-description-editor .ProseMirror h3,
+        .markdown-description-editor .ProseMirror h4,
+        .markdown-description-editor .ProseMirror h5,
+        .markdown-description-editor .ProseMirror h6 {
+          color: var(--task-title);
+        }
         .markdown-description-editor .ProseMirror blockquote {
           margin: 12px 0;
           padding: 10px 14px;

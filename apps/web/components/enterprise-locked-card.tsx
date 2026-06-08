@@ -35,7 +35,7 @@ export function EnterpriseLockedCard({ title, description, children }: { title: 
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>{title}</h3>
+        <h3 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-16)' }}>{title}</h3>
         <span style={{ border: '1px solid rgba(250, 204, 21, 0.32)', borderRadius: 999, padding: '4px 8px', color: 'var(--task-title)', fontSize: 'var(--font-11)', fontWeight: 700 }}>
           Enterprise feature
         </span>

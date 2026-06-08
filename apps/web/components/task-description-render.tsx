@@ -13,6 +13,14 @@ export function TaskDescriptionRender({ description }: { description: string }) 
           height: auto;
           border-radius: 12px;
         }
+        .task-description-render h1,
+        .task-description-render h2,
+        .task-description-render h3,
+        .task-description-render h4,
+        .task-description-render h5,
+        .task-description-render h6 {
+          color: var(--task-title);
+        }
         .task-description-render blockquote {
           margin: 12px 0;
           padding: 10px 14px;

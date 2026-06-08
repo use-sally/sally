@@ -79,7 +79,7 @@ export function CloudStorageIntegrationsPanel() {
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div>
-          <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>Cloud storage integrations</h3>
+          <h3 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-16)' }}>Cloud storage integrations</h3>
           <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>Enterprise-only provider credentials for Google Drive, Microsoft 365, and Dropbox. Secrets are encrypted before storage.</p>
         </div>
         <button type="button" onClick={() => void save()} disabled={saving || loading} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', fontWeight: 700 }}>{saving ? 'Saving…' : 'Save'}</button>

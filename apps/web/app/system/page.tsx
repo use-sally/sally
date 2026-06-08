@@ -15,7 +15,7 @@ const runtimeCards = [
 function SystemCard({ title, description }: { title: string; description: string }) {
   return (
     <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 8 }}>
-      <h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 'var(--font-16)' }}>{title}</h3>
+      <h3 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'var(--font-16)' }}>{title}</h3>
       <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>{description}</p>
     </section>
   )
