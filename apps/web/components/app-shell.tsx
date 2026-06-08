@@ -10,11 +10,15 @@ import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
 import {
   applyFontScale,
+  applyStatusTint,
   applyTheme,
   clampFontScale,
+  clampStatusTint,
   readStoredFontScale,
+  readStoredStatusTint,
   readStoredTheme,
   writeStoredFontScale,
+  writeStoredStatusTint,
   writeStoredTheme,
   type ThemeMode,
 } from '../lib/appearance'
@@ -112,6 +116,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     setThemeMode(nextTheme)
     applyTheme(nextTheme)
     applyFontScale(readStoredFontScale())
+    applyStatusTint(readStoredStatusTint())
 
     const session = loadSession()
     if (session?.account?.name) setAccountName(session.account.name)
@@ -127,6 +132,11 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           const scale = clampFontScale(profile.appearanceFontScale)
           writeStoredFontScale(scale)
           applyFontScale(scale)
+        }
+        if (typeof profile.appearanceStatusTint === 'number') {
+          const tint = clampStatusTint(profile.appearanceStatusTint)
+          writeStoredStatusTint(tint)
+          applyStatusTint(tint)
         }
         if (profile.appearanceTheme === 'dark' || profile.appearanceTheme === 'light') {
           writeStoredTheme(profile.appearanceTheme)

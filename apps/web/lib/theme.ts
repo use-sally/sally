@@ -261,6 +261,7 @@ function varsFor(mode: ThemeMode) {
     --tag-border: ${palette.tagBorder};
     --task-row-active-bg: ${palette.taskRowActiveBg};
     --heading-text: ${palette.textPrimary};
+    --status-lane-bg-strength: 30%;
     --font-10: 10px;
     --font-11: 11px;
     --font-12: 12px;

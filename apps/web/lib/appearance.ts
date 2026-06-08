@@ -15,7 +15,12 @@ export const FONT_SCALE_PRESETS: ReadonlyArray<{ id: FontScalePresetId; label: s
   { id: 'large',    label: 'Large',   value: 1.25 },
 ]
 
+export const STATUS_TINT_MIN = 0
+export const STATUS_TINT_MAX = 50
+export const STATUS_TINT_DEFAULT = 30
+
 export const STORAGE_FONT_SCALE = 'appearance-font-scale'
+export const STORAGE_STATUS_TINT = 'appearance-status-tint'
 export const STORAGE_THEME = 'theme-mode'
 
 export function clampFontScale(value: unknown): number {
@@ -47,6 +52,32 @@ export function readStoredFontScale(): number {
 export function writeStoredFontScale(value: number) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(STORAGE_FONT_SCALE, String(clampFontScale(value)))
+}
+
+export function clampStatusTint(value: unknown): number {
+  let num: number
+  if (typeof value === 'number') num = value
+  else if (typeof value === 'string' && value.trim() !== '') num = Number(value)
+  else return STATUS_TINT_DEFAULT
+  if (!Number.isFinite(num)) return STATUS_TINT_DEFAULT
+  return Math.min(STATUS_TINT_MAX, Math.max(STATUS_TINT_MIN, num))
+}
+
+export function readStoredStatusTint(): number {
+  if (typeof window === 'undefined') return STATUS_TINT_DEFAULT
+  const raw = window.localStorage.getItem(STORAGE_STATUS_TINT)
+  if (!raw) return STATUS_TINT_DEFAULT
+  return clampStatusTint(Number.parseFloat(raw))
+}
+
+export function writeStoredStatusTint(value: number) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(STORAGE_STATUS_TINT, String(clampStatusTint(value)))
+}
+
+export function applyStatusTint(value: number) {
+  if (typeof document === 'undefined') return
+  document.documentElement.style.setProperty('--status-lane-bg-strength', `${clampStatusTint(value)}%`)
 }
 
 export function readStoredTheme(): ThemeMode {

@@ -186,6 +186,7 @@ model Account {
   platformRole            PlatformRole                @default(NONE)
   appearanceFontScale     Float                       @default(1.0)
   appearanceTheme         String                      @default("dark")
+  appearanceStatusTint    Float                       @default(30.0)
   archivedAt              DateTime?
   createdAt               DateTime                    @default(now())
   updatedAt               DateTime                    @updatedAt

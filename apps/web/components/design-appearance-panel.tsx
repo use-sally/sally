@@ -9,6 +9,8 @@ import {
   FONT_SCALE_MIN,
   FONT_SCALE_PRESETS,
   FONT_SCALE_STEP,
+  STATUS_TINT_MAX,
+  STATUS_TINT_MIN,
   matchPreset,
   roundFontScale,
 } from '../lib/appearance'
@@ -16,9 +18,13 @@ import {
 export function DesignAppearancePanel({
   fontScale,
   onChange,
+  statusTint,
+  onStatusTintChange,
 }: {
   fontScale: number
   onChange: (next: number) => void
+  statusTint: number
+  onStatusTintChange: (next: number) => void
 }) {
   const [hoverScale, setHoverScale] = useState<number | null>(null)
 
@@ -92,6 +98,30 @@ export function DesignAppearancePanel({
 
         <div style={{ ...labelText, fontSize: 'var(--font-2xs)', color: 'var(--text-muted)', minHeight: 16 }}>
           Text size changes do not resize layout, spacing, or sections.
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 8, paddingTop: 4, borderTop: '1px solid var(--panel-border)' }}>
+        <div style={{ ...labelText, fontSize: 'var(--font-2xs)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>Status lane background</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{Math.round(statusTint)}%</span>
+        </div>
+        <input
+          type="range"
+          min={STATUS_TINT_MIN}
+          max={STATUS_TINT_MAX}
+          step={1}
+          value={statusTint}
+          onChange={(event) => onStatusTintChange(Number(event.target.value))}
+          aria-label="Status lane background strength"
+          style={{ width: '100%' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: 'var(--font-2xs)', fontWeight: 700 }}>
+          <span>0%</span>
+          <span>50%</span>
+        </div>
+        <div style={{ ...labelText, fontSize: 'var(--font-2xs)', color: 'var(--text-muted)' }}>
+          Controls the status-color tint behind kanban columns and task status groups.
         </div>
       </div>
     </div>

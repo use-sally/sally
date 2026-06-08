@@ -10,7 +10,7 @@ import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
 import { TwoFactorAccountPanel } from '../../components/two-factor-account-panel'
 import { apiUrl, disconnectIntegration, getEdition, getIntegrationConnectUrl, getIntegrations, getNotificationPreferences, getProfile, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
 import { labelText, projectInputField, sectionLabelText } from '../../lib/theme'
-import { FONT_SCALE_DEFAULT, applyFontScale, clampFontScale, readStoredFontScale, writeStoredFontScale } from '../../lib/appearance'
+import { FONT_SCALE_DEFAULT, STATUS_TINT_DEFAULT, applyFontScale, applyStatusTint, clampFontScale, clampStatusTint, readStoredFontScale, readStoredStatusTint, writeStoredFontScale, writeStoredStatusTint } from '../../lib/appearance'
 import { DesignAppearancePanel } from '../../components/design-appearance-panel'
 
 async function compressProfileImage(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
@@ -51,7 +51,7 @@ async function compressProfileImage(file: File): Promise<{ mimeType: string; bas
 }
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<{ id: string; name: string | null; email: string; avatarUrl: string | null; pendingEmail: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN'; emailLocked?: boolean; appearanceFontScale?: number; appearanceTheme?: 'dark' | 'light' } | null>(null)
+  const [profile, setProfile] = useState<{ id: string; name: string | null; email: string; avatarUrl: string | null; pendingEmail: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN'; emailLocked?: boolean; appearanceFontScale?: number; appearanceTheme?: 'dark' | 'light'; appearanceStatusTint?: number } | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
@@ -68,6 +68,7 @@ export default function ProfilePage() {
   const [edition, setEdition] = useState<EditionInfo | null>(null)
   const [integrationBusy, setIntegrationBusy] = useState<string | null>(null)
   const [fontScale, setFontScale] = useState<number>(FONT_SCALE_DEFAULT)
+  const [statusTint, setStatusTint] = useState<number>(STATUS_TINT_DEFAULT)
 
   const load = async () => {
     setLoading(true)
@@ -87,6 +88,12 @@ export default function ProfilePage() {
       setFontScale(apiScale)
       writeStoredFontScale(apiScale)
       applyFontScale(apiScale)
+      const apiTint = typeof response.profile.appearanceStatusTint === 'number'
+        ? clampStatusTint(response.profile.appearanceStatusTint)
+        : readStoredStatusTint()
+      setStatusTint(apiTint)
+      writeStoredStatusTint(apiTint)
+      applyStatusTint(apiTint)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profile')
     } finally {
@@ -100,6 +107,14 @@ export default function ProfilePage() {
     writeStoredFontScale(clamped)
     applyFontScale(clamped)
     void updateProfile({ appearanceFontScale: clamped }).catch(() => {})
+  }
+
+  const persistStatusTint = (next: number) => {
+    const clamped = clampStatusTint(next)
+    setStatusTint(clamped)
+    writeStoredStatusTint(clamped)
+    applyStatusTint(clamped)
+    void updateProfile({ appearanceStatusTint: clamped }).catch(() => {})
   }
 
   useEffect(() => {
@@ -292,7 +307,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <DesignAppearancePanel fontScale={fontScale} onChange={persistFontScale} />
+        <DesignAppearancePanel fontScale={fontScale} onChange={persistFontScale} statusTint={statusTint} onStatusTintChange={persistStatusTint} />
 
         {edition?.availableFeatures?.includes('integrations.cloudStorage') ? (
           <div style={{ ...panel, display: 'grid', gap: 12 }}>

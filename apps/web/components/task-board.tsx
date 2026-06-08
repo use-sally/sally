@@ -431,7 +431,7 @@ function boardColumnStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)
   const border = pair?.darkText ?? 'var(--panel-border)'
   return {
-    background: pair?.darkText ? `color-mix(in srgb, ${border} 30%, var(--panel-bg))` : 'var(--panel-bg)',
+    background: pair?.darkText ? `color-mix(in srgb, ${border} var(--status-lane-bg-strength), var(--panel-bg))` : 'var(--panel-bg)',
     border: `1px solid ${border}`,
     borderRadius: 16,
     padding: 12,
