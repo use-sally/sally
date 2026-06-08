@@ -245,7 +245,7 @@ function BoardColumnView({ column, taskBaseHref, drafts, setDrafts, addInlineTas
   const colorPair = resolveStatusPair(displayColor)
 
   return (
-    <div ref={(node) => { setNodeRef(node); sortable.setNodeRef(node) }} style={{ ...boardColumnStyle(displayColor), ...statusThemeVars(displayColor), transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition, opacity: sortable.isDragging ? 0.7 : 1 }}>
+    <div className="status-lane-surface" ref={(node) => { setNodeRef(node); sortable.setNodeRef(node) }} style={{ ...boardColumnStyle(), ...statusThemeVars(displayColor), transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition, opacity: sortable.isDragging ? 0.7 : 1 }}>
       <div data-board-status-editor={isEditing ? column.id : undefined} onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void saveStatusEdit(column)
       }} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
@@ -417,7 +417,7 @@ const addStatusButton: React.CSSProperties = { background: '#34d399', color: '#0
 function statusGroupTextStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)
   return {
-    color: pair?.darkText ?? 'var(--text-primary)',
+    color: pair ? 'var(--status-lane-border)' : 'var(--text-primary)',
     fontWeight: 800,
     fontSize: 'var(--font-14)',
     lineHeight: 1.2,
@@ -427,11 +427,10 @@ function statusGroupTextStyle(color?: string | null): React.CSSProperties {
   }
 }
 
-function boardColumnStyle(color?: string | null): React.CSSProperties {
-  const pair = resolveStatusPair(color)
-  const border = pair?.darkText ?? 'var(--panel-border)'
+function boardColumnStyle(): React.CSSProperties {
+  const border = 'var(--status-lane-border, var(--panel-border))'
   return {
-    background: pair?.darkText ? `color-mix(in srgb, ${border} var(--status-lane-bg-strength), var(--panel-bg))` : 'var(--panel-bg)',
+    background: `color-mix(in srgb, ${border} var(--status-lane-bg-strength), var(--panel-bg))`,
     border: `1px solid ${border}`,
     borderRadius: 16,
     padding: 12,
@@ -445,7 +444,7 @@ function boardColumnStyle(color?: string | null): React.CSSProperties {
 
 function boardCardStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)
-  const border = pair?.darkText ?? 'var(--form-border)'
+  const border = pair ? 'var(--status-lane-border)' : 'var(--form-border)'
   return {
     border: `1px solid ${border}`,
     boxShadow: `0 10px 24px color-mix(in srgb, ${border} 16%, transparent)`,

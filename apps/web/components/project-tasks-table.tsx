@@ -12,7 +12,7 @@ import { getWorkspaceId, loadSession } from '../lib/auth'
 import { qk, useProjectQuery, useProjectTasksQuery } from '../lib/query'
 import { pill, priorityStars, tagStyle } from './app-shell'
 import { TaskPeopleAvatarStack } from './task-people-avatar-stack'
-import { canonicalStatusColor, resolveStatusPair, statusChipStyle, STATUS_COLOR_PAIRS } from '../lib/status-colors'
+import { canonicalStatusColor, resolveStatusPair, statusChipStyle, statusThemeVars, STATUS_COLOR_PAIRS } from '../lib/status-colors'
 import { EditableTaskRow } from './editable-task-row'
 import { automationBadgeStyle, getTaskAutomationBadge } from '../lib/task-automation'
 import { labelText, projectInputField, restoreTextAction, sortableHeaderButton } from '../lib/theme'
@@ -454,13 +454,15 @@ function TaskStatusGroup({ status, count, children, reorderable, pinned, sortabl
   const displayColor = editing ? statusEditDraft.color : status.color
   return (
     <section
+      className="status-lane-surface"
       data-task-status-editor={editing ? status.id : undefined}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onSaveEdit()
       }}
       ref={setNodeRef}
       style={{
-        ...statusGroupCardStyle(displayColor),
+        ...statusGroupCardStyle(),
+        ...statusThemeVars(displayColor),
         display: 'grid',
         gap: collapsed ? 0 : 12,
         padding: collapsed ? '10px 12px' : 14,
@@ -559,7 +561,7 @@ function StatusEditor({ draft, setDraft, saving }: { draft: StatusEditDraft; set
 function statusGroupTextStyle(color?: string | null): React.CSSProperties {
   const pair = resolveStatusPair(color)
   return {
-    color: pair?.darkText ?? 'var(--text-primary)',
+    color: pair ? 'var(--status-lane-border)' : 'var(--text-primary)',
     fontWeight: 800,
     fontSize: 'var(--font-14)',
     lineHeight: 1.2,
@@ -569,11 +571,10 @@ function statusGroupTextStyle(color?: string | null): React.CSSProperties {
   }
 }
 
-function statusGroupCardStyle(color?: string | null): React.CSSProperties {
-  const pair = resolveStatusPair(color)
-  const border = pair?.darkText ?? 'var(--panel-border)'
+function statusGroupCardStyle(): React.CSSProperties {
+  const border = 'var(--status-lane-border, var(--panel-border))'
   return {
-    background: pair?.darkText ? `color-mix(in srgb, ${border} var(--status-lane-bg-strength), var(--panel-bg))` : 'var(--panel-bg)',
+    background: `color-mix(in srgb, ${border} var(--status-lane-bg-strength), var(--panel-bg))`,
     border: `1px solid ${border}`,
     boxShadow: `0 10px 24px color-mix(in srgb, ${border} 12%, transparent)`,
     minWidth: 0,

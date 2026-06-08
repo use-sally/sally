@@ -472,6 +472,14 @@ html[data-theme='light'] .status-theme-surface {
   border-color: var(--status-border-light);
 }
 
+.status-lane-surface {
+  --status-lane-border: var(--status-border-dark);
+}
+
+html[data-theme='light'] .status-lane-surface {
+  --status-lane-border: var(--status-border-light);
+}
+
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--text-muted);
