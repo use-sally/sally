@@ -99,6 +99,7 @@ export type Notification = {
   body: string
   readAt: string | null
   createdAt: string
+  workspaceId: string
   projectId?: string | null
   taskId?: string | null
   actor: NotificationActor | null
@@ -299,6 +300,20 @@ export type ProjectDetail = {
   }[]
 }
 
+export type TaskConnectedResource = {
+  id: string
+  provider: 'GOOGLE_DRIVE' | 'MICROSOFT_365' | 'DROPBOX'
+  kind: 'FILE' | 'FOLDER' | 'LINK'
+  externalId: string
+  name: string
+  webUrl: string
+  mimeType: string | null
+  metadata: Record<string, unknown> | null
+  connectedByAccountId: string | null
+  connectedBy: { id: string; name: string | null; email: string } | null
+  createdAt: string
+}
+
 export type TaskDetail = {
   id: string
   number: number
@@ -321,6 +336,7 @@ export type TaskDetail = {
   dependencies: TaskDependencyRef[]
   dependedOnBy: TaskDependencyRef[]
   todos: TodoItem[]
+  connectedResources: TaskConnectedResource[]
   timesheetSummary: TimesheetSummary
   timesheets: TimesheetEntry[]
   timesheetUsers: TimesheetUser[]
@@ -334,6 +350,39 @@ export type WorkspaceInfo = {
   slug: string
   createdAt: string
   archivedAt: string | null
+}
+
+export type CloudStorageProviderConfig = {
+  provider: 'GOOGLE_DRIVE' | 'MICROSOFT_365' | 'DROPBOX'
+  slug: 'google-drive' | 'microsoft-365' | 'dropbox'
+  enabled: boolean
+  configured: boolean
+  clientId: string
+  hasClientSecret: boolean
+  tenantId: string
+  redirectUri: string
+}
+
+export type ProviderResource = {
+  provider: 'GOOGLE_DRIVE' | 'MICROSOFT_365' | 'DROPBOX'
+  externalId: string
+  name: string
+  webUrl: string
+  kind: 'FILE' | 'FOLDER' | 'LINK'
+  mimeType: string | null
+  metadata: Record<string, unknown>
+}
+
+export type AccountIntegrationStatus = {
+  provider: 'GOOGLE_DRIVE' | 'MICROSOFT_365' | 'DROPBOX'
+  slug: 'google-drive' | 'microsoft-365' | 'dropbox'
+  configured: boolean
+  connected: boolean
+  scopes: string | null
+  externalAccountId: string | null
+  externalEmail: string | null
+  expiresAt: string | null
+  updatedAt: string | null
 }
 
 export type AccountSummary = {

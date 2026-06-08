@@ -1,5 +1,6 @@
 import { AppShell } from '../../components/app-shell'
 import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
+import { SystemCloudStorageCard } from '../../components/system-cloud-storage-card'
 import { appBuildTime, appVersionLabel } from '../../lib/version'
 
 const runtimeCards = [
@@ -32,6 +33,7 @@ export default function SystemPage() {
         </section>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
           {runtimeCards.map(([title, description]) => <SystemCard key={title} title={title} description={description} />)}
+          <SystemCloudStorageCard />
           <EnterpriseLockedCard title="Backups/restore" description="Manage backup schedules, restore workflows, and retention controls from the Sally admin UI." />
         </div>
       </div>

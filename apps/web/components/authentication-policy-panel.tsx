@@ -62,7 +62,7 @@ export function AuthenticationPolicyPanel() {
   }
 
   if (!loading && !enterprise) {
-    return <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 8 }}><h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 16 }}>Authentication policy</h3><p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>Local email/password authentication uses Sally's default strong-password policy in Community. Enterprise unlocks configurable password and SSO password-login policy.</p></section>
+    return <section style={{ border: '1px solid var(--panel-border)', borderRadius: 16, background: 'var(--panel-bg)', padding: 18, display: 'grid', gap: 8 }}><h3 style={{ margin: 0, color: 'var(--task-title)', fontSize: 16 }}>Authentication policy</h3><p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>Local email/password authentication uses Sally&apos;s default strong-password policy in Community. Enterprise unlocks configurable password and SSO password-login policy.</p></section>
   }
 
   return (

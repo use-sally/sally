@@ -91,6 +91,18 @@ enum WorkItemProvider {
   GITHUB
 }
 
+enum TaskResourceProvider {
+  GOOGLE_DRIVE
+  MICROSOFT_365
+  DROPBOX
+}
+
+enum TaskResourceKind {
+  FILE
+  FOLDER
+  LINK
+}
+
 enum AgentConnectionStatus {
   ONLINE
   OFFLINE
@@ -198,8 +210,39 @@ model Account {
   twoFactorChallenges     AccountTwoFactorChallenge[]
   webAuthnCredentials     AccountWebAuthnCredential[]
   webAuthnChallenges      AccountWebAuthnChallenge[]
+  integrations            AccountIntegration[]
+  connectedTaskResources  TaskConnectedResource[]
 
   @@index([archivedAt])
+}
+
+model CloudStorageProviderConfig {
+  provider        TaskResourceProvider @id
+  enabled         Boolean              @default(false)
+  clientId        String?
+  clientSecretEnc String?
+  tenantId        String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+}
+
+model AccountIntegration {
+  id                 String               @id @default(cuid())
+  accountId          String
+  provider           TaskResourceProvider
+  accessTokenEnc     String
+  refreshTokenEnc    String?
+  expiresAt          DateTime?
+  scopes             String?
+  externalAccountId  String?
+  externalEmail      String?
+  metadata           Json?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  account            Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, provider])
+  @@index([provider])
 }
 
 model AccountTwoFactorCredential {
@@ -720,8 +763,29 @@ model Task {
   workItemRefs     WorkItemRef[]
   approvalRequests ApprovalRequest[]
   blockers         Blocker[]
+  connectedResources TaskConnectedResource[]
 
   @@unique([projectId, number])
+}
+
+model TaskConnectedResource {
+  id                   String               @id @default(cuid())
+  taskId               String
+  provider             TaskResourceProvider
+  kind                 TaskResourceKind     @default(LINK)
+  externalId           String
+  name                 String
+  webUrl               String
+  mimeType             String?
+  connectedByAccountId String?
+  metadata             Json?
+  createdAt            DateTime             @default(now())
+  task                 Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  connectedBy          Account?             @relation(fields: [connectedByAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([taskId, provider, externalId])
+  @@index([taskId])
+  @@index([connectedByAccountId])
 }
 
 model WorkItemRef {

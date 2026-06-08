@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectAutomationOverview } from '@sally/types/src'
 import { useQueryClient } from '@tanstack/react-query'
 import { AssigneeAvatar } from '../../../components/assignee-avatar'
@@ -12,7 +12,7 @@ import { ProjectAutomationPanel } from '../../../components/project-automation-p
 import { ProjectAutomationControls } from '../../../components/project-automation-controls'
 import { ProjectTasksTable } from '../../../components/project-tasks-table'
 import { TaskBoard } from '../../../components/task-board'
-import { BottomTaskDrawer } from '../../../components/bottom-task-drawer'
+import { TaskModal } from '../../../components/task-modal'
 import { SectionHeaderWithInfo } from '../../../components/info-flag'
 import { MarkdownDescriptionEditor } from '../../../components/markdown-description-editor'
 import { TaskDescriptionRender } from '../../../components/task-description-render'
@@ -248,6 +248,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const [projectHeaderSaving, setProjectHeaderSaving] = useState(false)
   const [projectDangerSaving, setProjectDangerSaving] = useState<'archive' | 'delete' | null>(null)
   const [workflowRefreshNotice, setWorkflowRefreshNotice] = useState<string | null>(null)
+  const [boardSearch, setBoardSearch] = useState('')
+  const [boardStatus, setBoardStatus] = useState('')
+  const [boardAssignee, setBoardAssignee] = useState('')
+  const [boardLabel, setBoardLabel] = useState('')
   const workflowFingerprintRef = useRef<string | null>(null)
   const clientPickerRef = useRef<HTMLDivElement | null>(null)
 
@@ -327,6 +331,45 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   }, [project?.id, project?.name, project?.description])
   const session = loadSession()
   const taskOptions = project?.recentTasks.map((task) => ({ id: task.id, title: task.title })) ?? []
+  const boardAssigneeOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    members.forEach((member) => {
+      const value = member.name || member.email
+      const label = member.name?.trim() ? `${member.name} (${member.email})` : member.email
+      if (value) map.set(value, label)
+      if (member.email) map.set(member.email, label)
+    })
+    boardColumns.flatMap((column) => column.cards).forEach((task) => {
+      const people = [task.owner, task.assignee, ...task.participants.map((participant) => participant.name), ...task.collaborators.map((collaborator) => collaborator.name)]
+      people.filter(Boolean).forEach((name) => map.set(name, map.get(name) || name))
+    })
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [boardColumns, members])
+  const filteredBoardColumns = useMemo(() => {
+    const query = boardSearch.trim().toLowerCase()
+    const labelQuery = boardLabel.trim().toLowerCase()
+    return boardColumns.map((column) => ({
+      ...column,
+      cards: column.cards.filter((task) => {
+        if (boardStatus) {
+          const negated = boardStatus.startsWith('!')
+          const value = negated ? boardStatus.slice(1) : boardStatus
+          const matchesStatus = task.status === value
+          if (negated ? matchesStatus : !matchesStatus) return false
+        }
+        if (boardAssignee) {
+          const people = [task.owner, task.assignee, ...task.participants.map((participant) => participant.name), ...task.collaborators.map((collaborator) => collaborator.name)]
+          if (!people.includes(boardAssignee)) return false
+        }
+        if (labelQuery && !task.labels.some((label) => label.toLowerCase().includes(labelQuery))) return false
+        if (query) {
+          const haystack = [task.title, task.description, task.owner, task.assignee, task.status, ...task.labels].join(' ').toLowerCase()
+          if (!haystack.includes(query)) return false
+        }
+        return true
+      }),
+    }))
+  }, [boardAssignee, boardColumns, boardLabel, boardSearch, boardStatus])
   const currentAccountId = session?.account?.id ?? null
   const currentMember = members.find((member) => member.accountId === currentAccountId)
   const currentWorkspaceRole = session?.memberships?.find((membership) => membership.workspaceId === getWorkspaceId())?.role ?? null
@@ -763,8 +806,26 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
               <>
                 <div style={panel}>
                   {currentView === 'board' ? (
-                    boardError ? <div style={{ color: 'var(--danger-text)' }}>{boardError instanceof Error ? boardError.message : 'Failed to load board'}</div> :
-                    boardColumns.length ? <TaskBoard columns={boardColumns} taskBaseHref={`/projects/${projectId}`} projectId={projectId} canReorderStatuses={workflowDecision.allowed} canManageStatuses={workflowDecision.allowed} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>
+                    boardError ? <div style={{ color: 'var(--danger-text)' }}>{boardError instanceof Error ? boardError.message : 'Failed to load board'}</div> : (
+                      <div style={{ display: 'grid', gap: 16 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 12 }}>
+                          <input value={boardSearch} onChange={(event) => setBoardSearch(event.target.value)} placeholder="Search tasks" style={projectInputField} />
+                          <select value={boardStatus} onChange={(event) => setBoardStatus(event.target.value)} style={projectInputField}>
+                            <option value="">All statuses</option>
+                            {(project?.statuses || []).flatMap((statusOption) => [
+                              <option key={statusOption.id} value={statusOption.name}>{statusOption.name}</option>,
+                              <option key={`${statusOption.id}-not`} value={`!${statusOption.name}`}>{`Not ${statusOption.name}`}</option>,
+                            ])}
+                          </select>
+                          <select value={boardAssignee} onChange={(event) => setBoardAssignee(event.target.value)} style={projectInputField}>
+                            <option value="">All people</option>
+                            {boardAssigneeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                          <input value={boardLabel} onChange={(event) => setBoardLabel(event.target.value)} placeholder="Filter by label" style={projectInputField} />
+                        </div>
+                        {boardColumns.length ? <TaskBoard columns={filteredBoardColumns} taskBaseHref={`/projects/${projectId}`} projectId={projectId} canReorderStatuses={workflowDecision.allowed} canManageStatuses={workflowDecision.allowed} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>}
+                      </div>
+                    )
                   ) : (
                     <ProjectTasksTable projectId={projectId} automationOverview={automationOverview} canManageStatuses={workflowDecision.allowed} />
                   )}
@@ -807,7 +868,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
       ) : (
         <div style={{ color: 'var(--text-muted)' }}>Select a project from the sidebar.</div>
       )}
-      {taskId && projectId ? <BottomTaskDrawer taskId={taskId} projectId={projectId} /> : null}
+      {taskId && projectId ? <TaskModal taskId={taskId} projectId={projectId} /> : null}
 
     </AppShell>
   )

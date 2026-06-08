@@ -8,8 +8,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const taskBoardSource = fs.readFileSync(path.join(__dirname, 'task-board.tsx'), 'utf8')
 const taskTableSource = fs.readFileSync(path.join(__dirname, 'project-tasks-table.tsx'), 'utf8')
 const editableTaskRowSource = fs.readFileSync(path.join(__dirname, 'editable-task-row.tsx'), 'utf8')
-const taskModalSource = fs.readFileSync(path.join(__dirname, 'bottom-task-drawer.tsx'), 'utf8')
-const inlineTaskPanelSource = fs.readFileSync(path.join(__dirname, 'inline-task-panel.tsx'), 'utf8')
+const taskModalSource = fs.readFileSync(path.join(__dirname, 'task-modal.tsx'), 'utf8')
+const taskModalBodySource = fs.readFileSync(path.join(__dirname, 'task-modal-body.tsx'), 'utf8')
 const taskModalHeaderPath = path.join(__dirname, 'task-modal-header.tsx')
 const taskModalHeaderSource = fs.existsSync(taskModalHeaderPath) ? fs.readFileSync(taskModalHeaderPath, 'utf8') : ''
 const projectPageSource = fs.readFileSync(path.join(__dirname, '..', 'app', 'projects', '[projectId]', 'page.tsx'), 'utf8')
@@ -21,7 +21,7 @@ describe('project task modal navigation', () => {
   })
 
   it('project page renders the task overlay for any island with a selected task', () => {
-    assert.match(projectPageSource, /\{taskId && projectId \? <BottomTaskDrawer/)
+    assert.match(projectPageSource, /\{taskId && projectId \? <TaskModal/)
     assert.doesNotMatch(projectPageSource, /currentView === 'board' && taskId/)
   })
 
@@ -40,8 +40,8 @@ describe('project task modal navigation', () => {
   it('tasks island uses the shared modal instead of rendering an inline task panel or jumping the background list', () => {
     assert.match(taskTableSource, /const router = useRouter\(\)/)
     assert.match(taskTableSource, /router\.replace\(next \? `\$\{pathname\}\?\$\{next\}` : pathname, \{ scroll: false \}\)/)
-    assert.doesNotMatch(taskTableSource, /<InlineTaskPanel taskId=\{task\.id\}/)
-    assert.doesNotMatch(taskTableSource, /import \{ InlineTaskPanel \}/)
+    assert.doesNotMatch(taskTableSource, /<TaskModalBody taskId=\{task\.id\}/)
+    assert.doesNotMatch(taskTableSource, /import \{ TaskModalBody \}/)
     assert.doesNotMatch(taskTableSource, /window\.scrollTo\(/)
     assert.doesNotMatch(taskTableSource, /requestAnimationFrame\(\)/)
   })
@@ -99,8 +99,8 @@ describe('project task modal navigation', () => {
     assert.match(taskBoardSource, /<TaskPeopleAvatarStack/)
     assert.match(editableTaskRowSource, /<TaskPeopleAvatarStack/)
     assert.match(taskModalHeaderSource, /<TaskPeopleField[\s\S]*compact[\s\S]*\/>/)
-    assert.doesNotMatch(inlineTaskPanelSource, /<TaskPeopleField/)
-    assert.doesNotMatch(inlineTaskPanelSource, /Click to add more people/)
+    assert.doesNotMatch(taskModalBodySource, /<TaskPeopleField/)
+    assert.doesNotMatch(taskModalBodySource, /Click to add more people/)
   })
 
   it('task modal header remains the only editable task metadata surface', () => {
@@ -109,9 +109,9 @@ describe('project task modal navigation', () => {
     assert.match(taskModalHeaderSource, /saveTask\(\{ title: next \}\)/)
     assert.match(taskModalHeaderSource, /saveTask\(\{ priority: value \}\)/)
     assert.match(taskModalHeaderSource, /saveTask\(\{ dueDate: dueDate \|\| null \}\)/)
-    assert.match(taskModalHeaderSource, /updateTaskLabels\(task\.id, parsedLabels\)/)
-    assert.match(taskModalHeaderSource, /placeholder="tags"/)
-    assert.match(taskModalHeaderSource, />tags<\/span>/)
+    assert.match(taskModalHeaderSource, /updateTaskLabels\(task\.id, labels\)/)
+    assert.match(taskModalHeaderSource, /type tag and press Enter/)
+    assert.match(taskModalHeaderSource, />tags<\/button>/)
     assert.match(taskModalHeaderSource, />due date<\/span>/)
   })
 

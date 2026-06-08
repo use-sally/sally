@@ -17,6 +17,7 @@ export const STATUS_COLOR_PAIRS: StatusColorPair[] = [
   { id: 'emerald', darkBg: '#064E3B', darkText: '#A7F3D0', lightBg: '#D1FAE5', lightText: '#047857' },
   { id: 'amber', darkBg: '#422006', darkText: '#FCD34D', lightBg: '#FEF3C7', lightText: '#B45309' },
   { id: 'orange', darkBg: '#713F12', darkText: '#FDE68A', lightBg: '#FFEDD5', lightText: '#C2410C' },
+  { id: 'red', darkBg: '#7F1D1D', darkText: '#FCA5A5', lightBg: '#FEE2E2', lightText: '#B91C1C' },
   { id: 'rose', darkBg: '#4C0519', darkText: '#FDA4AF', lightBg: '#FFE4E6', lightText: '#BE123C' },
   { id: 'zinc', darkBg: '#3F3F46', darkText: '#E4E4E7', lightBg: '#E4E4E7', lightText: '#3F3F46' },
 ]

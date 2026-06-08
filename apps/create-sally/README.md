@@ -144,6 +144,7 @@ The installer sets up:
 - local Postgres
 - HTTPS via Caddy
 - Sally web + API
+- a stable `SALLY_CREDENTIAL_ENCRYPTION_KEY` for encrypted secrets such as Enterprise cloud storage OAuth credentials and connected account tokens
 
 Best for:
 - single-server installs

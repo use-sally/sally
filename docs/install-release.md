@@ -244,7 +244,7 @@ The task experience now includes:
 - `Blocked` surfaced across task and status management UI
 - task/project responses carrying canonical `position` values so the UI can render consistent order across list and board views
 
-### Enterprise security and governance package
+### Enterprise security, governance, and cloud storage package
 
 This release line adds the Enterprise feature foundation:
 - installed license lifecycle hardening
@@ -253,7 +253,10 @@ This release line adds the Enterprise feature foundation:
 - API/MCP key expiry policy and Enterprise-gated personal key validity dates
 - automation governance policy for allowed agent runtimes, workflow start roles, approval requirements, and concurrency
 - authenticator-app TOTP 2FA with QR enrollment, login challenge handoff, user disable flow, Enterprise enforcement policy, and Team admin recovery reset
+- cloud storage provider OAuth configuration and user-connected Google Drive, Microsoft 365/SharePoint/OneDrive, and Dropbox account integrations
 - WebAuthn/passkeys as a phishing-resistant second factor, including platform authenticators such as Touch ID, Face ID, and Windows Hello on secure origins
 - Security policy modals for authentication, sessions, 2FA enforcement, API/MCP keys, audit log, SAML, and automation governance
 
-Committed migrations add the required policy, TOTP credential/challenge, and WebAuthn credential/challenge tables. `create-sally update` applies them through `prisma migrate deploy`; `create-sally doctor` starts Postgres, applies pending migrations for managed installs, and reports missing Enterprise tables if the schema is incomplete.
+Committed migrations add the required policy, TOTP credential/challenge, WebAuthn credential/challenge, account integration, cloud storage provider config, and task connected resource tables. `create-sally update` applies them through `prisma migrate deploy`; `create-sally doctor` starts Postgres, applies pending migrations for managed installs, and reports missing Enterprise tables if the schema is incomplete.
+
+Cloud storage requires a stable `SALLY_CREDENTIAL_ENCRYPTION_KEY` so OAuth client secrets and user tokens remain decryptable across restarts and updates.

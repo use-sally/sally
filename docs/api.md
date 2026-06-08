@@ -18,7 +18,7 @@ The API is not yet fully uniform.
 
 - Some endpoints return envelope objects like `{ ok: true, ... }`
 - Some list/read endpoints return raw arrays or raw objects
-- Error responses usually look like `{ ok: false, error: 'Message' }`
+- Error responses usually look like `{ ok: false, error: 'Message' }`. Permission failures may also include structured permission metadata so API/MCP agents can explain what role or key scope is missing.
 
 This is one of the strongest candidates for later OpenAPI generation + contract cleanup.
 
@@ -209,7 +209,7 @@ Resolution rules:
 
 Common failure modes:
 - `400 { ok:false, error:'workspace selector required' }`
-- `403 { ok:false, error:'Workspace access denied' }`
+- `403 { ok:false, error:'Workspace access denied', code:'PERMISSION_DENIED', permission:{...} }`
 - `404 { ok:false, error:'Workspace not found' }`
 - `403 { ok:false, error:'Workspace access denied by MCP key restriction' }`
 
@@ -224,6 +224,31 @@ curl -H "Authorization: Bearer $SALLY_API_KEY" \
 ---
 
 ## Permission model
+
+### Structured permission feedback
+
+Role/key-scope failures return a machine-readable `permission` object where possible:
+
+```json
+{
+  "ok": false,
+  "error": "Insufficient permissions",
+  "code": "PERMISSION_DENIED",
+  "permission": {
+    "scope": "workspace",
+    "required": { "workspaceRoles": ["OWNER"] },
+    "current": {
+      "platformRole": "NONE",
+      "workspaceRole": "MEMBER",
+      "effectiveWorkspaceRole": "MEMBER",
+      "mcpWorkspaceRestriction": null
+    },
+    "reason": "This action requires workspace role OWNER."
+  }
+}
+```
+
+Scopes include `platform`, `workspace`, `project`, `task`, `key`, and `policy`. MCP tools surface this JSON in the error text so an agent can tell the user whether they need platform admin, workspace owner/member, project owner/member, or a write-capable key.
 
 ### Platform role
 
@@ -673,6 +698,7 @@ Returns a raw array, newest first:
     "body": "Ship onboarding flow",
     "readAt": null,
     "createdAt": "2026-03-26T12:00:00.000Z",
+    "workspaceId": "...",
     "projectId": "...",
     "taskId": "...",
     "actor": {
@@ -684,6 +710,8 @@ Returns a raw array, newest first:
   }
 ]
 ```
+
+Notification rows include `workspaceId`. Web and email links use it as `?workspaceId=...` so task/project links resolve correctly even if the user currently has another workspace selected.
 
 ### `POST /notifications/:notificationId/read`
 Deletes the notification row if it belongs to the caller.
@@ -785,6 +813,7 @@ Behavior:
 - auto-creates default statuses:
   - `Backlog`
   - `In Progress`
+  - `Blocked`
   - `Review`
   - `Done`
 - auto-adds default project owners from:
@@ -860,7 +889,8 @@ Shape:
 
 Notes:
 - currently workspace owner gated
-- create appends a new TODO-type status with default dark color
+- create appends a new status with a semantic default color
+- `BLOCKED` defaults to red (`#7F1D1D`)
 - delete requires reassignment target when tasks still use that status
 - default first status cannot be deleted
 
@@ -942,10 +972,22 @@ Response:
 Editable fields:
 - `title`
 - `description`
+- `owner`
+- `participants`
 - `assignee`
+- `collaborators`
 - `priority`
 - `dueDate`
 - `statusId`
+- `projectId`
+
+`projectId` moves the task to another project inside the same workspace. Move behavior:
+- caller must be able to edit the current task and access the target project as project `OWNER` or `MEMBER`
+- task gets a new task number in the target project
+- target status is the supplied `statusId`, otherwise the first target status with the same semantic type as the source status, otherwise the first target project status
+- task labels are recreated/relinked in the target project by name
+- project-scoped linked rows such as timesheets, work item refs, agent jobs/runs, approvals, and blockers are repointed to the target project
+- task dependencies involving the moved task are removed because task dependencies are project-local
 
 Activity log stores field-level changes. Reassignment triggers assignment notification. Description edits can trigger cleanup of removed inline task-description images.
 
@@ -1029,6 +1071,45 @@ Behavior:
 - excludes self-mentions
 - creates `CommentMention` rows
 - creates `comment.mentioned` notifications
+
+Comment bodies are stored as Markdown-compatible plain text. The web app renders comments as sanitized Markdown and uses the same rich Markdown editor family as task descriptions.
+
+### Cloud storage integrations
+
+Enterprise-gated routes used by the web app for connected file search.
+
+#### `GET /system/cloud-storage-integrations`
+Superadmin/System route. Returns instance-level provider OAuth configuration state.
+
+#### `PATCH /system/cloud-storage-integrations`
+Superadmin/System route. Saves provider enablement and OAuth credentials. Client secrets are encrypted; deployments must set `SALLY_CREDENTIAL_ENCRYPTION_KEY`.
+
+Supported providers:
+- `GOOGLE_DRIVE`
+- `MICROSOFT_365` for OneDrive and SharePoint
+- `DROPBOX`
+
+#### `GET /integrations`
+Returns the current account's configured/connected status for each provider slug:
+- `google-drive`
+- `microsoft-365`
+- `dropbox`
+
+#### `GET /integrations/:slug/connect`
+Returns an OAuth authorization URL for the current user account. Admin provider configuration is separate from user account connection.
+
+#### `GET /integrations/:slug/callback`
+OAuth callback. Stores encrypted account tokens and redirects back to Profile with success/error query params.
+
+#### `GET /integrations/:slug/resources`
+Searches files/folders visible to the connected user account.
+
+Query params:
+- `q`
+- `source=onedrive|sharepoint` for Microsoft 365
+- `siteId`, `driveId`, `itemId` for SharePoint navigation/search scoping
+
+If the user has not connected that provider, the API returns `401`. The web editor surfaces this as a first-use Connect button.
 
 ---
 
@@ -1199,14 +1280,15 @@ The hosted MCP implementation calls back into the same HTTP API, not the databas
 
 Current hosted tools include:
 
-- workspace: `workspace.list`, `workspace.invite`
+- workspace: `workspace.list`, `workspace.create`, `workspace.invite`
 - clients: `client.list`, `client.get`, `client.create`, `client.update`, `client.delete`
 - projects: `project.list`, `project.get`, `project.create`, `project.update`, `project.archive`, `project.delete`
 - project membership: `project.member.list`, `project.member.add`, `project.member.update`, `project.member.remove`
-- project statuses: `project.status.create`, `project.status.update`, `project.status.delete`
+- project statuses: `project.status.create`, `project.status.update`, `project.status.delete`, `project.status.reorder`
 - tasks: `task.list`, `task.get`, `task.create`, `task.update`, `task.archive`, `task.delete`, `task.move`, `task.reorder`
 - task labels/todos/comments: `task.labels.update`, `task.todo.create`, `task.todo.update`, `task.todo.delete`, `task.todo.reorder`, `comment.add`
 - timesheets: `timesheet.list`, `timesheet.users`, `timesheet.report`, `timesheet.add`, `timesheet.update`, `timesheet.delete`
+- agents: `agent.list`, `agent_job.create`, `agent_job.list`, `agent_job.claim`, `agent_job.update`, `agent_run.create`, `agent_run.update`, `agent_run.heartbeat`
 
 ### Hosted MCP vs local `sally-mcp`
 

@@ -120,20 +120,80 @@ curl -X POST https://your-sally-domain.com/mcp \
   }'
 ```
 
-### Hosted MCP tool families
+### Hosted MCP tools
 
-The hosted MCP server currently exposes tool families around:
-- workspaces
-- workspace invites
-- clients
-- projects
-- project members
-- project statuses
-- tasks
-- task labels, todos, comments
-- timesheets
+The hosted MCP server currently exposes these tools:
 
-Use [`docs/api.md`](./api.md) for the implementation-backed list.
+Workspace/client/project:
+- `workspace.list`
+- `workspace.create` — platform admin only
+- `workspace.invite`
+- `client.list`
+- `client.get`
+- `client.create`
+- `client.update`
+- `client.delete`
+- `project.list`
+- `project.get`
+- `project.create`
+- `project.update`
+- `project.archive`
+- `project.delete`
+- `project.member.list`
+- `project.member.add`
+- `project.member.update`
+- `project.member.remove`
+
+Statuses:
+- `project.status.create`
+- `project.status.update`
+- `project.status.delete`
+- `project.status.reorder`
+
+Tasks:
+- `task.list`
+- `task.get`
+- `task.create`
+- `task.update`
+- `task.archive`
+- `task.delete`
+- `task.move`
+- `task.reorder`
+- `task.labels.update`
+- `task.todo.create`
+- `task.todo.update`
+- `task.todo.delete`
+- `task.todo.reorder`
+- `comment.add`
+
+Timesheets:
+- `timesheet.list`
+- `timesheet.report`
+- `timesheet.users`
+- `timesheet.add`
+- `timesheet.update`
+- `timesheet.delete`
+
+Agents:
+- `agent.list`
+- `agent_job.create`
+- `agent_job.list`
+- `agent_job.claim`
+- `agent_job.update`
+- `agent_run.create`
+- `agent_run.update`
+- `agent_run.heartbeat`
+
+Notable task behavior:
+- `task.create` accepts `owner`, `participants`, `assignee`, `collaborators`, `description`, `priority`, `status`, `statusId`, `dueDate`, `labels`, and `todos`.
+- `task.update` accepts the editable task fields above. Supplying `projectId` moves the task to another project in the same workspace, using the API's project-move rules for task number, status mapping, label relinking, related records, and dependency cleanup.
+- `task.move` moves by target status name. Use `task.update` with `projectId` for cross-project moves.
+
+Current non-MCP surfaces:
+- Enterprise cloud storage provider configuration and user OAuth connection/search are HTTP API + web-editor features. They are documented in [`docs/api.md`](./api.md), but are not currently exposed as hosted MCP tools.
+- Notification preferences and notification list/read tools exist in the local stdio MCP wrapper, but not in the hosted `/mcp` tool list.
+
+Use [`docs/api.md`](./api.md) for endpoint behavior and exact API-side validation rules.
 
 ### Hosted MCP gotchas
 
@@ -225,7 +285,10 @@ The tool lists overlap, but they are not guaranteed to be identical at every mom
 
 MCP access is only as broad as the Sally user behind the key.
 
+When a role or key scope blocks an action, the API returns structured permission feedback and MCP tools surface that JSON in the tool error. Agents should use `permission.scope`, `permission.required`, `permission.current`, and `permission.reason` to explain the missing permission instead of guessing.
+
 That means:
+- platform-admin-only actions, such as `workspace.create`, remain platform-admin-only
 - owner-only actions remain owner-only
 - workspace restrictions still apply
 - project restrictions still apply

@@ -12,6 +12,7 @@ export type FeatureKey =
   | 'automation.multipleAgents'
   | 'automation.workflowPolicies'
   | 'integrations.webhooks'
+  | 'integrations.cloudStorage'
   | 'system.backupsUi'
   | 'reports.crossWorkspace'
 
@@ -65,6 +66,7 @@ export const ENTERPRISE_FEATURES = [
   'automation.multipleAgents',
   'automation.workflowPolicies',
   'integrations.webhooks',
+  'integrations.cloudStorage',
   'system.backupsUi',
   'reports.crossWorkspace',
 ] as const satisfies readonly FeatureKey[]

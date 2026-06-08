@@ -293,6 +293,7 @@ DATABASE_URL=${databaseUrl}
 
 SESSION_SECRET=${args.sessionSecret}
 APP_ENCRYPTION_KEY=${args.appEncryptionKey}
+SALLY_CREDENTIAL_ENCRYPTION_KEY=${args.appEncryptionKey}
 
 SUPERADMIN_EMAIL=${args.superadminEmail}
 SUPERADMIN_NAME=${args.superadminName}

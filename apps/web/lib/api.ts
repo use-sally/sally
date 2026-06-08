@@ -1,5 +1,5 @@
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
-import type { AuditLogEvent, BoardColumn, Client, ClientDetail, EditionInfo, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
+import type { AccountIntegrationStatus, AuditLogEvent, BoardColumn, Client, ClientDetail, CloudStorageProviderConfig, EditionInfo, Health, McpKey, MentionableUser, Notification, NotificationPreference, Project, ProjectActivityEvent, ProjectAutomationOverview, ProjectDetail, ProjectMember, ProjectsSummary, ProjectTaskListItem, ProviderResource, TaskConnectedResource, TaskDetail, TimesheetEntry, TimesheetReport, TimesheetSummary, TimesheetUser, WorkspaceInfo, WorkspaceMember } from '@sally/types/src'
 import { getSessionToken, getWorkspaceId } from './auth'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api'
@@ -185,6 +185,24 @@ export function getProjectTasks(projectId: string, filters?: { status?: string; 
   return getJson(`/projects/${projectId}/tasks${q ? `?${q}` : ''}`)
 }
 export function getTask(taskId: string): Promise<TaskDetail> { return getJson(`/tasks/${taskId}`) }
+export function getCloudStorageProviderConfig(): Promise<{ providers: CloudStorageProviderConfig[] }> { return getJson('/system/cloud-storage-integrations') }
+export function updateCloudStorageProviderConfig(providers: Array<{ provider: CloudStorageProviderConfig['provider']; enabled: boolean; clientId?: string; clientSecret?: string; tenantId?: string }>): Promise<{ ok: boolean }> { return getJson('/system/cloud-storage-integrations', { method: 'PATCH', body: JSON.stringify({ providers }) }) }
+export function getIntegrations(): Promise<AccountIntegrationStatus[]> { return getJson('/integrations') }
+export function getIntegrationStatus(slug: AccountIntegrationStatus['slug']): Promise<AccountIntegrationStatus> { return getJson(`/integrations/${slug}/status`) }
+export function getIntegrationConnectUrl(slug: AccountIntegrationStatus['slug']): Promise<{ ok: boolean; url: string }> { return getJson(`/integrations/${slug}/connect`) }
+export function disconnectIntegration(slug: AccountIntegrationStatus['slug']): Promise<{ ok: boolean }> { return getJson(`/integrations/${slug}/disconnect`, { method: 'POST', body: JSON.stringify({}) }) }
+export function searchIntegrationResources(slug: AccountIntegrationStatus['slug'], q?: string, options?: { source?: string; siteId?: string; driveId?: string; itemId?: string }): Promise<{ items: ProviderResource[] }> {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (options?.source) params.set('source', options.source)
+  if (options?.siteId) params.set('siteId', options.siteId)
+  if (options?.driveId) params.set('driveId', options.driveId)
+  if (options?.itemId) params.set('itemId', options.itemId)
+  const query = params.toString()
+  return getJson(`/integrations/${slug}/resources${query ? `?${query}` : ''}`)
+}
+export function createTaskResource(taskId: string, payload: { provider: TaskConnectedResource['provider']; kind?: TaskConnectedResource['kind']; externalId?: string; name?: string; webUrl: string; mimeType?: string | null; metadata?: Record<string, unknown> }): Promise<{ ok: boolean; resource: TaskConnectedResource }> { return getJson(`/tasks/${taskId}/resources`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function deleteTaskResource(taskId: string, resourceId: string): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/resources/${resourceId}`, { method: 'DELETE' }) }
 export function getBoard(projectId?: string): Promise<BoardColumn[]> {
   const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
   return getJson(`/board${q}`)
@@ -218,7 +236,7 @@ export function createProject(payload: { name: string; description?: string; cli
 export function moveTask(taskId: string, targetStatus: string): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/move`, { method: 'POST', body: JSON.stringify({ targetStatus }) }) }
 export function reorderTask(payload: { taskId: string; targetStatusId: string; orderedTaskIds: string[] }): Promise<{ ok: boolean }> { return getJson('/tasks/reorder', { method: 'POST', body: JSON.stringify(payload) }) }
 export function reorderProjectTasks(projectId: string, orderedTaskIds: string[]): Promise<{ ok: boolean }> { return getJson(`/projects/${projectId}/tasks/reorder`, { method: 'POST', body: JSON.stringify({ orderedTaskIds }) }) }
-export function updateTask(taskId: string, payload: { title?: string; description?: string; owner?: string; participants?: { participant: string; role: 'OWNER' | 'PARTICIPANT'; position: number }[]; assignee?: string; collaborators?: string[]; priority?: 'P1'|'P2'|'P3'; dueDate?: string | null; statusId?: string }): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function updateTask(taskId: string, payload: { title?: string; description?: string; owner?: string; participants?: { participant: string; role: 'OWNER' | 'PARTICIPANT'; position: number }[]; assignee?: string; collaborators?: string[]; priority?: 'P1'|'P2'|'P3'; dueDate?: string | null; statusId?: string; projectId?: string }): Promise<{ ok: boolean; projectId?: string; statusId?: string }> { return getJson(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function archiveTask(taskId: string, archived = true): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}/archive`, { method: 'POST', body: JSON.stringify({ archived }) }) }
 export function deleteTask(taskId: string): Promise<{ ok: boolean }> { return getJson(`/tasks/${taskId}`, { method: 'DELETE' }) }
 export function createTask(payload: { projectId: string; title: string; owner?: string; participants?: { participant: string; role: 'OWNER' | 'PARTICIPANT'; position: number }[]; assignee?: string; collaborators?: string[]; description?: string; priority?: 'P1'|'P2'|'P3'; status?: string; statusId?: string; dueDate?: string | null; labels?: string[]; todos?: { text: string }[] }): Promise<{ ok: boolean; taskId: string }> { return getJson('/tasks', { method: 'POST', body: JSON.stringify(payload) }) }

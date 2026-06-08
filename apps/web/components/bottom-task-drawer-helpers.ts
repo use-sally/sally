@@ -1,1 +1,0 @@
-export const BOTTOM_TASK_DRAWER_MAX_HEIGHT = '92vh'

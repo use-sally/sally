@@ -118,6 +118,7 @@ SUPERADMIN_EMAIL=admin@example.com
 SUPERADMIN_NAME=Local Admin
 BOOTSTRAP_SUPERADMIN_PASSWORD=ChangeMe123!
 SUPERADMIN_DISABLE_PASSWORD_RESET=true
+SALLY_CREDENTIAL_ENCRYPTION_KEY=local-dev-32-byte-minimum-secret
 API_TOKEN=
 MAIL_FROM=
 SMTP_URL=
@@ -127,6 +128,7 @@ Notes:
 
 - `BOOTSTRAP_SUPERADMIN_PASSWORD` is used only by the bootstrap command to create the initial local superadmin password.
 - Keep this local password private, but do not reuse a real password here.
+- `SALLY_CREDENTIAL_ENCRYPTION_KEY` is required for encrypted secrets such as Enterprise cloud storage OAuth client secrets and connected account tokens. Use a strong stable secret for any persistent environment; the value above is local-only.
 - Mail is optional for normal local development. With `MAIL_FROM` and `SMTP_URL` blank, invite/reset email sending will report that mail is not configured.
 
 Create the web env file:

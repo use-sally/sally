@@ -162,6 +162,23 @@ New Enterprise schema areas include:
 
 Enterprise features remain visible in Community where useful, but editing/enforcement is gated by the installed Enterprise license.
 
+### Enterprise cloud storage integrations
+This release line also adds Enterprise cloud storage integration tables and API/UI surfaces:
+- account integrations for user-connected Google Drive, Microsoft 365/SharePoint/OneDrive, and Dropbox accounts
+- instance-level provider OAuth configuration in System
+- task connected resource records
+- editor slash commands for provider file search and link insertion
+
+Set a stable `SALLY_CREDENTIAL_ENCRYPTION_KEY` before enabling provider credentials. The key is required to encrypt OAuth client secrets and connected user account tokens.
+
+### Task modal and task workflow updates
+- the old drawer-style task UI has been refactored into `task-modal.tsx`, `task-modal-header.tsx`, and `task-modal-body.tsx`
+- task comments now use the rich Markdown editor and render sanitized Markdown
+- task modal actions support Archive, Move, and Delete at the bottom of the modal
+- moving a task to another project in the same workspace is supported through `PATCH /tasks/:taskId` with `projectId`
+- notification payloads now include `workspaceId`, and web/email task links preserve workspace context
+- Blocked statuses default to the red status color
+
 Two-factor authentication notes:
 - users enroll authenticator-app TOTP from Profile using a QR code or manual setup key
 - users can also add WebAuthn/passkeys from Profile and use Touch ID, Face ID, or Windows Hello as a phishing-resistant second factor on supported secure origins

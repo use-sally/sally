@@ -65,8 +65,9 @@ Sally is especially suited to teams that:
 - create and update projects
 - archive and delete projects
 - inline project name/description editing in the web app
-- default project statuses: Backlog, In Progress, Review, Done
+- default project statuses: Backlog, In Progress, Blocked, Review, Done
 - custom project statuses with color and task counts
+- Blocked uses the default red status color
 - project activity log
 - project members with roles
 - add existing workspace members to projects or invite by email from the project surface
@@ -75,14 +76,17 @@ Sally is especially suited to teams that:
 ### Tasks
 - create, update, archive, delete
 - move between statuses
+- move to another project in the same workspace from the task modal
 - reorder within columns
-- inline title and description editing in the web app
+- centered task modal with editable header metadata and compact task body
+- rich Markdown task descriptions with slash commands, quote/code styling, image upload, and connected file search
 - priorities
-- due dates
-- labels
+- due dates with native date picker
+- labels with type-to-filter picker and create-on-enter
 - todos/checklists
 - comments and mentions
-- inline image upload for task descriptions
+- comments use the same rich Markdown editor surface as descriptions and render Markdown after posting
+- inline image upload for task descriptions and comments
 - permission-aware assignee, comment, and edit controls
 
 ### Clients
@@ -94,6 +98,13 @@ Sally is especially suited to teams that:
 - comment mention notifications
 - in-app notification preferences
 - notification email delivery processing
+- notification links carry workspace context so task/project links work even when the user currently has another workspace selected
+
+### Enterprise cloud storage integrations
+- Enterprise-gated Google Drive, Microsoft 365/SharePoint/OneDrive, and Dropbox file search
+- instance admins configure provider OAuth credentials once from System
+- each user connects their own provider account from Profile or on first use in the rich editor file picker
+- task descriptions and comments support `/googledrive`, `/gdrive`, `/sharepoint`, `/onedrive`, and `/dropbox` slash commands to search accessible files and insert links
 
 ### Timesheets
 - project and task timesheets

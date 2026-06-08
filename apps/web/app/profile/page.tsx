@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import type { AccountIntegrationStatus, EditionInfo } from '@sally/types/src'
 import { AppShell, panel } from '../../components/app-shell'
+import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
 import { InfoFlag } from '../../components/info-flag'
 import { PersonalApiKeysPanel } from '../../components/personal-api-keys-panel'
 import { TwoFactorAccountPanel } from '../../components/two-factor-account-panel'
-import { apiUrl, getNotificationPreferences, getProfile, logout, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
+import { apiUrl, disconnectIntegration, getEdition, getIntegrationConnectUrl, getIntegrations, getNotificationPreferences, getProfile, updateNotificationPreferences, updateProfile, uploadProfileImage } from '../../lib/api'
 import { labelText, projectInputField, sectionLabelText } from '../../lib/theme'
 import { FONT_SCALE_DEFAULT, applyFontScale, clampFontScale, readStoredFontScale, writeStoredFontScale } from '../../lib/appearance'
 import { DesignAppearancePanel } from '../../components/design-appearance-panel'
@@ -62,17 +64,23 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [notificationPreferences, setNotificationPreferences] = useState<{ eventType: string; inAppEnabled: boolean; emailEnabled: boolean }[]>([])
+  const [integrations, setIntegrations] = useState<AccountIntegrationStatus[]>([])
+  const [edition, setEdition] = useState<EditionInfo | null>(null)
+  const [integrationBusy, setIntegrationBusy] = useState<string | null>(null)
   const [fontScale, setFontScale] = useState<number>(FONT_SCALE_DEFAULT)
 
   const load = async () => {
     setLoading(true)
     try {
-      const [response, prefs] = await Promise.all([getProfile(), getNotificationPreferences()])
+      const [response, prefs, editionInfo] = await Promise.all([getProfile(), getNotificationPreferences(), getEdition().catch(() => null)])
       setProfile(response.profile)
       setName(response.profile.name || '')
       setEmail(response.profile.email)
       setAvatarUrl(response.profile.avatarUrl || '')
       setNotificationPreferences(prefs)
+      setEdition(editionInfo)
+      const cloudStorageEnabled = Boolean(editionInfo?.availableFeatures?.includes('integrations.cloudStorage'))
+      setIntegrations(cloudStorageEnabled ? await getIntegrations().catch(() => []) : [])
       const apiScale = typeof response.profile.appearanceFontScale === 'number'
         ? clampFontScale(response.profile.appearanceFontScale)
         : readStoredFontScale()
@@ -162,6 +170,34 @@ export default function ProfilePage() {
       setError(err instanceof Error ? err.message : 'Failed to request email change approval')
     } finally {
       setSendingEmailApproval(false)
+    }
+  }
+
+  const handleConnectIntegration = async (slug: AccountIntegrationStatus['slug']) => {
+    setIntegrationBusy(slug)
+    setError(null)
+    setInfo(null)
+    try {
+      const response = await getIntegrationConnectUrl(slug)
+      window.location.href = response.url
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start integration connection')
+      setIntegrationBusy(null)
+    }
+  }
+
+  const handleDisconnectIntegration = async (slug: AccountIntegrationStatus['slug']) => {
+    setIntegrationBusy(slug)
+    setError(null)
+    setInfo(null)
+    try {
+      await disconnectIntegration(slug)
+      setIntegrations(await getIntegrations())
+      setInfo('Integration disconnected.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect integration')
+    } finally {
+      setIntegrationBusy(null)
     }
   }
 
@@ -258,6 +294,36 @@ export default function ProfilePage() {
 
         <DesignAppearancePanel fontScale={fontScale} onChange={persistFontScale} />
 
+        {edition?.availableFeatures?.includes('integrations.cloudStorage') ? (
+          <div style={{ ...panel, display: 'grid', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={sectionLabelText}>Connected storage</div>
+              <InfoFlag text="Connect cloud storage accounts so tasks can reference Google Drive, Microsoft 365, and Dropbox resources. Files stay in the original provider." />
+            </div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {integrations.map((integration) => (
+                <div key={integration.slug} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '12px 14px', border: '1px solid var(--panel-border)', borderRadius: 14, background: 'var(--form-bg)' }}>
+                  <div>
+                    <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{integrationLabel(integration.provider)}</div>
+                    <div style={{ ...labelText, marginTop: 4 }}>
+                      {!integration.configured ? 'OAuth is not configured on this Sally instance.' : integration.connected ? `Connected${integration.externalEmail ? ` as ${integration.externalEmail}` : ''}.` : 'Not connected.'}
+                    </div>
+                    {integration.expiresAt ? <div style={{ ...labelText, marginTop: 2 }}>Token expires {new Date(integration.expiresAt).toLocaleString()}</div> : null}
+                  </div>
+                  {integration.connected ? (
+                    <button type="button" onClick={() => void handleDisconnectIntegration(integration.slug)} disabled={integrationBusy === integration.slug} style={secondaryButton}>{integrationBusy === integration.slug ? 'Disconnecting…' : 'Disconnect'}</button>
+                  ) : (
+                    <button type="button" onClick={() => void handleConnectIntegration(integration.slug)} disabled={!integration.configured || integrationBusy === integration.slug} style={secondaryButton}>{integrationBusy === integration.slug ? 'Connecting…' : 'Connect'}</button>
+                  )}
+                </div>
+              ))}
+              {!integrations.length ? <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No storage integrations available.</div> : null}
+            </div>
+          </div>
+        ) : (
+          <EnterpriseLockedCard title="Connected storage" description="Google Drive, Microsoft 365, SharePoint, OneDrive, and Dropbox task resource connections are available in Sally Enterprise." />
+        )}
+
         <div style={{ ...panel, display: 'grid', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={sectionLabelText}>Notifications</div>
@@ -285,5 +351,13 @@ export default function ProfilePage() {
   )
 }
 
+function integrationLabel(provider: AccountIntegrationStatus['provider']) {
+  if (provider === 'GOOGLE_DRIVE') return 'Google Drive'
+  if (provider === 'MICROSOFT_365') return 'Microsoft 365'
+  if (provider === 'DROPBOX') return 'Dropbox'
+  return provider
+}
+
 const field: CSSProperties = { display: 'grid', gap: 6 }
 const inputStyle: CSSProperties = { ...projectInputField }
+const secondaryButton: CSSProperties = { background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--form-border)', borderRadius: 10, padding: '10px 12px', fontWeight: 700, cursor: 'pointer' }

@@ -34,6 +34,8 @@ Responsibilities:
 - login and session-driven product UI
 - workspace selection
 - project/task/client/timesheet views
+- centered task modal with rich Markdown editing, comments, task actions, and workspace-scoped task navigation
+- Enterprise cloud storage connection/search surfaces in Profile, System, and rich editors
 - profile and notification controls
 - low-noise operator workflows
 
@@ -44,8 +46,9 @@ Responsibilities:
 - auth and session handling
 - API key and hosted MCP key validation
 - workspace/project/task/client/timesheet routes
-- notification handling
+- notification handling, including workspace-aware task/project links
 - upload handling
+- encrypted provider/user credentials for Enterprise cloud storage integrations
 - hosted MCP endpoint at `/mcp`
 - permission enforcement
 - activity logging
@@ -79,6 +82,7 @@ At a high level, the product is centered around:
 - todos
 - comments
 - notifications
+- task connected resources and account integrations
 - clients
 - timesheets
 - API keys / MCP keys / sessions
@@ -171,6 +175,7 @@ MCP client → `sally-mcp` stdio process → Sally API → Prisma/Postgres
 - hosted MCP and stdio MCP tool coverage overlap but are not perfectly identical
 - some aggregated API routes would benefit from generated schemas
 - upload handling is currently JSON/base64 based rather than multipart/signed upload flows
+- Enterprise cloud storage currently stores encrypted OAuth credentials/tokens and relies on `SALLY_CREDENTIAL_ENCRYPTION_KEY` being stable across restarts
 
 ## Architectural north star
 

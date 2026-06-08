@@ -22,6 +22,7 @@ export const ENTERPRISE_FEATURES = [
   'automation.multipleAgents',
   'automation.workflowPolicies',
   'integrations.webhooks',
+  'integrations.cloudStorage',
   'reports.crossWorkspace',
   'system.backupsUi',
 ]

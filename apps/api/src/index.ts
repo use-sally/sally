@@ -228,6 +228,14 @@ async function moveTaskForWorkflow(input: { workspaceId: string; projectId?: str
   return { ok: true, action: 'moved', statusId: targetStatus.id }
 }
 
+function defaultTaskStatusColor(type: TaskStatusType) {
+  if (type === TaskStatusType.IN_PROGRESS) return '#172554'
+  if (type === TaskStatusType.BLOCKED) return '#7F1D1D'
+  if (type === TaskStatusType.REVIEW) return '#422006'
+  if (type === TaskStatusType.DONE) return '#14532D'
+  return '#1F2937'
+}
+
 function targetStatusTypeForWorkflowJob(role: string | null | undefined, status: string | null | undefined): TaskStatusType | null {
   const normalizedStatus = status?.trim().toUpperCase()
   if (normalizedStatus === 'BLOCKED') return TaskStatusType.BLOCKED
@@ -505,6 +513,28 @@ function normalizePlatformRole(input?: string | null) {
   return null
 }
 
+function permissionDenied(reply: any, request: any, input: { error?: string; scope: 'platform' | 'workspace' | 'project' | 'task' | 'key' | 'policy'; required?: Record<string, unknown>; current?: Record<string, unknown>; reason?: string }) {
+  const account = (request as any).account as { platformRole?: PlatformRole | null } | undefined
+  const membership = (request as any).membership as { role?: WorkspaceRole | null } | undefined
+  const mcpKey = (request as any).mcpKey as { workspaceId?: string | null; workspaceSlug?: string | null } | undefined
+  return reply.code(403).send({
+    ok: false,
+    error: input.error || 'Insufficient permissions',
+    code: 'PERMISSION_DENIED',
+    permission: {
+      scope: input.scope,
+      required: input.required || {},
+      current: {
+        platformRole: account?.platformRole || PlatformRole.NONE,
+        workspaceRole: membership?.role || null,
+        mcpWorkspaceRestriction: mcpKey?.workspaceId || mcpKey?.workspaceSlug ? { workspaceId: mcpKey.workspaceId || null, workspaceSlug: mcpKey.workspaceSlug || null } : null,
+        ...(input.current || {}),
+      },
+      reason: input.reason || null,
+    },
+  })
+}
+
 async function requireWorkspaceRole(request: any, reply: any, roles: WorkspaceRole[]) {
   const account = (request as any).account as { id: string } | undefined
   const workspace = (request as any).workspace as { archivedAt?: Date | null } | undefined
@@ -513,12 +543,12 @@ async function requireWorkspaceRole(request: any, reply: any, roles: WorkspaceRo
   if (isPlatformAdmin(request)) return true
   const membership = (request as any).membership as { role: WorkspaceRole } | undefined
   if (!membership) {
-    reply.code(403).send({ ok: false, error: 'Workspace access denied' })
+    permissionDenied(reply, request, { error: 'Workspace access denied', scope: 'workspace', required: { workspaceRoles: roles }, current: { workspaceRole: null }, reason: 'The authenticated account is not a member of the selected workspace.' })
     return false
   }
   const effectiveRole = membership.role === WorkspaceRole.VIEWER ? WorkspaceRole.MEMBER : membership.role
   if (!roles.includes(effectiveRole)) {
-    reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+    permissionDenied(reply, request, { scope: 'workspace', required: { workspaceRoles: roles }, current: { workspaceRole: membership.role, effectiveWorkspaceRole: effectiveRole }, reason: `This action requires workspace role ${roles.join(' or ')}.` })
     return false
   }
   return true
@@ -537,7 +567,7 @@ async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, work
   if (isPlatformAdmin(request)) return true
   const membership = await prisma.workspaceMembership.findFirst({ where: { workspaceId, accountId: account.id }, include: { workspace: true } })
   if (!membership) {
-    reply.code(403).send({ ok: false, error: 'Workspace access denied' })
+    permissionDenied(reply, request, { error: 'Workspace access denied', scope: 'workspace', required: { workspaceRoles: roles, workspaceId }, current: { workspaceRole: null }, reason: 'The authenticated account is not a member of the target workspace.' })
     return false
   }
   if (!ensureWorkspaceIsActive(membership.workspace, reply)) return false
@@ -545,7 +575,7 @@ async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, work
   ;(request as any).workspace = membership.workspace
   const effectiveRole = membership.role === WorkspaceRole.VIEWER ? WorkspaceRole.MEMBER : membership.role
   if (!roles.includes(effectiveRole)) {
-    reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+    permissionDenied(reply, request, { scope: 'workspace', required: { workspaceRoles: roles, workspaceId }, current: { workspaceRole: membership.role, effectiveWorkspaceRole: effectiveRole }, reason: `This action requires workspace role ${roles.join(' or ')}.` })
     return false
   }
   return true
@@ -559,12 +589,12 @@ async function requireProjectRole(request: any, reply: any, projectId: string, r
   if (workspaceMembership?.role === WorkspaceRole.OWNER) return true
   const membership = await prisma.projectMembership.findFirst({ where: { projectId, accountId: account.id } })
   if (!membership) {
-    reply.code(403).send({ ok: false, error: 'Project access denied' })
+    permissionDenied(reply, request, { error: 'Project access denied', scope: 'project', required: { projectRoles: roles, projectId }, current: { projectRole: null }, reason: 'The authenticated account is not a member of the target project.' })
     return false
   }
   const effectiveRole = membership.role === 'VIEWER' ? PROJECT_ROLE.MEMBER : membership.role
   if (!roles.includes(effectiveRole)) {
-    reply.code(403).send({ ok: false, error: 'Insufficient project permissions' })
+    permissionDenied(reply, request, { error: 'Insufficient project permissions', scope: 'project', required: { projectRoles: roles, projectId }, current: { projectRole: membership.role, effectiveProjectRole: effectiveRole }, reason: `This action requires project role ${roles.join(' or ')}.` })
     return false
   }
   return true
@@ -695,6 +725,214 @@ function formatTaskPeopleForResponse(
       avatarUrl: avatarMap.get(participant) ?? null,
     })),
   }
+}
+
+const TASK_RESOURCE_PROVIDERS = ['GOOGLE_DRIVE', 'MICROSOFT_365', 'DROPBOX'] as const
+const TASK_RESOURCE_KINDS = ['FILE', 'FOLDER', 'LINK'] as const
+
+function normalizeTaskResourcePayload(body: any) {
+  const provider = String(body?.provider || '').trim().toUpperCase()
+  if (!TASK_RESOURCE_PROVIDERS.includes(provider as any)) throw new Error('provider must be GOOGLE_DRIVE, MICROSOFT_365, or DROPBOX')
+  const kindInput = String(body?.kind || 'LINK').trim().toUpperCase()
+  if (!TASK_RESOURCE_KINDS.includes(kindInput as any)) throw new Error('kind must be FILE, FOLDER, or LINK')
+  const webUrl = String(body?.webUrl || '').trim()
+  if (!webUrl) throw new Error('webUrl is required')
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(webUrl)
+  } catch {
+    throw new Error('webUrl must be a valid URL')
+  }
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('webUrl must be an http(s) URL')
+  const name = String(body?.name || '').trim() || parsedUrl.hostname
+  if (name.length > 240) throw new Error('name must be 240 characters or less')
+  const externalId = String(body?.externalId || '').trim() || webUrl
+  if (externalId.length > 700) throw new Error('externalId must be 700 characters or less')
+  const mimeType = body?.mimeType === undefined || body?.mimeType === null ? null : String(body.mimeType).trim().slice(0, 180) || null
+  const metadata = body?.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : undefined
+  if (metadata) assertNoSecretLikeJson(metadata, 'task resource metadata')
+  return { provider: provider as any, kind: kindInput as any, externalId, name, webUrl, mimeType, metadata }
+}
+
+function formatTaskConnectedResource(resource: any) {
+  return {
+    id: resource.id,
+    provider: resource.provider,
+    kind: resource.kind,
+    externalId: resource.externalId,
+    name: resource.name,
+    webUrl: resource.webUrl,
+    mimeType: resource.mimeType ?? null,
+    metadata: resource.metadata ?? null,
+    connectedByAccountId: resource.connectedByAccountId ?? null,
+    connectedBy: resource.connectedBy ? { id: resource.connectedBy.id, name: resource.connectedBy.name, email: resource.connectedBy.email } : null,
+    createdAt: resource.createdAt.toISOString(),
+  }
+}
+
+const INTEGRATION_SLUGS = ['google-drive', 'microsoft-365', 'dropbox'] as const
+type IntegrationSlug = typeof INTEGRATION_SLUGS[number]
+
+function integrationProviderFromSlug(slug: string) {
+  if (slug === 'google-drive') return 'GOOGLE_DRIVE'
+  if (slug === 'microsoft-365') return 'MICROSOFT_365'
+  if (slug === 'dropbox') return 'DROPBOX'
+  return null
+}
+
+function integrationSlugFromProvider(provider: string) {
+  if (provider === 'GOOGLE_DRIVE') return 'google-drive'
+  if (provider === 'MICROSOFT_365') return 'microsoft-365'
+  if (provider === 'DROPBOX') return 'dropbox'
+  return provider.toLowerCase()
+}
+
+function credentialEncryptionKey() {
+  const raw = process.env.SALLY_CREDENTIAL_ENCRYPTION_KEY || process.env.CREDENTIAL_ENCRYPTION_KEY || ''
+  if (!raw) throw new Error('SALLY_CREDENTIAL_ENCRYPTION_KEY is required to store integration tokens')
+  if (/^[a-f0-9]{64}$/i.test(raw)) return Buffer.from(raw, 'hex')
+  return crypto.createHash('sha256').update(raw).digest()
+}
+
+function encryptCredential(value: string) {
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', credentialEncryptionKey(), iv)
+  const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
+  return ['v1', iv.toString('base64url'), cipher.getAuthTag().toString('base64url'), encrypted.toString('base64url')].join('.')
+}
+
+function decryptCredential(value: string) {
+  const [version, iv, tag, encrypted] = value.split('.')
+  if (version !== 'v1' || !iv || !tag || !encrypted) throw new Error('Unsupported encrypted credential format')
+  const decipher = crypto.createDecipheriv('aes-256-gcm', credentialEncryptionKey(), Buffer.from(iv, 'base64url'))
+  decipher.setAuthTag(Buffer.from(tag, 'base64url'))
+  return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64url')), decipher.final()]).toString('utf8')
+}
+
+function signIntegrationState(input: { accountId: string; provider: string }) {
+  const payload = Buffer.from(JSON.stringify({ ...input, exp: Date.now() + 10 * 60 * 1000, nonce: crypto.randomBytes(12).toString('base64url') })).toString('base64url')
+  const sig = crypto.createHmac('sha256', credentialEncryptionKey()).update(payload).digest('base64url')
+  return `${payload}.${sig}`
+}
+
+function verifyIntegrationState(state: string, provider: string) {
+  const [payload, sig] = state.split('.')
+  if (!payload || !sig) throw new Error('Invalid OAuth state')
+  const expected = crypto.createHmac('sha256', credentialEncryptionKey()).update(payload).digest('base64url')
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) throw new Error('Invalid OAuth state')
+  const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { accountId?: string; provider?: string; exp?: number }
+  if (!parsed.accountId || parsed.provider !== provider || !parsed.exp || parsed.exp < Date.now()) throw new Error('Expired OAuth state')
+  return parsed.accountId
+}
+
+function appPublicBaseUrl() { return process.env.APP_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_URL?.replace(/\/+$/, '') || 'http://localhost:3000' }
+function apiPublicBaseUrl() { return process.env.API_BASE_URL?.replace(/\/+$/, '') || process.env.SALLY_API_URL?.replace(/\/+$/, '') || 'http://localhost:4000' }
+
+function integrationOAuthConfig(slug: IntegrationSlug, stored?: { enabled?: boolean; clientId?: string | null; clientSecret?: string | null; tenantId?: string | null } | null) {
+  const hasStored = stored !== null && stored !== undefined
+  if (slug === 'google-drive') return { provider: 'GOOGLE_DRIVE', enabled: hasStored ? Boolean(stored?.enabled) : Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET), clientId: hasStored ? stored?.clientId ?? undefined : process.env.GOOGLE_CLIENT_ID, clientSecret: hasStored ? stored?.clientSecret ?? undefined : process.env.GOOGLE_CLIENT_SECRET, authUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token', redirectUri: `${apiPublicBaseUrl()}/integrations/google-drive/callback`, scope: 'openid email profile https://www.googleapis.com/auth/drive.metadata.readonly', extraAuth: { access_type: 'offline', prompt: 'consent' } }
+  if (slug === 'microsoft-365') {
+    const tenant = (hasStored ? stored?.tenantId : process.env.MICROSOFT_TENANT_ID) || 'common'
+    return { provider: 'MICROSOFT_365', enabled: hasStored ? Boolean(stored?.enabled) : Boolean(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET), clientId: hasStored ? stored?.clientId ?? undefined : process.env.MICROSOFT_CLIENT_ID, clientSecret: hasStored ? stored?.clientSecret ?? undefined : process.env.MICROSOFT_CLIENT_SECRET, authUrl: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`, tokenUrl: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, redirectUri: `${apiPublicBaseUrl()}/integrations/microsoft-365/callback`, scope: 'openid email profile offline_access Files.Read Sites.Read.All', extraAuth: {} }
+  }
+  return { provider: 'DROPBOX', enabled: hasStored ? Boolean(stored?.enabled) : Boolean(process.env.DROPBOX_CLIENT_ID && process.env.DROPBOX_CLIENT_SECRET), clientId: hasStored ? stored?.clientId ?? undefined : process.env.DROPBOX_CLIENT_ID, clientSecret: hasStored ? stored?.clientSecret ?? undefined : process.env.DROPBOX_CLIENT_SECRET, authUrl: 'https://www.dropbox.com/oauth2/authorize', tokenUrl: 'https://api.dropboxapi.com/oauth2/token', redirectUri: `${apiPublicBaseUrl()}/integrations/dropbox/callback`, scope: 'files.metadata.read sharing.read account_info.read', extraAuth: { token_access_type: 'offline' } }
+}
+
+async function readStoredOAuthConfig(slug: IntegrationSlug) {
+  const provider = integrationProviderFromSlug(slug)
+  if (!provider) return null
+  const stored = await prisma.cloudStorageProviderConfig.findUnique({ where: { provider: provider as any } })
+  if (!stored) return null
+  return { enabled: stored.enabled, clientId: stored.clientId, clientSecret: stored.clientSecretEnc ? decryptCredential(stored.clientSecretEnc) : null, tenantId: stored.tenantId }
+}
+
+async function integrationOAuthConfigForSlug(slug: IntegrationSlug) {
+  return integrationOAuthConfig(slug, await readStoredOAuthConfig(slug))
+}
+
+function formatIntegration(integration: any, configured: boolean) {
+  return { provider: integration.provider, slug: integrationSlugFromProvider(integration.provider), configured, connected: true, scopes: integration.scopes ?? null, externalAccountId: integration.externalAccountId ?? null, externalEmail: integration.externalEmail ?? null, expiresAt: integration.expiresAt?.toISOString() ?? null, updatedAt: integration.updatedAt.toISOString() }
+}
+
+function formatProviderResource(input: { provider: string; id: string; name: string; webUrl: string; kind?: string; mimeType?: string | null; metadata?: Record<string, unknown> }) {
+  return { provider: input.provider, externalId: input.id, name: input.name, webUrl: input.webUrl, kind: input.kind || 'FILE', mimeType: input.mimeType ?? null, metadata: input.metadata ?? {} }
+}
+
+async function refreshIntegrationAccessToken(integration: any) {
+  if (!integration.refreshTokenEnc) return integration
+  const slug = integrationSlugFromProvider(integration.provider) as IntegrationSlug
+  const config = await integrationOAuthConfigForSlug(slug)
+  if (!config.clientId || !config.clientSecret) return integration
+  const form = new URLSearchParams()
+  form.set('client_id', config.clientId)
+  form.set('client_secret', config.clientSecret)
+  form.set('grant_type', 'refresh_token')
+  form.set('refresh_token', decryptCredential(integration.refreshTokenEnc))
+  const response = await fetch(config.tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form })
+  const json = await response.json() as any
+  if (!response.ok || !json.access_token) throw new Error(json.error_description || json.error || 'Failed to refresh provider access')
+  const expiresAt = json.expires_in ? new Date(Date.now() + Number(json.expires_in) * 1000) : null
+  return await prisma.accountIntegration.update({
+    where: { id: integration.id },
+    data: { accessTokenEnc: encryptCredential(String(json.access_token)), ...(json.refresh_token ? { refreshTokenEnc: encryptCredential(String(json.refresh_token)) } : {}), expiresAt, scopes: json.scope || integration.scopes },
+  })
+}
+
+async function getUsableIntegrationAccessToken(integration: any) {
+  const needsRefresh = integration.expiresAt && integration.expiresAt.getTime() < Date.now() + 60 * 1000
+  const usable = needsRefresh ? await refreshIntegrationAccessToken(integration) : integration
+  return decryptCredential(usable.accessTokenEnc)
+}
+
+async function fetchProviderResources(provider: string, accessToken: string, query: string, options: { source?: string; siteId?: string; driveId?: string; itemId?: string } = {}) {
+  const safeQuery = query.trim()
+  if (provider === 'GOOGLE_DRIVE') {
+    const url = new URL('https://www.googleapis.com/drive/v3/files')
+    url.searchParams.set('fields', 'files(id,name,mimeType,webViewLink)')
+    url.searchParams.set('pageSize', '20')
+    url.searchParams.set('supportsAllDrives', 'true')
+    url.searchParams.set('includeItemsFromAllDrives', 'true')
+    url.searchParams.set('q', safeQuery ? `name contains '${safeQuery.replace(/'/g, "\\'")}' and trashed = false` : 'trashed = false')
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    const json = await response.json() as any
+    if (!response.ok) throw new Error(json.error?.message || 'Google Drive search failed')
+    return (json.files || []).map((file: any) => formatProviderResource({ provider, id: file.id, name: file.name, webUrl: file.webViewLink || `https://drive.google.com/open?id=${encodeURIComponent(file.id)}`, kind: file.mimeType === 'application/vnd.google-apps.folder' ? 'FOLDER' : 'FILE', mimeType: file.mimeType || null }))
+  }
+  if (provider === 'MICROSOFT_365') {
+    let url: string
+    let microsoftSource: 'ONEDRIVE' | 'SHAREPOINT' = 'ONEDRIVE'
+    if (options.source === 'sharepoint') {
+      microsoftSource = 'SHAREPOINT'
+      if (options.driveId) {
+        const itemPath = options.itemId ? `items/${encodeURIComponent(options.itemId)}` : 'root'
+        url = `https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(options.driveId)}/${itemPath}/children?$top=50`
+      } else if (options.siteId) {
+        url = `https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(options.siteId)}/drives?$top=50`
+      } else {
+        url = `https://graph.microsoft.com/v1.0/sites?search=${encodeURIComponent(safeQuery || '*')}`
+      }
+    } else {
+      url = safeQuery ? `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(safeQuery).replace(/'/g, '%27')}')?$top=20` : 'https://graph.microsoft.com/v1.0/me/drive/root/children?$top=20'
+    }
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+    const json = await response.json() as any
+    if (!response.ok) throw new Error(json.error?.message || 'Microsoft 365 search failed')
+    return (json.value || []).map((item: any) => {
+      const isDrive = Boolean(item.driveType)
+      const isSite = Boolean(item.siteCollection)
+      return formatProviderResource({ provider, id: item.id, name: item.name || item.displayName, webUrl: item.webUrl, kind: item.folder || isDrive || isSite ? 'FOLDER' : 'FILE', mimeType: item.file?.mimeType || null, metadata: { microsoftSource, siteId: options.siteId || (isSite ? item.id : undefined), driveId: item.parentReference?.driveId || (isDrive ? item.id : options.driveId), itemId: item.id, resourceType: isSite ? 'SITE' : isDrive ? 'DRIVE' : 'DRIVE_ITEM' } })
+    })
+  }
+  if (provider === 'DROPBOX') {
+    const endpoint = safeQuery ? 'https://api.dropboxapi.com/2/files/search_v2' : 'https://api.dropboxapi.com/2/files/list_folder'
+    const body = safeQuery ? { query: safeQuery, options: { max_results: 20 } } : { path: '', limit: 20 }
+    const response = await fetch(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const json = await response.json() as any
+    if (!response.ok) throw new Error(json.error_summary || 'Dropbox search failed')
+    const entries = safeQuery ? (json.matches || []).map((match: any) => match.metadata?.metadata).filter(Boolean) : (json.entries || [])
+    return entries.map((item: any) => formatProviderResource({ provider, id: item.id || item.path_lower, name: item.name, webUrl: `https://www.dropbox.com/home${encodeURI(item.path_display || '')}`, kind: item['.tag'] === 'folder' ? 'FOLDER' : 'FILE', metadata: { pathDisplay: item.path_display || null } }))
+  }
+  throw new Error('Unsupported provider')
 }
 
 async function logActivity(input: { workspaceId: string; projectId?: string | null; taskId?: string | null; actorName?: string | null; actorEmail?: string | null; actorApiKeyLabel?: string | null; actorMcpKeyLabel?: string | null; type: string; summary: string; payload?: any }) {
@@ -1360,6 +1598,7 @@ const hostedMcpSessions = new Map<string, HostedMcpSession>()
 
 const hostedMcpTools: McpTool[] = [
   { name: 'workspace.list', description: 'List accessible workspaces.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'workspace.create', description: 'Create a workspace. Platform admin only.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, slug: { type: 'string' } }, required: ['name'], additionalProperties: false } },
   { name: 'client.list', description: 'List visible clients in the current workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' } }, additionalProperties: false } },
   { name: 'client.get', description: 'Get full client details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, clientId: { type: 'string' } }, required: ['clientId'], additionalProperties: false } },
   { name: 'client.create', description: 'Create a client.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, name: { type: 'string' }, notes: { type: 'string' } }, required: ['name'], additionalProperties: false } },
@@ -1372,7 +1611,7 @@ const hostedMcpTools: McpTool[] = [
   { name: 'project.archive', description: 'Archive or unarchive a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'project.delete', description: 'Delete a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'project.status.create', description: 'Create a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, name: { type: 'string' }, type: { type: 'string', enum: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE'] } }, required: ['projectId', 'name', 'type'], additionalProperties: false } },
-  { name: 'project.status.update', description: 'Update a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, name: { type: 'string' }, color: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
+  { name: 'project.status.update', description: 'Update a project status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, name: { type: 'string' }, type: { type: 'string', enum: ['BACKLOG', 'TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'DONE'] }, color: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
   { name: 'project.status.delete', description: 'Delete a project status, optionally moving tasks to a replacement status.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, statusId: { type: 'string' }, targetStatusId: { type: 'string' } }, required: ['projectId', 'statusId'], additionalProperties: false } },
   { name: 'project.status.reorder', description: 'Reorder project statuses while keeping the first status pinned.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, orderedStatusIds: { type: 'array', items: { type: 'string' } } }, required: ['projectId', 'orderedStatusIds'], additionalProperties: false } },
   { name: 'workspace.invite', description: 'Invite a user into a workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, email: { type: 'string' }, role: { type: 'string' } }, required: ['email', 'role'], additionalProperties: false } },
@@ -1383,7 +1622,7 @@ const hostedMcpTools: McpTool[] = [
   { name: 'task.list', description: 'List tasks for a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, status: { type: 'string' }, assignee: { type: 'string' }, search: { type: 'string' }, label: { type: 'string' }, archived: { type: 'boolean' } }, required: ['projectId'], additionalProperties: false } },
   { name: 'task.get', description: 'Get full task details.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.create', description: 'Create a task in a project.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, projectId: { type: 'string' }, title: { type: 'string' }, owner: { type: 'string' }, participants: { type: 'array', items: { type: 'string' } }, assignee: { type: 'string' }, collaborators: { type: 'array', items: { type: 'string' } }, description: { type: 'string' }, priority: { type: 'string' }, status: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] }, labels: { type: 'array', items: { type: 'string' } }, todos: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } } }, required: ['projectId','title'], additionalProperties: false } },
-  { name: 'task.update', description: 'Update a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, owner: { type: 'string' }, participants: { type: 'array', items: { type: 'string' } }, assignee: { type: 'string' }, collaborators: { type: 'array', items: { type: 'string' } }, priority: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] } }, required: ['taskId'], additionalProperties: false } },
+  { name: 'task.update', description: 'Update a task. Supplying projectId moves the task to another project in the same workspace.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, owner: { type: 'string' }, participants: { type: 'array', items: { type: 'string' } }, assignee: { type: 'string' }, collaborators: { type: 'array', items: { type: 'string' } }, priority: { type: 'string' }, statusId: { type: 'string' }, dueDate: { type: ['string','null'] }, projectId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.archive', description: 'Archive or unarchive a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, archived: { type: 'boolean' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.delete', description: 'Delete a task.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false } },
   { name: 'task.move', description: 'Move a task by target status name.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, taskId: { type: 'string' }, targetStatus: { type: 'string' } }, required: ['taskId', 'targetStatus'], additionalProperties: false } },
@@ -1452,7 +1691,10 @@ async function injectJson(request: any, options: { method: 'GET' | 'POST' | 'PAT
   const response = await app.inject({ method: options.method, url: options.url, payload: options.payload, headers: mcpHeaders(request, options.args) })
   const bodyText = response.body || '{}'
   const body = JSON.parse(bodyText)
-  if (response.statusCode >= 400) throw new Error(body?.error || body?.message || `Request failed (${response.statusCode})`)
+  if (response.statusCode >= 400) {
+    const message = body?.permission ? JSON.stringify(body, null, 2) : body?.error || body?.message || `Request failed (${response.statusCode})`
+    throw new Error(message)
+  }
   return body
 }
 
@@ -1465,6 +1707,8 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
         .map((membership) => ({ id: membership.workspace.id, name: membership.workspace.name, slug: membership.workspace.slug, role: membership.role }))
       return { items }
     }
+    case 'workspace.create':
+      return await injectJson(request, { method: 'POST', url: '/workspaces', args, payload: { name: args.name, slug: args.slug } })
     case 'client.list':
       return { items: await injectJson(request, { method: 'GET', url: '/clients', args }) }
     case 'client.get':
@@ -1494,9 +1738,9 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
     case 'project.delete':
       return await injectJson(request, { method: 'DELETE', url: `/projects/${args.projectId}`, args })
     case 'project.status.create':
-      return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses`, args, payload: { name: args.name } })
+      return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses`, args, payload: { name: args.name, type: args.type } })
     case 'project.status.update':
-      return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}/statuses/${args.statusId}`, args, payload: { name: args.name, color: args.color } })
+      return await injectJson(request, { method: 'PATCH', url: `/projects/${args.projectId}/statuses/${args.statusId}`, args, payload: { name: args.name, type: args.type, color: args.color } })
     case 'project.status.delete':
       return await injectJson(request, { method: 'POST', url: `/projects/${args.projectId}/statuses/${args.statusId}/delete`, args, payload: { targetStatusId: args.targetStatusId } })
     case 'project.status.reorder':
@@ -1666,19 +1910,169 @@ const start = async () => {
       }
       if ((url.startsWith('/agent-jobs') || url.startsWith('/agent-runs') || url.startsWith('/blockers') || url.startsWith('/approval-requests')) && (await ensureWorkerAuth(request, reply))) return
       if ((url.startsWith('/projects') || url.startsWith('/tasks')) && (await ensureWorkerAuth(request, reply))) return
+      if (/^\/integrations\/[^/]+\/callback(?:\?|$)/.test(url)) return
       if (url.startsWith('/auth/login') || url.startsWith('/auth/saml') || url.startsWith('/auth/accept-invite') || url.startsWith('/auth/request-password-reset') || url.startsWith('/auth/reset-password')) return
       if (!(await ensureAuth(request, reply))) return
       const keyAuth = ((request as any).apiKey ?? (request as any).mcpKey) as { scopes?: string[] } | undefined
       if (keyAuth && !['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !keyAuth.scopes?.includes('write')) {
-        return reply.code(403).send({ ok: false, error: 'Key scope does not allow write access', code: 'KEY_SCOPE_DENIED' })
+        return permissionDenied(reply, request, { error: 'Key scope does not allow write access', scope: 'key', required: { keyScopes: ['write'] }, current: { keyScopes: keyAuth.scopes || [] }, reason: 'This API key or MCP key is read-only for this action.' })
       }
-      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth') || url.startsWith('/edition') || url.startsWith('/license')) return
+      if (url.startsWith('/accounts') || url.startsWith('/team') || url.startsWith('/workspaces') || url.startsWith('/auth') || url.startsWith('/integrations') || url.startsWith('/system') || url.startsWith('/edition') || url.startsWith('/license')) return
       const workspace = await resolveWorkspace(request, reply)
       if (!workspace) return
       ;(request as any).workspace = workspace
     })
 
+    const readInstalledLicenseForFeature = () => readInstalledLicenseWithAutoRefresh(prisma)
+
     app.get('/health', async () => ({ ok: true, service: 'api', timestamp: new Date().toISOString() }))
+
+    app.get('/system/cloud-storage-integrations', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const configs = await prisma.cloudStorageProviderConfig.findMany()
+      const byProvider = new Map(configs.map((config) => [config.provider, config]))
+      return { providers: await Promise.all(INTEGRATION_SLUGS.map(async (slug) => {
+        const provider = integrationProviderFromSlug(slug) as string
+        const stored = byProvider.get(provider as any)
+        const effective = await integrationOAuthConfigForSlug(slug)
+        return { provider, slug, enabled: Boolean(stored?.enabled), configured: Boolean(effective.enabled && effective.clientId && effective.clientSecret), clientId: stored?.clientId ?? '', hasClientSecret: Boolean(stored?.clientSecretEnc), tenantId: stored?.tenantId ?? '', redirectUri: effective.redirectUri }
+      })) }
+    })
+
+    app.patch('/system/cloud-storage-integrations', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      const body = request.body as { providers?: Array<{ provider?: string; enabled?: boolean; clientId?: string; clientSecret?: string; tenantId?: string }> }
+      if (!Array.isArray(body.providers)) return reply.code(400).send({ ok: false, error: 'providers is required' })
+      const updated = []
+      for (const item of body.providers) {
+        const provider = String(item.provider || '').trim().toUpperCase()
+        if (!TASK_RESOURCE_PROVIDERS.includes(provider as any)) return reply.code(400).send({ ok: false, error: `Unsupported provider: ${provider}` })
+        const clientId = item.clientId?.trim() || null
+        const tenantId = provider === 'MICROSOFT_365' ? item.tenantId?.trim() || 'common' : null
+        const data: any = { enabled: Boolean(item.enabled), clientId, tenantId }
+        if (item.clientSecret?.trim()) data.clientSecretEnc = encryptCredential(item.clientSecret.trim())
+        const config = await prisma.cloudStorageProviderConfig.upsert({ where: { provider: provider as any }, create: { provider: provider as any, ...data }, update: data })
+        updated.push(config.provider)
+      }
+      await writeAuditLog({ actorAccountId: (request as any).account?.id ?? null, action: 'audit.cloudStorageIntegrations.updated', targetType: 'cloudStorageProviderConfig', targetId: 'instance', summary: 'Updated cloud storage integration provider settings', metadata: { providers: updated } })
+      return { ok: true }
+    })
+
+    app.get('/integrations', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request) => {
+      const account = (request as any).account as { id: string }
+      const integrations = await prisma.accountIntegration.findMany({ where: { accountId: account.id } })
+      const byProvider = new Map(integrations.map((item) => [item.provider, item]))
+      return await Promise.all(INTEGRATION_SLUGS.map(async (slug) => {
+        const config = await integrationOAuthConfigForSlug(slug)
+        const configured = Boolean(config.enabled && config.clientId && config.clientSecret)
+        const integration = byProvider.get(config.provider as any)
+        if (integration) return formatIntegration(integration, configured)
+        return { provider: config.provider, slug, configured, connected: false, scopes: null, externalAccountId: null, externalEmail: null, expiresAt: null, updatedAt: null }
+      }))
+    })
+
+    app.get('/integrations/:slug/status', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      const { slug } = request.params as { slug: string }
+      if (!INTEGRATION_SLUGS.includes(slug as IntegrationSlug)) return reply.code(404).send({ ok: false, error: 'Integration not found' })
+      const account = (request as any).account as { id: string }
+      const config = await integrationOAuthConfigForSlug(slug as IntegrationSlug)
+      const integration = await prisma.accountIntegration.findUnique({ where: { accountId_provider: { accountId: account.id, provider: config.provider as any } } })
+      const configured = Boolean(config.enabled && config.clientId && config.clientSecret)
+      if (!integration) return { provider: config.provider, slug, configured, connected: false, scopes: null, externalAccountId: null, externalEmail: null, expiresAt: null, updatedAt: null }
+      return formatIntegration(integration, configured)
+    })
+
+    app.get('/integrations/:slug/connect', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      const { slug } = request.params as { slug: string }
+      if (!INTEGRATION_SLUGS.includes(slug as IntegrationSlug)) return reply.code(404).send({ ok: false, error: 'Integration not found' })
+      const account = (request as any).account as { id: string }
+      const config = await integrationOAuthConfigForSlug(slug as IntegrationSlug)
+      if (!config.enabled || !config.clientId || !config.clientSecret) return reply.code(400).send({ ok: false, error: `${slug} OAuth is not configured` })
+      let state: string
+      try {
+        state = signIntegrationState({ accountId: account.id, provider: config.provider })
+      } catch (err) {
+        return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : 'Credential encryption is not configured' })
+      }
+      const url = new URL(config.authUrl)
+      url.searchParams.set('client_id', config.clientId)
+      url.searchParams.set('redirect_uri', config.redirectUri)
+      url.searchParams.set('response_type', 'code')
+      url.searchParams.set('scope', config.scope)
+      url.searchParams.set('state', state)
+      for (const [key, value] of Object.entries(config.extraAuth)) url.searchParams.set(key, String(value))
+      return { ok: true, url: url.toString() }
+    })
+
+    app.get('/integrations/:slug/callback', async (request, reply) => {
+      const { slug } = request.params as { slug: string }
+      const query = request.query as { code?: string; state?: string; error?: string; error_description?: string }
+      const redirect = new URL('/profile', appPublicBaseUrl())
+      redirect.searchParams.set('integration', slug)
+      if (!INTEGRATION_SLUGS.includes(slug as IntegrationSlug)) {
+        redirect.searchParams.set('integrationError', 'Integration not found')
+        return reply.redirect(redirect.toString())
+      }
+      const config = await integrationOAuthConfigForSlug(slug as IntegrationSlug)
+      if (query.error) {
+        redirect.searchParams.set('integrationError', query.error_description || query.error)
+        return reply.redirect(redirect.toString())
+      }
+      if (!query.code || !query.state || !config.clientId || !config.clientSecret) {
+        redirect.searchParams.set('integrationError', 'OAuth callback is missing required data or configuration')
+        return reply.redirect(redirect.toString())
+      }
+      try {
+        const accountId = verifyIntegrationState(query.state, config.provider)
+        const form = new URLSearchParams()
+        form.set('client_id', config.clientId)
+        form.set('client_secret', config.clientSecret)
+        form.set('code', query.code)
+        form.set('grant_type', 'authorization_code')
+        form.set('redirect_uri', config.redirectUri)
+        const tokenResponse = await fetch(config.tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form })
+        const tokenJson = await tokenResponse.json() as any
+        if (!tokenResponse.ok || !tokenJson.access_token) throw new Error(tokenJson.error_description || tokenJson.error || 'Failed to exchange OAuth code')
+        const expiresAt = tokenJson.expires_in ? new Date(Date.now() + Number(tokenJson.expires_in) * 1000) : null
+        await prisma.accountIntegration.upsert({
+          where: { accountId_provider: { accountId, provider: config.provider as any } },
+          create: { accountId, provider: config.provider as any, accessTokenEnc: encryptCredential(String(tokenJson.access_token)), refreshTokenEnc: tokenJson.refresh_token ? encryptCredential(String(tokenJson.refresh_token)) : null, expiresAt, scopes: tokenJson.scope || config.scope, metadata: { tokenType: tokenJson.token_type || 'Bearer' } },
+          update: { accessTokenEnc: encryptCredential(String(tokenJson.access_token)), ...(tokenJson.refresh_token ? { refreshTokenEnc: encryptCredential(String(tokenJson.refresh_token)) } : {}), expiresAt, scopes: tokenJson.scope || config.scope, metadata: { tokenType: tokenJson.token_type || 'Bearer' } },
+        })
+        redirect.searchParams.set('integrationConnected', 'true')
+      } catch (err) {
+        redirect.searchParams.set('integrationError', err instanceof Error ? err.message : 'Failed to connect integration')
+      }
+      return reply.redirect(redirect.toString())
+    })
+
+    app.get('/integrations/:slug/resources', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      const { slug } = request.params as { slug: string }
+      const query = request.query as { q?: string; source?: string; siteId?: string; driveId?: string; itemId?: string }
+      if (!INTEGRATION_SLUGS.includes(slug as IntegrationSlug)) return reply.code(404).send({ ok: false, error: 'Integration not found' })
+      const account = (request as any).account as { id: string }
+      const provider = integrationProviderFromSlug(slug)
+      if (!provider) return reply.code(404).send({ ok: false, error: 'Integration not found' })
+      const integration = await prisma.accountIntegration.findUnique({ where: { accountId_provider: { accountId: account.id, provider: provider as any } } })
+      if (!integration) return reply.code(401).send({ ok: false, error: 'Connect this storage provider before browsing resources.' })
+      try {
+        const accessToken = await getUsableIntegrationAccessToken(integration)
+        return { items: await fetchProviderResources(provider, accessToken, String(query.q || ''), { source: query.source, siteId: query.siteId, driveId: query.driveId, itemId: query.itemId }) }
+      } catch (err) {
+        return reply.code(502).send({ ok: false, error: err instanceof Error ? err.message : 'Provider search failed' })
+      }
+    })
+
+    app.post('/integrations/:slug/disconnect', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      const { slug } = request.params as { slug: string }
+      if (!INTEGRATION_SLUGS.includes(slug as IntegrationSlug)) return reply.code(404).send({ ok: false, error: 'Integration not found' })
+      const account = (request as any).account as { id: string }
+      const provider = integrationProviderFromSlug(slug)
+      if (!provider) return reply.code(404).send({ ok: false, error: 'Integration not found' })
+      await prisma.accountIntegration.deleteMany({ where: { accountId: account.id, provider: provider as any } })
+      return { ok: true }
+    })
+
     app.get('/edition', async () => {
       const installedLicense = await readInstalledLicenseWithAutoRefresh(prisma)
       const edition = getEditionInfo({ installedLicense })
@@ -2403,6 +2797,7 @@ const start = async () => {
         body: notification.body,
         readAt: notification.readAt?.toISOString() ?? null,
         createdAt: notification.createdAt.toISOString(),
+        workspaceId: notification.workspaceId,
         projectId: notification.projectId,
         taskId: notification.taskId,
         actor: notification.actor ? { id: notification.actor.id, name: notification.actor.name, email: notification.actor.email, avatarUrl: notification.actor.avatarUrl ?? null } : null,
@@ -3437,8 +3832,6 @@ const start = async () => {
       }))
     })
 
-    const readInstalledLicenseForFeature = () => readInstalledLicenseWithAutoRefresh(prisma)
-
     app.get('/audit-log', { preHandler: requireFeature('security.auditLog', readInstalledLicenseForFeature) }, async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
       const query = request.query as { action?: string; targetType?: string; actorAccountId?: string; workspaceId?: string; from?: string; to?: string; limit?: string; export?: string }
@@ -3477,7 +3870,7 @@ const start = async () => {
     })
 
     app.post('/workspaces', async (request, reply) => {
-      if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })
+      if (!isPlatformAdmin(request)) return permissionDenied(reply, request, { scope: 'platform', required: { platformRoles: [PlatformRole.ADMIN, PlatformRole.SUPERADMIN] }, reason: 'Creating a workspace requires a platform admin account.' })
       const body = request.body as { name: string; slug?: string }
       const name = body.name?.trim()
       if (!name) return reply.code(400).send({ ok: false, error: 'name is required' })
@@ -4328,7 +4721,7 @@ const start = async () => {
     app.get('/tasks/:taskId', async (request, reply) => {
       const workspace = (request as any).workspace
       const { taskId } = request.params as { taskId: string }
-      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { project: { include: { client: true } }, status: true, comments: { orderBy: { createdAt: 'asc' } }, labels: { include: { label: true } }, participants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, collaborators: true, todos: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, dependencies: { include: { dependsOn: { select: { id: true, number: true, title: true } } } }, dependedOnBy: { include: { task: { select: { id: true, number: true, title: true } } } }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 20 } } })
+      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { project: { include: { client: true } }, status: true, comments: { orderBy: { createdAt: 'asc' } }, labels: { include: { label: true } }, participants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, collaborators: true, todos: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] }, connectedResources: { include: { connectedBy: { select: { id: true, name: true, email: true } } }, orderBy: [{ createdAt: 'asc' }] }, dependencies: { include: { dependsOn: { select: { id: true, number: true, title: true } } } }, dependedOnBy: { include: { task: { select: { id: true, number: true, title: true } } } }, timesheets: { include: { user: true, task: { select: { title: true } } }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 20 } } })
       if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
       if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, task.projectId)
@@ -4338,7 +4731,63 @@ const start = async () => {
       const commentAvatars = await getAssigneeAvatarMap(workspace.id, task.comments.map((comment) => comment.author))
       const timesheetScope = await resolveTimesheetScope(request, workspace.id, task.projectId)
       const visibleTimesheets = timesheetScope.elevated || !timesheetScope.userId ? task.timesheets : task.timesheets.filter((entry) => entry.userId === timesheetScope.userId)
-      return { id: task.id, number: task.number, position: task.position, title: task.title, description: task.description ?? 'No description yet.', ...formatTaskPeopleForResponse(task, assigneeAvatars), priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString(), labels: task.labels.map((l) => l.label.name), dependencies: task.dependencies.map((d) => ({ taskId: d.dependsOn.id, number: d.dependsOn.number, title: d.dependsOn.title })), dependedOnBy: task.dependedOnBy.map((d) => ({ taskId: d.task.id, number: d.task.number, title: d.task.title })), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
+      const edition = await getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      const connectedResources = edition.availableFeatures.includes('integrations.cloudStorage') ? task.connectedResources.map(formatTaskConnectedResource) : []
+      return { id: task.id, number: task.number, position: task.position, title: task.title, description: task.description ?? 'No description yet.', ...formatTaskPeopleForResponse(task, assigneeAvatars), priority: task.priority, status: task.status.name, statusId: task.statusId, dueDate: task.dueDate?.toISOString() ?? null, createdAt: task.createdAt.toISOString(), updatedAt: task.updatedAt.toISOString(), labels: task.labels.map((l) => l.label.name), dependencies: task.dependencies.map((d) => ({ taskId: d.dependsOn.id, number: d.dependsOn.number, title: d.dependsOn.title })), dependedOnBy: task.dependedOnBy.map((d) => ({ taskId: d.task.id, number: d.task.number, title: d.task.title })), todos: task.todos.map((t) => ({ id: t.id, text: t.text, done: t.done, position: t.position })), connectedResources, timesheetSummary: summarizeTimesheets(visibleTimesheets), timesheetUsers: Array.from(new Map(visibleTimesheets.map((entry) => [entry.userId, { id: entry.userId, name: entry.user.name }])).values()), timesheets: visibleTimesheets.map((entry) => ({ id: entry.id, userId: entry.userId, userName: entry.user.name, projectId: task.project.id, taskId: entry.taskId ?? null, taskTitle: entry.task?.title ?? null, date: entry.date.toISOString(), minutes: entry.minutes, description: entry.description, billable: entry.billable, validated: entry.validated, createdAt: entry.createdAt.toISOString() })), project: { id: task.project.id, name: task.project.name, client: task.project.client ? { id: task.project.client.id, name: task.project.client.name } : null }, comments: task.comments.map((c) => ({ id: c.id, author: c.author, authorAvatarUrl: commentAvatars.get(c.author) ?? null, body: c.body, createdAt: c.createdAt })) }
+    })
+
+    app.get('/tasks/:taskId/resources', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      const workspace = (request as any).workspace
+      const { taskId } = request.params as { taskId: string }
+      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { collaborators: true, participants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] } } })
+      if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
+      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const taskScope = await getTaskAccessScope(request, task.projectId)
+      if (!canAccessTaskAssignee(taskScope, task.assignee, task.collaborators.map((item) => item.collaborator), task.owner, task.participants.map((item) => item.participant))) return reply.code(403).send({ ok: false, error: 'Task access denied' })
+      const resources = await prisma.taskConnectedResource.findMany({ where: { taskId }, include: { connectedBy: { select: { id: true, name: true, email: true } } }, orderBy: [{ createdAt: 'asc' }] })
+      return resources.map(formatTaskConnectedResource)
+    })
+
+    app.post('/tasks/:taskId/resources', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { taskId } = request.params as { taskId: string }
+      let payload: ReturnType<typeof normalizeTaskResourcePayload>
+      try {
+        payload = normalizeTaskResourcePayload(request.body)
+      } catch (err) {
+        return reply.code(400).send({ ok: false, error: err instanceof Error ? err.message : 'Invalid resource payload' })
+      }
+      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { collaborators: true, participants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] } } })
+      if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
+      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const taskScope = await getTaskAccessScope(request, task.projectId)
+      if (!canAccessTaskAssignee(taskScope, task.assignee, task.collaborators.map((item) => item.collaborator), task.owner, task.participants.map((item) => item.participant))) return reply.code(403).send({ ok: false, error: 'Task access denied' })
+      const account = (request as any).account as { id?: string } | undefined
+      const resource = await prisma.taskConnectedResource.upsert({
+        where: { taskId_provider_externalId: { taskId, provider: payload.provider, externalId: payload.externalId } },
+        create: { taskId, provider: payload.provider, kind: payload.kind, externalId: payload.externalId, name: payload.name, webUrl: payload.webUrl, mimeType: payload.mimeType, metadata: payload.metadata as Prisma.InputJsonValue | undefined, connectedByAccountId: account?.id ?? null },
+        update: { kind: payload.kind, name: payload.name, webUrl: payload.webUrl, mimeType: payload.mimeType, metadata: payload.metadata as Prisma.InputJsonValue | undefined, connectedByAccountId: account?.id ?? undefined },
+        include: { connectedBy: { select: { id: true, name: true, email: true } } },
+      })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.resource.connected', summary: `Connected ${resource.name} to task ${task.title}.`, payload: { resourceId: resource.id, provider: resource.provider, kind: resource.kind } })
+      return { ok: true, resource: formatTaskConnectedResource(resource) }
+    })
+
+    app.delete('/tasks/:taskId/resources/:resourceId', { preHandler: requireFeature('integrations.cloudStorage', readInstalledLicenseForFeature) }, async (request, reply) => {
+      const workspace = (request as any).workspace
+      if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
+      const { taskId, resourceId } = request.params as { taskId: string; resourceId: string }
+      const task = await prisma.task.findFirst({ where: { id: taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { collaborators: true, participants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] } } })
+      if (!task) return reply.code(404).send({ ok: false, error: 'Task not found' })
+      if (!(await requireProjectRole(request, reply, task.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      const taskScope = await getTaskAccessScope(request, task.projectId)
+      if (!canAccessTaskAssignee(taskScope, task.assignee, task.collaborators.map((item) => item.collaborator), task.owner, task.participants.map((item) => item.participant))) return reply.code(403).send({ ok: false, error: 'Task access denied' })
+      const resource = await prisma.taskConnectedResource.findFirst({ where: { id: resourceId, taskId } })
+      if (!resource) return reply.code(404).send({ ok: false, error: 'Resource not found' })
+      await prisma.taskConnectedResource.delete({ where: { id: resourceId } })
+      await logActivity({ workspaceId: workspace.id, projectId: task.projectId, taskId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.resource.removed', summary: `Removed ${resource.name} from task ${task.title}.`, payload: { resourceId: resource.id, provider: resource.provider, kind: resource.kind } })
+      return { ok: true }
     })
 
     app.post('/tasks/:taskId/todos', async (request, reply) => {
@@ -4485,7 +4934,7 @@ const start = async () => {
       if (!project) return reply.code(404).send({ ok: false, error: 'Project not found' })
       if (!(await requireProjectRole(request, reply, projectId, [PROJECT_ROLE.OWNER]))) return
       const maxPos = await prisma.taskStatus.aggregate({ where: { projectId }, _max: { position: true } })
-      const status = await prisma.taskStatus.create({ data: { projectId, name, type: body.type, position: (maxPos._max.position ?? -1) + 1, color: '#1F2937' } })
+      const status = await prisma.taskStatus.create({ data: { projectId, name, type: body.type, position: (maxPos._max.position ?? -1) + 1, color: defaultTaskStatusColor(body.type) } })
       await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.created', summary: `Created status ${name}.`, payload: { statusId: status.id, name, semanticType: body.type } })
       return { ok: true, statusId: status.id }
     })
@@ -4502,12 +4951,12 @@ const start = async () => {
       const nextName = body.name !== undefined ? body.name.trim() : status.name
       if (!nextName) return reply.code(400).send({ ok: false, error: 'name is required' })
       const nextType = body.type !== undefined ? body.type : status.type
-      const nextColor = body.color !== undefined ? (body.color.trim() || '#1F2937') : status.color
+      const nextColor = body.color !== undefined ? (body.color.trim() || defaultTaskStatusColor(nextType)) : body.type !== undefined && body.type !== status.type ? defaultTaskStatusColor(nextType) : status.color
       const details: string[] = []
       if (nextName !== status.name) details.push(activityChange('name', status.name, nextName))
       if (nextType !== status.type) details.push(activityChange('type', status.type, nextType))
       if ((nextColor || null) !== (status.color || null)) details.push(activityChange('color', status.color, nextColor))
-      await prisma.taskStatus.update({ where: { id: statusId }, data: { ...(body.name !== undefined ? { name: nextName } : {}), ...(body.type !== undefined ? { type: nextType } : {}), ...(body.color !== undefined ? { color: nextColor } : {}) } })
+      await prisma.taskStatus.update({ where: { id: statusId }, data: { ...(body.name !== undefined ? { name: nextName } : {}), ...(body.type !== undefined ? { type: nextType, color: nextColor } : {}), ...(body.color !== undefined ? { color: nextColor } : {}) } })
       await logActivity({ workspaceId: workspace.id, projectId, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'status.updated', summary: `Updated status ${status.name}.`, payload: { statusId, name: body.name, type: body.type, color: body.color, details } })
       return { ok: true }
     })
@@ -4716,11 +5165,11 @@ const start = async () => {
           slug,
           description: body.description?.trim() || null,
           statuses: { create: [
-            { name: 'Backlog', type: 'BACKLOG', position: 0, color: '#1F2937' },
-            { name: 'In Progress', type: 'IN_PROGRESS', position: 1, color: '#172554' },
-            { name: 'Blocked', type: 'BLOCKED', position: 2, color: '#7f1d1d' },
-            { name: 'Review', type: 'REVIEW', position: 3, color: '#422006' },
-            { name: 'Done', type: 'DONE', position: 4, color: '#14532D' },
+            { name: 'Backlog', type: 'BACKLOG', position: 0, color: defaultTaskStatusColor(TaskStatusType.BACKLOG) },
+            { name: 'In Progress', type: 'IN_PROGRESS', position: 1, color: defaultTaskStatusColor(TaskStatusType.IN_PROGRESS) },
+            { name: 'Blocked', type: 'BLOCKED', position: 2, color: defaultTaskStatusColor(TaskStatusType.BLOCKED) },
+            { name: 'Review', type: 'REVIEW', position: 3, color: defaultTaskStatusColor(TaskStatusType.REVIEW) },
+            { name: 'Done', type: 'DONE', position: 4, color: defaultTaskStatusColor(TaskStatusType.DONE) },
           ] },
           ...(defaultOwnerIds.length ? { memberships: { create: defaultOwnerIds.map((accountId) => ({ accountId, role: PROJECT_ROLE.OWNER })) } } : {}),
         },
@@ -4799,18 +5248,34 @@ const start = async () => {
       const workspace = (request as any).workspace
       if (!(await requireWorkspaceRole(request, reply, [WorkspaceRole.OWNER, WorkspaceRole.MEMBER]))) return
       const params = request.params as { taskId: string }
-      const body = request.body as { title?: string; description?: string; owner?: string; participants?: string[]; assignee?: string; collaborators?: string[]; priority?: TaskPriority; dueDate?: string | null; statusId?: string }
-      const existing = await prisma.task.findFirst({ where: { id: params.taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { collaborators: true, participants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] } } })
+      const body = request.body as { title?: string; description?: string; owner?: string; participants?: string[]; assignee?: string; collaborators?: string[]; priority?: TaskPriority; dueDate?: string | null; statusId?: string; projectId?: string }
+      const existing = await prisma.task.findFirst({ where: { id: params.taskId, archivedAt: null, project: { workspaceId: workspace.id, archivedAt: null } }, include: { status: true, labels: { include: { label: true } }, collaborators: true, participants: { orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] } } })
       if (!existing) return reply.code(404).send({ ok: false, error: 'Task not found' })
       if (!(await requireProjectRole(request, reply, existing.projectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
       const taskScope = await getTaskAccessScope(request, existing.projectId)
       if (!canAccessTaskAssignee(taskScope, existing.assignee, existing.collaborators.map((item) => item.collaborator), existing.owner, existing.participants.map((item) => item.participant))) return reply.code(403).send({ ok: false, error: 'Task access denied' })
+      const targetProjectId = body.projectId !== undefined ? body.projectId : existing.projectId
+      const movingProject = targetProjectId !== existing.projectId
+      let targetProject: { id: string; name: string } | null = null
+      if (movingProject) {
+        targetProject = await prisma.project.findFirst({ where: { id: targetProjectId, workspaceId: workspace.id, archivedAt: null }, select: { id: true, name: true } })
+        if (!targetProject) return reply.code(404).send({ ok: false, error: 'Target project not found' })
+        if (!(await requireProjectRole(request, reply, targetProjectId, [PROJECT_ROLE.OWNER, PROJECT_ROLE.MEMBER]))) return
+      }
       const currentStatus = await prisma.taskStatus.findFirst({ where: { id: existing.statusId }, select: { id: true, name: true } })
       let targetStatusName: string | null = null
+      let resolvedStatusId = existing.statusId
       if (body.statusId) {
-        const targetStatus = await prisma.taskStatus.findFirst({ where: { id: body.statusId, projectId: existing.projectId } })
+        const targetStatus = await prisma.taskStatus.findFirst({ where: { id: body.statusId, projectId: targetProjectId } })
         if (!targetStatus) return reply.code(404).send({ ok: false, error: 'Target status not found for task project' })
         targetStatusName = targetStatus.name
+        resolvedStatusId = targetStatus.id
+      } else if (movingProject) {
+        const matchingStatus = await prisma.taskStatus.findFirst({ where: { projectId: targetProjectId, type: existing.status.type }, orderBy: { position: 'asc' } })
+        const firstStatus = matchingStatus || await prisma.taskStatus.findFirst({ where: { projectId: targetProjectId }, orderBy: { position: 'asc' } })
+        if (!firstStatus) return reply.code(404).send({ ok: false, error: 'Target project has no statuses' })
+        targetStatusName = firstStatus.name
+        resolvedStatusId = firstStatus.id
       }
       const existingPeople = getResolvedTaskPeople(existing)
       const nextTitle = body.title !== undefined ? body.title : existing.title
@@ -4821,7 +5286,7 @@ const start = async () => {
       })
       const nextPriority = body.priority !== undefined ? body.priority : existing.priority
       const nextDueDate = body.dueDate !== undefined ? toIsoOrNull(body.dueDate) : existing.dueDate
-      const nextStatusId = body.statusId !== undefined ? body.statusId : existing.statusId
+      const nextStatusId = resolvedStatusId
       const details: string[] = []
       if (nextTitle !== existing.title) details.push(activityChange('title', existing.title, nextTitle))
       if ((nextDescription || null) !== (existing.description || null)) details.push('description changed')
@@ -4830,16 +5295,36 @@ const start = async () => {
       if (nextPriority !== existing.priority) details.push(activityChange('priority', existing.priority, nextPriority))
       if ((nextDueDate || null)?.toString() !== (existing.dueDate || null)?.toString()) details.push(activityChange('due date', existing.dueDate, nextDueDate))
       if (nextStatusId !== existing.statusId) details.push(activityChange('status', currentStatus?.name || existing.statusId, targetStatusName || nextStatusId))
+      if (movingProject) details.push(activityChange('project', existing.projectId, targetProject?.name || targetProjectId))
       if (peopleWrite.assignee) {
-        const allowedAssignee = await ensureProjectMembershipForAssignee(workspace.id, existing.projectId, peopleWrite.assignee)
+        const allowedAssignee = await ensureProjectMembershipForAssignee(workspace.id, targetProjectId, peopleWrite.assignee)
         if (!allowedAssignee) return reply.code(400).send({ ok: false, error: 'Assignee must already be a member of this project' })
       }
       for (const collaborator of peopleWrite.collaborators) {
-        const allowedCollaborator = await ensureProjectMembershipForAssignee(workspace.id, existing.projectId, collaborator)
+        const allowedCollaborator = await ensureProjectMembershipForAssignee(workspace.id, targetProjectId, collaborator)
         if (!allowedCollaborator) return reply.code(400).send({ ok: false, error: 'Collaborators must already be members of this project' })
       }
       await prisma.$transaction(async (tx) => {
-        await tx.task.update({ where: { id: params.taskId }, data: { ...(body.title !== undefined ? { title: body.title } : {}), ...(body.description !== undefined ? { description: body.description } : {}), owner: peopleWrite.owner, assignee: peopleWrite.assignee, ...(body.priority !== undefined ? { priority: body.priority } : {}), ...(body.dueDate !== undefined ? { dueDate: toIsoOrNull(body.dueDate) } : {}), ...(body.statusId !== undefined ? { statusId: body.statusId } : {}) } })
+        let movedTaskData: { projectId?: string; statusId?: string; number?: number; position?: number } = {}
+        if (movingProject) {
+          const projectCounter = await tx.project.update({ where: { id: targetProjectId }, data: { taskCounter: { increment: 1 } }, select: { taskCounter: true } })
+          const maxPositionTask = await tx.task.findFirst({ where: { projectId: targetProjectId, archivedAt: null }, orderBy: [{ position: 'desc' }], select: { position: true } })
+          movedTaskData = { projectId: targetProjectId, statusId: nextStatusId, number: projectCounter.taskCounter, position: (maxPositionTask?.position ?? -1) + 1 }
+          const labelNames = existing.labels.map((entry) => entry.label.name)
+          await tx.taskLabel.deleteMany({ where: { taskId: params.taskId } })
+          for (const name of labelNames) {
+            const label = await tx.label.upsert({ where: { projectId_name: { projectId: targetProjectId, name } }, create: { projectId: targetProjectId, name }, update: {} })
+            await tx.taskLabel.create({ data: { taskId: params.taskId, labelId: label.id } })
+          }
+          await tx.taskDependency.deleteMany({ where: { OR: [{ taskId: params.taskId }, { dependsOnId: params.taskId }] } })
+          await tx.timesheetEntry.updateMany({ where: { taskId: params.taskId }, data: { projectId: targetProjectId } })
+          await tx.workItemRef.updateMany({ where: { sallyTaskId: params.taskId }, data: { projectId: targetProjectId } })
+          await tx.agentJob.updateMany({ where: { taskId: params.taskId }, data: { projectId: targetProjectId } })
+          await tx.agentRun.updateMany({ where: { taskId: params.taskId }, data: { projectId: targetProjectId } })
+          await tx.approvalRequest.updateMany({ where: { taskId: params.taskId }, data: { projectId: targetProjectId } })
+          await tx.blocker.updateMany({ where: { taskId: params.taskId }, data: { projectId: targetProjectId } })
+        }
+        await tx.task.update({ where: { id: params.taskId }, data: { ...(movingProject ? movedTaskData : {}), ...(body.title !== undefined ? { title: body.title } : {}), ...(body.description !== undefined ? { description: body.description } : {}), owner: peopleWrite.owner, assignee: peopleWrite.assignee, ...(body.priority !== undefined ? { priority: body.priority } : {}), ...(body.dueDate !== undefined ? { dueDate: toIsoOrNull(body.dueDate) } : {}), ...(!movingProject && body.statusId !== undefined ? { statusId: nextStatusId } : {}) } })
         await tx.taskParticipant.deleteMany({ where: { taskId: params.taskId } })
         if (peopleWrite.participantRows.length) {
           await tx.taskParticipant.createMany({ data: peopleWrite.participantRows.map((participant) => ({ taskId: params.taskId, participant: participant.participant, role: participant.role, position: participant.position })) })
@@ -4850,13 +5335,13 @@ const start = async () => {
         }
       })
       const existingParticipantNames = existingPeople.participants.map((participant) => participant.participant)
-      for (const participant of peopleWrite.participantRows) await ensureProjectMembershipForAssignee(workspace.id, existing.projectId, participant.participant)
+      for (const participant of peopleWrite.participantRows) await ensureProjectMembershipForAssignee(workspace.id, targetProjectId, participant.participant)
       for (const participant of peopleWrite.participantRows.filter((value) => !existingParticipantNames.includes(value.participant))) {
-        await notifyTaskAssignment({ workspaceId: workspace.id, projectId: existing.projectId, taskId: existing.id, taskTitle: nextTitle, assignee: participant.participant, actorAccountId: ((request as any).account as { id: string } | undefined)?.id ?? null })
+        await notifyTaskAssignment({ workspaceId: workspace.id, projectId: targetProjectId, taskId: existing.id, taskTitle: nextTitle, assignee: participant.participant, actorAccountId: ((request as any).account as { id: string } | undefined)?.id ?? null })
       }
       if (body.description !== undefined) cleanupRemovedDescriptionImages(existing.description, nextDescription)
-      await logActivity({ workspaceId: workspace.id, projectId: existing.projectId, taskId: existing.id, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: 'task.updated', summary: `Updated task ${existing.title}.`, payload: { taskId: existing.id, details } })
-      return { ok: true }
+      await logActivity({ workspaceId: workspace.id, projectId: targetProjectId, taskId: existing.id, actorName: actorFromRequest(request).actorName, actorEmail: actorFromRequest(request).actorEmail, actorApiKeyLabel: actorFromRequest(request).actorApiKeyLabel, type: movingProject ? 'task.moved' : 'task.updated', summary: movingProject ? `Moved task ${existing.title} to ${targetProject?.name || targetProjectId}.` : `Updated task ${existing.title}.`, payload: { taskId: existing.id, fromProjectId: movingProject ? existing.projectId : undefined, toProjectId: movingProject ? targetProjectId : undefined, details } })
+      return { ok: true, projectId: targetProjectId, statusId: nextStatusId }
     })
 
     app.post('/tasks/:taskId/archive', async (request, reply) => {

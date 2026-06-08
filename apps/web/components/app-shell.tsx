@@ -81,13 +81,14 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     }))
     setWorkspaceOptions(options)
 
+    const requestedWorkspaceId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('workspaceId') : null
     const storedWorkspace = getWorkspaceId()
-    const nextWorkspace = pickPreferredWorkspaceId(workspaceMemberships, { storedWorkspaceId: storedWorkspace }) || ''
+    const nextWorkspace = pickPreferredWorkspaceId(workspaceMemberships, { requestedWorkspaceId, storedWorkspaceId: storedWorkspace }) || ''
     setActiveWorkspaceId(nextWorkspace)
     if (nextWorkspace) {
       if (nextWorkspace !== storedWorkspace) {
         setWorkspaceId(nextWorkspace)
-        if (refreshOptions?.reloadOnWorkspaceChange) window.location.reload()
+        if (refreshOptions?.reloadOnWorkspaceChange || requestedWorkspaceId === nextWorkspace) window.location.reload()
       }
     } else if (storedWorkspace) {
       setWorkspaceId(null)
@@ -239,7 +240,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     await readNotification(notification.id)
     setNotifications((current) => current.filter((item) => item.id !== notification.id))
     setNotificationsOpen(false)
-    const workspaceQuery = activeWorkspaceId ? `?workspaceId=${encodeURIComponent(activeWorkspaceId)}` : ''
+    const targetWorkspaceId = notification.workspaceId || activeWorkspaceId
+    if (targetWorkspaceId) setWorkspaceId(targetWorkspaceId)
+    const workspaceQuery = targetWorkspaceId ? `?workspaceId=${encodeURIComponent(targetWorkspaceId)}` : ''
     if (notification.taskId) {
       router.push(`/tasks/${notification.taskId}${workspaceQuery}`)
       return

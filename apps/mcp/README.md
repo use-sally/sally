@@ -87,6 +87,7 @@ sally-mcp
 ### Workspace and account
 
 - `workspace.list`
+- `workspace.create` — platform admin only
 - `workspace.members.list`
 - `workspace.members.add`
 - `workspace.members.update`
@@ -135,6 +136,8 @@ sally-mcp
 - `project.statuses.create`
 - `project.statuses.update`
 - `project.statuses.delete`
+- `project.statuses.reorder`
+- `project.tasks.reorder`
 
 ### Tasks, comments, labels, todos, uploads
 
@@ -171,5 +174,8 @@ sally-mcp
 - It does not access the database directly.
 - Each user should mint and use their own Sally API key.
 - Permissions are inherited from the real Sally user behind that key.
+- Permission failures include structured API feedback when available, including required roles/key scopes and the current role context, so agents can explain what access is missing.
+- Platform-admin-only operations remain platform-admin-only.
 - Owner-only operations remain owner-only. The MCP server does not bypass Sally permissions.
+- `task.update` can receive `projectId` to move a task to another project in the same workspace when the user has the required project access.
 - Login, invite acceptance, password reset, and other email/token flows are intentionally not exposed as MCP tools because they are not practical authenticated agent actions with a minted user API key.
