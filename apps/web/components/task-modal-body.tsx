@@ -113,6 +113,8 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
   const [description, setDescription] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [newTodo, setNewTodo] = useState('')
+  const [editingTodoId, setEditingTodoId] = useState<string | null>(null)
+  const [editingTodoText, setEditingTodoText] = useState('')
   const [commentBody, setCommentBody] = useState('')
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionOptions, setMentionOptions] = useState<MentionableUser[]>([])
@@ -288,6 +290,33 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
     setBusy(true)
     try {
       await updateTaskTodo(taskId, id, { done: !done })
+      await invalidateAll()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function startTodoEdit(id: string, text: string) {
+    if (!taskEditDecision.allowed) return
+    setEditingTodoId(id)
+    setEditingTodoText(text)
+  }
+
+  function cancelTodoEdit() {
+    setEditingTodoId(null)
+    setEditingTodoText('')
+  }
+
+  async function saveTodoText(id: string, currentText: string) {
+    const nextText = editingTodoText.trim()
+    if (!nextText || nextText === currentText) {
+      cancelTodoEdit()
+      return
+    }
+    setBusy(true)
+    try {
+      await updateTaskTodo(taskId, id, { text: nextText })
+      cancelTodoEdit()
       await invalidateAll()
     } finally {
       setBusy(false)
@@ -675,7 +704,60 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
           <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)', fontWeight: 700 }}>Checklist</div>
           {taskEditDecision.visible ? <input value={newTodo} onChange={(e) => setNewTodo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && taskEditDecision.allowed) { e.preventDefault(); void addTodo() } }} style={inputStyle} placeholder="Add checklist item and press Enter" disabled={!taskEditDecision.allowed} /> : null}
           <div style={{ display: 'grid', gap: 8 }}>
-            {task.todos.map((todo) => <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-13)' }}><input type="checkbox" checked={todo.done} onChange={() => taskEditDecision.allowed ? void toggleTodo(todo.id, todo.done) : undefined} disabled={!taskEditDecision.allowed} /> <span style={{ textDecoration: todo.done ? 'line-through' : 'none', opacity: todo.done ? 0.55 : 1 }}>{todo.text}</span></label>{taskEditDecision.visible ? <button onClick={() => void removeTodo(todo.id)} style={deleteTextAction}>Delete</button> : null}</div>)}
+            {task.todos.map((todo) => {
+              const isEditingTodo = editingTodoId === todo.id
+              return (
+                <div key={todo.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 'var(--font-13)', minWidth: 0, flex: 1 }}>
+                    <input type="checkbox" checked={todo.done} onChange={() => taskEditDecision.allowed ? void toggleTodo(todo.id, todo.done) : undefined} disabled={!taskEditDecision.allowed} />
+                    {isEditingTodo ? (
+                      <input
+                        autoFocus
+                        value={editingTodoText}
+                        onChange={(event) => setEditingTodoText(event.target.value)}
+                        onBlur={() => void saveTodoText(todo.id, todo.text)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            void saveTodoText(todo.id, todo.text)
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            cancelTodoEdit()
+                          }
+                        }}
+                        disabled={busy || !taskEditDecision.allowed}
+                        aria-label="Edit checklist item"
+                        style={{ ...inputStyle, padding: '6px 8px', fontSize: 'var(--font-13)', minWidth: 0, width: '100%' }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startTodoEdit(todo.id, todo.text)}
+                        disabled={!taskEditDecision.allowed}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          padding: 0,
+                          minWidth: 0,
+                          textAlign: 'left',
+                          color: 'var(--text-primary)',
+                          cursor: taskEditDecision.allowed ? 'text' : 'default',
+                          textDecoration: todo.done ? 'line-through' : 'none',
+                          opacity: todo.done ? 0.55 : 1,
+                          fontSize: 'var(--font-13)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {todo.text}
+                      </button>
+                    )}
+                  </div>
+                  {taskEditDecision.visible ? <button onClick={() => void removeTodo(todo.id)} style={deleteTextAction}>Delete</button> : null}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
