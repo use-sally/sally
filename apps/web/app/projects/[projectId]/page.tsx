@@ -16,12 +16,13 @@ import { TaskModal } from '../../../components/task-modal'
 import { SectionHeaderWithInfo } from '../../../components/info-flag'
 import { MarkdownDescriptionEditor } from '../../../components/markdown-description-editor'
 import { TaskDescriptionRender } from '../../../components/task-description-render'
-import { addProjectMember, archiveProject, deleteProject, getProjectActivity, getProjectMembers, inviteWorkspaceMember, removeProjectMember, updateProject, updateProjectMember, uploadProjectDescriptionImage } from '../../../lib/api'
-import { getWorkspaceId, loadSession } from '../../../lib/auth'
+import { addProjectMember, archiveProject, deleteProject, getProjectActivity, getProjectMembers, inviteWorkspaceMember, removeProjectMember, updateProject, updateProjectMember, uploadProjectDescriptionImage, type InviteResponse } from '../../../lib/api'
+import { getWorkspaceId, loadSession, setWorkspaceId } from '../../../lib/auth'
 import { qk, useBoardQuery, useClientsQuery, useProjectAutomationQuery, useProjectQuery } from '../../../lib/query'
 import { projectWorkflowSummary } from '../../../lib/task-automation'
 import { archiveTextAction, deleteTextAction, labelText, projectInputField } from '../../../lib/theme'
 import { projectRoleOptions } from '../../../lib/roles'
+import { workspaceProjectPath } from '../../../lib/routes'
 import { canChangeProjectClient, canChangeProjectMemberRole, canEditProject, canInviteProjectMember, canManageProjectWorkflow, canRemoveProjectMember } from '../../../lib/permissions'
 
 function formatActivityActor(event: { actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null }) {
@@ -79,11 +80,24 @@ function projectMemberRoleLabel(member: { role: string; workspaceRole?: string |
       ? 'Workspace owner'
       : member.role === 'OWNER'
         ? 'Project owner'
-        : member.role
+        : member.role === 'VIEWER'
+          ? 'Project viewer'
+          : member.role
 }
 
 function projectRoleRank(role?: string | null) {
-  return role === 'OWNER' ? 2 : 1
+  return role === 'OWNER' ? 3 : role === 'MEMBER' ? 2 : role === 'VIEWER' ? 1 : 0
+}
+
+function inviteLinkFromResponse(response: InviteResponse) {
+  if (response.inviteUrl) return response.inviteUrl
+  if (response.invitePath && typeof window !== 'undefined') return `${window.location.origin}${response.invitePath}`
+  if (response.inviteToken && typeof window !== 'undefined') return `${window.location.origin}/accept-invite?token=${encodeURIComponent(response.inviteToken)}`
+  return null
+}
+
+async function copyTextToClipboard(value: string) {
+  await navigator.clipboard?.writeText(value)
 }
 
 async function compressImageForProject(file: File): Promise<{ mimeType: string; base64: string; fileName: string }> {
@@ -223,7 +237,7 @@ function ArchivedProjectTimesheets({ entries }: { entries: { id: string; userNam
   )
 }
 
-export default function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default function ProjectDetailPage({ params }: { params: Promise<{ workspaceId?: string; projectId: string }> }) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const qc = useQueryClient()
@@ -235,9 +249,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const [activity, setActivity] = useState<{ id: string; type: string; summary: string; actorName: string | null; actorEmail: string | null; actorApiKeyLabel: string | null; actorMcpKeyLabel: string | null; details: string[]; createdAt: string }[]>([])
   const [members, setMembers] = useState<{ id: string; accountId: string; name: string | null; email: string; avatarUrl?: string | null; role: string; createdAt: string; locked?: boolean; workspaceRole?: string | null; platformRole?: string | null }[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('MEMBER')
   const [memberInviteMode, setMemberInviteMode] = useState(false)
   const [memberActionSaving, setMemberActionSaving] = useState(false)
   const [memberActionInfo, setMemberActionInfo] = useState<string | null>(null)
+  const [memberInviteLink, setMemberInviteLink] = useState<string | null>(null)
   const [memberActionError, setMemberActionError] = useState<string | null>(null)
   const [clientSaving, setClientSaving] = useState(false)
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
@@ -256,7 +272,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
   const clientPickerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    void params.then((p) => setProjectId(p.projectId))
+    void params.then((p) => {
+      if (p.workspaceId) setWorkspaceId(p.workspaceId)
+      setProjectId(p.projectId)
+    })
   }, [params])
 
   useEffect(() => {
@@ -328,7 +347,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
     if (!project) return
     setProjectNameDraft(project.name)
     setProjectDescriptionDraft(project.description || '')
-  }, [project?.id, project?.name, project?.description])
+  }, [project])
   const session = loadSession()
   const taskOptions = project?.recentTasks.map((task) => ({ id: task.id, title: task.title })) ?? []
   const boardAssigneeOptions = useMemo(() => {
@@ -459,12 +478,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
       setMemberActionSaving(true)
       setMemberActionError(null)
       setMemberActionInfo(null)
-      await inviteWorkspaceMember({ email, role: 'MEMBER' })
-      await addProjectMember(projectId, { email, role: 'MEMBER' })
+      setMemberInviteLink(null)
+      const inviteResponse = await inviteWorkspaceMember({ email, role: 'MEMBER' })
+      await addProjectMember(projectId, { email, role: inviteRole })
       await refreshMembers()
       setInviteEmail('')
+      setInviteRole('MEMBER')
       setMemberInviteMode(false)
-      setMemberActionInfo('Invite sent. User will join the workspace and this project.')
+      const inviteLink = inviteLinkFromResponse(inviteResponse)
+      setMemberInviteLink(inviteLink)
+      setMemberActionInfo(inviteResponse.emailed ? 'Invite sent. User will join the workspace and this project.' : inviteLink ? 'Invite created. Copy and share the link with the user.' : 'Invite created, but no email was sent. Check SMTP configuration.')
     } catch (err) {
       setMemberActionError(err instanceof Error ? err.message : 'Failed to invite project member')
     } finally {
@@ -477,6 +500,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
       setMemberActionSaving(true)
       setMemberActionError(null)
       setMemberActionInfo(null)
+      setMemberInviteLink(null)
       await updateProjectMember(projectId, membershipId, { role })
       await refreshMembers()
       setMemberActionInfo('Project role updated.')
@@ -493,6 +517,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
       setMemberActionSaving(true)
       setMemberActionError(null)
       setMemberActionInfo(null)
+      setMemberInviteLink(null)
       await removeProjectMember(projectId, membershipId)
       await refreshMembers()
       setMemberActionInfo('Project member removed.')
@@ -683,24 +708,30 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                   {inviteMemberDecision.visible ? (
                     <div style={{ position: 'relative' }}>
                       {memberInviteMode ? (
-                        <input
-                          autoFocus
-                          value={inviteEmail}
-                          onChange={(event) => setInviteEmail(event.target.value)}
-                          onBlur={() => { if (!memberActionSaving && !inviteEmail.trim()) setMemberInviteMode(false) }}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault()
-                              void handleInviteProjectMember()
-                            }
-                            if (event.key === 'Escape') {
-                              setInviteEmail('')
-                              setMemberInviteMode(false)
-                            }
-                          }}
-                          placeholder="add email address to invite"
-                          style={memberAddInput}
-                        />
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)} disabled={memberActionSaving} style={memberRoleSelect} aria-label="Project role for invited member">
+                            {projectRoleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                          </select>
+                          <input
+                            autoFocus
+                            value={inviteEmail}
+                            onChange={(event) => setInviteEmail(event.target.value)}
+                            onBlur={() => { if (!memberActionSaving && !inviteEmail.trim()) setMemberInviteMode(false) }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                void handleInviteProjectMember()
+                              }
+                              if (event.key === 'Escape') {
+                                setInviteEmail('')
+                                setInviteRole('MEMBER')
+                                setMemberInviteMode(false)
+                              }
+                            }}
+                            placeholder="add email address to invite"
+                            style={memberAddInput}
+                          />
+                        </div>
                       ) : (
                         <button
                           type="button"
@@ -716,6 +747,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                   ) : null}
                 </div>
                 {memberActionInfo ? <div style={{ color: '#34d399', fontSize: 'var(--font-12)' }}>{memberActionInfo}</div> : null}
+                {memberInviteLink ? (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', fontSize: 'var(--font-12)' }}>
+                    <code style={{ color: 'var(--text-secondary)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{memberInviteLink}</code>
+                    <button type="button" onClick={() => void copyTextToClipboard(memberInviteLink).then(() => setMemberActionInfo('Invite link copied.'))} style={memberCopyButton}>Copy link</button>
+                  </div>
+                ) : null}
                 {memberActionError ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-12)' }}>{memberActionError}</div> : null}
               </section>
 
@@ -763,7 +800,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                     <div style={labelText}>Depends on</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {project.dependencies.map((dep: { projectId: string; name: string }) => (
-                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)', fontWeight: 600 }}>{dep.name}</a>
+                        <a key={dep.projectId} href={workspaceProjectPath(getWorkspaceId(), dep.projectId)} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)', fontWeight: 600 }}>{dep.name}</a>
                       ))}
                     </div>
                   </div>
@@ -773,7 +810,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                     <div style={labelText}>Blocks</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {project.dependedOnBy.map((dep: { projectId: string; name: string }) => (
-                        <a key={dep.projectId} href={`/projects/${dep.projectId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)', fontWeight: 600 }}>{dep.name}</a>
+                        <a key={dep.projectId} href={workspaceProjectPath(getWorkspaceId(), dep.projectId)} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)', fontWeight: 600 }}>{dep.name}</a>
                       ))}
                     </div>
                   </div>
@@ -823,7 +860,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ projec
                           </select>
                           <input value={boardLabel} onChange={(event) => setBoardLabel(event.target.value)} placeholder="Filter by label" style={projectInputField} />
                         </div>
-                        {boardColumns.length ? <TaskBoard columns={filteredBoardColumns} taskBaseHref={`/projects/${projectId}`} projectId={projectId} canReorderStatuses={workflowDecision.allowed} canManageStatuses={workflowDecision.allowed} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>}
+                        {boardColumns.length ? <TaskBoard columns={filteredBoardColumns} taskBaseHref={workspaceProjectPath(getWorkspaceId(), projectId)} projectId={projectId} canReorderStatuses={workflowDecision.allowed} canManageStatuses={workflowDecision.allowed} automationOverview={automationOverview} /> : <div style={{ color: 'var(--text-muted)' }}>{boardLoading ? 'Loading board…' : 'No tasks yet.'}</div>}
                       </div>
                     )
                   ) : (
@@ -890,6 +927,8 @@ const memberRoleMenu: React.CSSProperties = { position: 'absolute', left: 0, top
 const memberRoleOption: React.CSSProperties = { background: 'transparent', border: 'none', padding: '6px 8px', textAlign: 'left', cursor: 'pointer', borderRadius: 8, color: 'var(--text-primary)', fontSize: 'var(--font-12)' }
 const memberAddButton: React.CSSProperties = { width: 34, height: 34, padding: 0, border: '1px solid var(--panel-border)', borderRadius: 999, background: 'var(--form-bg)', color: 'var(--heading-text)', cursor: 'pointer', display: 'inline-grid', placeItems: 'center', fontSize: 'var(--font-20)', lineHeight: 1, fontWeight: 700 }
 const memberAddInput: React.CSSProperties = { ...projectInputField, width: 220, padding: '6px 10px', fontSize: 'var(--font-12)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberRoleSelect: React.CSSProperties = { ...projectInputField, width: 104, padding: '6px 8px', fontSize: 'var(--font-12)', fontFamily: `'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace` }
+const memberCopyButton: React.CSSProperties = { border: '1px solid var(--panel-border)', borderRadius: 999, background: 'var(--form-bg)', color: 'var(--text-primary)', padding: '4px 8px', fontSize: 'var(--font-12)', cursor: 'pointer' }
 const memberRemoveText: React.CSSProperties = { marginTop: 0, padding: 0, border: 'none', background: 'transparent', color: 'var(--danger-text)', fontSize: 'var(--font-12)', cursor: 'pointer', textAlign: 'left', lineHeight: 1.2 }
 const projectHeaderNameText: React.CSSProperties = { fontSize: 'var(--font-30)', fontWeight: 750, color: 'var(--heading-text)', lineHeight: 1.1 }
 const projectHeaderNameButton: React.CSSProperties = { ...projectHeaderNameText, display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'text', textAlign: 'left' }

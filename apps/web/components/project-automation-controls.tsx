@@ -8,6 +8,8 @@ import { createAgentPairingCode, revokeAgentConnection, startProjectWorkflow, up
 import { AGENT_RUNTIME_OPTIONS, getAgentRuntimeOption, type AgentRuntimeId } from '../lib/agent-runtimes'
 import { buildAgentNpxConnectCommand, copyAgentConnectCommandToClipboard } from '../lib/project-automation-display'
 import { qk, useProjectAutomationQuery } from '../lib/query'
+import { getWorkspaceId } from '../lib/auth'
+import { workspaceProjectPath } from '../lib/routes'
 import { pill } from './app-shell'
 
 type AutomationToast = { kind: 'message'; text: string }
@@ -153,7 +155,7 @@ export function ProjectAutomationControls({ projectId, canManage, compact = fals
 
   const handleWorkflowControlAction = async () => {
     if (workflowControl.action === 'open-automation') {
-      router.replace(`/projects/${projectId}?view=automation`, { scroll: false })
+      router.replace(`${workspaceProjectPath(getWorkspaceId(), projectId)}?view=automation`, { scroll: false })
       return
     }
     await handleStartWorkflow()

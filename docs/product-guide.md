@@ -56,25 +56,29 @@ Sally is especially suited to teams that:
 ### Workspace management
 - list visible workspaces
 - create workspaces (superadmin)
+- superadmin/admin access remains available even when no workspace exists
 - manage workspace memberships
-- invite members by email
+- invite members by email or copy invite links for manual delivery
 - resend or cancel pending invites
 - workspace-scoped access control
 
 ### Projects
 - create and update projects
 - archive and delete projects
+- canonical workspace-scoped project URLs: `/workspaces/:workspaceId/projects/:projectId`
 - inline project name/description editing in the web app
 - default project statuses: Backlog, In Progress, Blocked, Review, Done
 - custom project statuses with color and task counts
 - Blocked uses the default red status color
 - project activity log
-- project members with roles
-- add existing workspace members to projects or invite by email from the project surface
+- project members with owner/member/viewer roles
+- project viewer role for read-only access without assignee/people details
+- add existing workspace members to projects or invite by email/link from the project surface
 - client linking
 
 ### Tasks
 - create, update, archive, delete
+- canonical workspace-scoped task URLs: `/workspaces/:workspaceId/projects/:projectId/tasks/:taskId`
 - move between statuses
 - move to another project in the same workspace from the task modal
 - reorder within columns
@@ -155,12 +159,13 @@ There are two main permission layers:
 ### Project roles
 - `OWNER`
 - `MEMBER`
-- `VIEWER` may still exist in older data or API-level handling, but normal current UI flows focus on `OWNER` and `MEMBER`
+- `VIEWER`
 
 General rule of thumb:
 - owners manage structure and membership
 - members do normal project work
-- the web app now hides or disables actions based on the effective permission decision instead of exposing a broad editable surface to everyone
+- viewers can read the project and tasks, but cannot edit anything and do not see assignee/people details
+- the web app hides or disables actions based on the effective permission decision instead of exposing a broad editable surface to everyone
 
 For exact behavior and edge cases, use:
 - [`docs/api.md`](./api.md)
@@ -195,5 +200,6 @@ It is trying to be a solid operational core for project and task execution.
 
 - For install: [`ubuntu-debian-install.md`](./ubuntu-debian-install.md)
 - For API integration: [`api.md`](./api.md)
+- For workspace access, invite links, and shareable URLs: [`workspace-access-sharing.md`](./workspace-access-sharing.md)
 - For MCP usage: [`mcp.md`](./mcp.md)
 - For practical examples: [`tutorials.md`](./tutorials.md)

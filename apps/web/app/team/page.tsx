@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { AppShell } from '../../components/app-shell'
-import { addTeamAccountToProject, addTeamAccountToWorkspace, apiUrl, archiveTeamAccount, createTeamAccount, deleteTeamAccount, getTeamAccounts, removeTeamAccountFromProject, removeTeamAccountFromWorkspace, resetTeamAccountTwoFactor, type TeamAccountHub, updateAccountPlatformRole, uploadTeamAccountAvatar } from '../../lib/api'
+import { addTeamAccountToProject, addTeamAccountToWorkspace, apiUrl, archiveTeamAccount, createTeamAccount, createTeamAccountInvite, deleteTeamAccount, getTeamAccounts, removeTeamAccountFromProject, removeTeamAccountFromWorkspace, resetTeamAccountTwoFactor, type TeamAccountHub, updateAccountPlatformRole, uploadTeamAccountAvatar } from '../../lib/api'
 import { loadSession } from '../../lib/auth'
 import { platformRoleLabel } from '../../lib/roles'
 import { archiveTextAction, deleteTextAction, restoreTextAction } from '../../lib/theme'
@@ -47,6 +47,17 @@ async function compressTeamAvatar(file: File): Promise<{ mimeType: string; base6
 }
 
 type TeamAccount = TeamAccountHub['accounts'][number]
+
+function inviteLinkFromParts(input: { inviteUrl?: string | null; invitePath?: string | null; inviteToken?: string | null }) {
+  if (input.inviteUrl) return input.inviteUrl
+  if (input.invitePath && typeof window !== 'undefined') return `${window.location.origin}${input.invitePath}`
+  if (input.inviteToken && typeof window !== 'undefined') return `${window.location.origin}/accept-invite?token=${encodeURIComponent(input.inviteToken)}`
+  return null
+}
+
+async function copyTextToClipboard(value: string) {
+  await navigator.clipboard?.writeText(value)
+}
 
 export default function TeamPage() {
   const [hub, setHub] = useState<TeamAccountHub | null>(null)
@@ -171,7 +182,9 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
   const [workspaceRole, setWorkspaceRole] = useState('MEMBER')
   const [expandedWorkspaceId, setExpandedWorkspaceId] = useState<string | null>(null)
   const [projectDrafts, setProjectDrafts] = useState<Record<string, { projectId: string; role: string }>>({})
+  const [copyNotice, setCopyNotice] = useState<string | null>(null)
   const archived = !!account.archivedAt
+  const isInviteOnly = !!account.inviteOnly
   const isCurrentAccount = account.id === currentAccountId
   const isSuperadminAccount = account.platformRole === 'SUPERADMIN'
   const visibleWorkspaceMemberships = account.memberships.filter((membership) => !membership.workspaceArchivedAt)
@@ -183,6 +196,21 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
   }
   const avatarSrc = account.avatarUrl ? (account.avatarUrl.startsWith('/') ? apiUrl(account.avatarUrl) : account.avatarUrl) : ''
   const avatarInitial = (account.name?.trim()?.[0] || account.email.trim()[0] || '?').toUpperCase()
+  const pendingInvites = account.pendingInvites ?? []
+  const showInviteLinks = !account.accountActivated || pendingInvites.length > 0
+  const handleCopyInvite = async (invite: NonNullable<TeamAccount['pendingInvites']>[number]) => {
+    const link = inviteLinkFromParts(invite)
+    if (!link) {
+      setCopyNotice('Invite link unavailable. Resend the invite from the workspace member list to refresh it.')
+      return
+    }
+    try {
+      await copyTextToClipboard(link)
+      setCopyNotice(`Invite link copied for ${invite.workspaceName}.`)
+    } catch (err) {
+      setCopyNotice(err instanceof Error ? err.message : 'Failed to copy invite link')
+    }
+  }
 
   return (
     <article style={{ ...panelStyle, padding: 16, opacity: archived ? 0.62 : 1, display: 'grid', gap: 14 }}>
@@ -196,7 +224,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
-            disabled={saving === `avatar:${account.id}`}
+            disabled={isInviteOnly || saving === `avatar:${account.id}`}
             onChange={(event) => {
               const file = event.target.files?.[0]
               event.target.value = ''
@@ -213,11 +241,14 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
           <div style={{ color: 'var(--text-primary)', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name || account.email}</div>
           <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.email}</div>
           {archived ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-11)', fontWeight: 800, marginTop: 5 }}>Archived</div> : null}
+          {!account.accountActivated ? <div style={{ color: '#fcd34d', fontSize: 'var(--font-11)', fontWeight: 800, marginTop: 5 }}>Not activated yet</div> : null}
           <div style={{ color: account.twoFactorEnabled ? '#6ee7b7' : 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 800, marginTop: 5 }}>
             2FA {account.twoFactorEnabled ? 'enabled' : 'not enabled'}{account.twoFactorConfirmedAt ? ` · TOTP ${new Date(account.twoFactorConfirmedAt).toLocaleDateString()}` : ''}{account.passkeyCount ? ` · ${account.passkeyCount} passkey${account.passkeyCount === 1 ? '' : 's'}` : ''}
           </div>
         </div>
-        {isSuperadminAccount ? (
+        {isInviteOnly ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)', fontWeight: 700 }}>Pending invite</div>
+        ) : isSuperadminAccount ? (
           <div style={{ display: 'grid', gap: 5, color: 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 800, textTransform: 'uppercase' }}>
             Platform role
             <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700, textTransform: 'none' }}>{platformRoleLabel(account.platformRole)}</div>
@@ -227,7 +258,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
             Platform role
             <select
               value={account.platformRole}
-              disabled={!isSuperadmin || isCurrentAccount || saving === `role:${account.id}`}
+              disabled={isInviteOnly || !isSuperadmin || isCurrentAccount || saving === `role:${account.id}`}
               onChange={(event) => void onAction(`role:${account.id}`, () => updateAccountPlatformRole(account.id, { platformRole: event.target.value as 'NONE' | 'ADMIN' | 'SUPERADMIN' }), 'Platform role updated.')}
               style={inputStyle}
             >
@@ -239,7 +270,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
         )}
         <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-12)', fontWeight: 700 }}>{platformRoleLabel(account.platformRole)}</div>
         <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
-          {isSuperadminAccount ? null : archived ? (
+          {isInviteOnly || isSuperadminAccount ? null : archived ? (
             <button
               type="button"
               onClick={() => void onAction(`archive:${account.id}`, () => archiveTeamAccount(account.id, false), 'User restored.')}
@@ -258,7 +289,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
               Archive user
             </button>
           )}
-          {account.twoFactorEnabled ? (
+          {!isInviteOnly && account.twoFactorEnabled ? (
             <button
               type="button"
               onClick={() => {
@@ -272,7 +303,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
               Reset 2FA
             </button>
           ) : null}
-          {!isSuperadminAccount && archived ? (
+          {!isInviteOnly && !isSuperadminAccount && archived ? (
             <button
               type="button"
               onClick={() => {
@@ -288,13 +319,47 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
         </div>
       </div>
 
+      {showInviteLinks ? (
+        <div style={{ display: 'grid', gap: 8, border: '1px solid rgba(250, 204, 21, 0.22)', borderRadius: 12, padding: 10, background: 'rgba(250, 204, 21, 0.06)' }}>
+          <div style={{ color: '#fcd34d', fontSize: 'var(--font-12)', fontWeight: 800 }}>Invite links</div>
+          {pendingInvites.length ? pendingInvites.map((invite) => {
+            const link = inviteLinkFromParts(invite)
+            return (
+              <div key={invite.inviteId} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>
+                <span>{invite.workspaceName} · {invite.role.toLowerCase()} · expires {new Date(invite.expiresAt).toLocaleDateString()}</span>
+                {link ? <code style={{ maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{link}</code> : null}
+                <button type="button" onClick={() => void handleCopyInvite(invite)} style={smallButtonStyle}>Copy link</button>
+              </div>
+            )
+          }) : visibleWorkspaceMemberships.length ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>
+              <span>No pending invite exists yet.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const membership = visibleWorkspaceMemberships[0]
+                  void onAction(`invite:${account.id}`, () => createTeamAccountInvite(account.id, { workspaceId: membership.workspaceId, role: membership.role }), 'Invite link created.')
+                }}
+                disabled={saving === `invite:${account.id}`}
+                style={smallButtonStyle}
+              >
+                {saving === `invite:${account.id}` ? 'Creating…' : 'Create invite link'}
+              </button>
+            </div>
+          ) : <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Add this account to a workspace to create an invite link.</div>}
+          {copyNotice ? <div style={{ color: '#34d399', fontSize: 'var(--font-12)' }}>{copyNotice}</div> : null}
+        </div>
+      ) : null}
+
       <div style={{ display: 'grid', gap: 10 }}>
         <div style={{ color: '#fcd34d', fontSize: 'var(--font-12)', fontWeight: 800 }}>Workspaces & projects</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 112px auto', gap: 8 }}>
-          <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} style={inputStyle}><option value="">Add workspace</option>{availableWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select>
-          <select value={workspaceRole} onChange={(event) => setWorkspaceRole(event.target.value)} style={inputStyle}><option value="MEMBER">Member</option><option value="OWNER">Owner</option></select>
-          <button type="button" disabled={!workspaceId} onClick={() => void onAction(`addw:${account.id}`, () => addTeamAccountToWorkspace(account.id, { workspaceId, role: workspaceRole }), 'Workspace access added.').then(() => { setExpandedWorkspaceId(workspaceId); setWorkspaceId('') })} style={smallButtonStyle}>Add</button>
-        </div>
+        {!isInviteOnly ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 112px auto', gap: 8 }}>
+            <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} style={inputStyle}><option value="">Add workspace</option>{availableWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select>
+            <select value={workspaceRole} onChange={(event) => setWorkspaceRole(event.target.value)} style={inputStyle}><option value="MEMBER">Member</option><option value="OWNER">Owner</option></select>
+            <button type="button" disabled={!workspaceId} onClick={() => void onAction(`addw:${account.id}`, () => addTeamAccountToWorkspace(account.id, { workspaceId, role: workspaceRole }), 'Workspace access added.').then(() => { setExpandedWorkspaceId(workspaceId); setWorkspaceId('') })} style={smallButtonStyle}>Add</button>
+          </div>
+        ) : null}
 
         <div style={{ display: 'grid', gap: 8 }}>
           {visibleWorkspaceMemberships.map((membership) => {
@@ -319,7 +384,7 @@ function TeamAccountRow({ account, hub, currentAccountId, isSuperadmin, saving, 
                         <option value="">Add project in {membership.workspaceName}</option>
                         {addableProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
                       </select>
-                      <select value={projectDraft.role} onChange={(event) => setProjectDraft(membership.workspaceId, { role: event.target.value })} style={inputStyle}><option value="MEMBER">Member</option><option value="OWNER">Owner</option></select>
+                      <select value={projectDraft.role} onChange={(event) => setProjectDraft(membership.workspaceId, { role: event.target.value })} style={inputStyle}><option value="MEMBER">Member</option><option value="VIEWER">Viewer</option><option value="OWNER">Owner</option></select>
                       <button type="button" disabled={!projectDraft.projectId} onClick={() => void onAction(`addp:${account.id}:${membership.workspaceId}`, () => addTeamAccountToProject(account.id, { projectId: projectDraft.projectId, role: projectDraft.role }), 'Project access added.').then(() => setProjectDraft(membership.workspaceId, { projectId: '' }))} style={smallButtonStyle}>Add</button>
                     </div>
                     <div style={{ display: 'grid', gap: 6 }}>

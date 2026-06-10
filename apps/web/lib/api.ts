@@ -277,7 +277,8 @@ export function resetPassword(payload: { token: string; password: string; invite
   return getJson('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-export function inviteWorkspaceMember(payload: { email: string; role?: string }): Promise<{ ok: boolean; existing?: boolean; emailed?: boolean; expiresAt?: string }> {
+export type InviteResponse = { ok: boolean; existing?: boolean; emailed?: boolean; expiresAt?: string; inviteToken?: string; invitePath?: string; inviteUrl?: string | null }
+export function inviteWorkspaceMember(payload: { email: string; role?: string }): Promise<InviteResponse> {
   return getJson('/auth/invite', { method: 'POST', body: JSON.stringify(payload) })
 }
 
@@ -325,7 +326,7 @@ export function removeWorkspaceMember(workspaceId: string, membershipId: string)
 export function updateAccountPlatformRole(accountId: string, payload: { platformRole: 'NONE' | 'ADMIN' | 'SUPERADMIN' }): Promise<{ ok: boolean; account: { id: string; name: string | null; email: string; avatarUrl?: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' } }> {
   return getJson(`/accounts/${accountId}/platform-role`, { method: 'PATCH', body: JSON.stringify(payload) })
 }
-export function resendWorkspaceInvite(workspaceId: string, inviteId: string): Promise<{ ok: boolean; emailed?: boolean; inviteId?: string; expiresAt?: string }> {
+export function resendWorkspaceInvite(workspaceId: string, inviteId: string): Promise<InviteResponse & { inviteId?: string }> {
   return getJson(`/workspaces/${workspaceId}/invites/${inviteId}/resend`, { method: 'POST', body: JSON.stringify({}) })
 }
 export function cancelWorkspaceInvite(workspaceId: string, inviteId: string): Promise<{ ok: boolean; deletedPlaceholderAccount?: boolean }> {
@@ -348,6 +349,9 @@ export type TeamAccountHub = {
     archivedAt: string | null
     createdAt: string
     updatedAt: string
+    inviteOnly?: boolean
+    accountActivated?: boolean
+    pendingInvites?: { inviteId: string; workspaceId: string; workspaceName: string; role: string; inviteToken?: string | null; invitePath?: string | null; inviteUrl?: string | null; expiresAt: string }[]
     memberships: { id: string; workspaceId: string; workspaceName: string; workspaceSlug?: string; workspaceArchivedAt?: string | null; role: string }[]
     projectMemberships: { id: string; projectId: string; projectName: string; workspaceId: string; workspaceName: string; projectWorkspaceArchivedAt?: string | null; role: string }[]
   }[]
@@ -360,6 +364,7 @@ export function deleteTeamAccount(accountId: string): Promise<{ ok: boolean }> {
 export function uploadTeamAccountAvatar(accountId: string, payload: { fileName?: string; mimeType?: string; base64: string }): Promise<{ ok: boolean; url: string; account: { id: string; name: string | null; email: string; avatarUrl: string | null; platformRole?: 'NONE' | 'ADMIN' | 'SUPERADMIN' } }> { return getJson(`/team/accounts/${accountId}/avatar`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function resetTeamAccountTwoFactor(accountId: string): Promise<{ ok: boolean; accountId: string; enabled: boolean }> { return getJson(`/accounts/${accountId}/2fa/reset`, { method: 'POST', body: JSON.stringify({}) }) }
 export function addTeamAccountToWorkspace(accountId: string, payload: { workspaceId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/workspaces`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function createTeamAccountInvite(accountId: string, payload: { workspaceId: string; role?: string }): Promise<InviteResponse & { inviteId?: string }> { return getJson(`/team/accounts/${accountId}/invites`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function removeTeamAccountFromWorkspace(accountId: string, membershipId: string): Promise<{ ok: boolean }> { return getJson(`/team/accounts/${accountId}/workspaces/${membershipId}`, { method: 'DELETE' }) }
 export function addTeamAccountToProject(accountId: string, payload: { projectId: string; role: string }): Promise<{ ok: boolean; membershipId: string }> { return getJson(`/team/accounts/${accountId}/projects`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function removeTeamAccountFromProject(accountId: string, membershipId: string): Promise<{ ok: boolean }> { return getJson(`/team/accounts/${accountId}/projects/${membershipId}`, { method: 'DELETE' }) }

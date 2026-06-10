@@ -10,6 +10,7 @@ export function platformRoleLabel(role?: string | null) {
 export const projectRoleOptions = [
   { value: 'OWNER', label: 'Owner', help: 'Owns and manages this specific project.' },
   { value: 'MEMBER', label: 'Member', help: 'Works inside this specific project.' },
+  { value: 'VIEWER', label: 'Viewer', help: 'Can view the project and tasks without assignee details or edit access.' },
 ] as const
 
 export function workspaceRoleLabel(role?: string | null) {

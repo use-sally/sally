@@ -19,6 +19,7 @@ If a page here disagrees with the actual implementation, trust the code in:
 
 ### If you want to understand the product quickly
 - [Product + workflow guide](./product-guide.md)
+- [Workspace access, invite links, and shareable URLs](./workspace-access-sharing.md)
 - [Architecture](./ARCHITECTURE.md)
 
 ### If you want to integrate with the API
@@ -41,9 +42,10 @@ If a page here disagrees with the actual implementation, trust the code in:
 Sally currently covers:
 - account login and session auth
 - workspaces and memberships
-- invites, invite management, and password reset flows
+- invites, invite links, invite management, and password reset flows
 - projects with default or custom statuses
-- project memberships
+- project memberships including read-only viewer access
+- canonical workspace-scoped project and task URLs
 - tasks with priorities, descriptions, due dates, labels, todos, comments, and inline images
 - clients linked to projects
 - notifications for assignment and mentions

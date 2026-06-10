@@ -10,6 +10,7 @@ import { getWorkspaceId, loadSession } from '../../lib/auth'
 import { canEditProject } from '../../lib/permissions'
 import { labelText, restoreTextAction, taskTitleText } from '../../lib/theme'
 import { qk, useClientsQuery, useProjectsQuery } from '../../lib/query'
+import { workspaceProjectPath } from '../../lib/routes'
 
 export default function ProjectsPage() {
   const router = useRouter()
@@ -48,7 +49,7 @@ export default function ProjectsPage() {
       setNewProjectName('')
       await qc.invalidateQueries({ queryKey: ['projects'] })
       await qc.invalidateQueries({ queryKey: qk.projectsSummary })
-      router.push(`/projects/${created.projectId}`)
+      router.push(workspaceProjectPath(getWorkspaceId(), created.projectId))
     } finally {
       setCreatingProject(false)
     }
@@ -94,7 +95,7 @@ export default function ProjectsPage() {
         {filteredProjects.map((project) => (
           showArchived ? (
             <div key={project.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr 1fr 140px', padding: '16px 18px', borderBottom: '1px solid var(--panel-border)', alignItems: 'center', color: 'var(--text-primary)' }}>
-              <Link href={`/projects/${project.id}?archived=true`} style={{ ...taskTitleText, fontWeight: 700, textDecoration: 'none' }}>{project.name}</Link>
+              <Link href={`${workspaceProjectPath(getWorkspaceId(), project.id)}?archived=true`} style={{ ...taskTitleText, fontWeight: 700, textDecoration: 'none' }}>{project.name}</Link>
               <div style={{ color: 'var(--text-secondary)' }}>{project.client ? project.client.name : '—'}</div>
               <div style={{ color: 'var(--text-secondary)' }}>{project.lead}</div>
               <div style={{ color: 'var(--text-secondary)' }}>{project.tasks}</div>
@@ -105,7 +106,7 @@ export default function ProjectsPage() {
               ) : null}
             </div>
           ) : (
-            <Link key={project.id} href={`/projects/${project.id}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr 1fr 1fr', padding: '16px 18px', borderBottom: '1px solid var(--panel-border)', alignItems: 'center', textDecoration: 'none', color: 'var(--text-primary)' }}>
+            <Link key={project.id} href={workspaceProjectPath(getWorkspaceId(), project.id)} style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr 1fr 1fr', padding: '16px 18px', borderBottom: '1px solid var(--panel-border)', alignItems: 'center', textDecoration: 'none', color: 'var(--text-primary)' }}>
               <div style={{ ...taskTitleText, fontWeight: 700 }}>{project.name}</div>
               <div style={{ color: 'var(--text-secondary)' }}>{project.client ? project.client.name : '—'}</div>
               <div style={{ color: 'var(--text-secondary)' }}>{project.lead}</div>

@@ -9,6 +9,7 @@ import { getWorkspaceId, loadSession } from '../lib/auth'
 import { ClientPicker } from './client-picker'
 import type { WorkspaceMember } from '@sally/types/src'
 import { labelText, projectInputField } from '../lib/theme'
+import { workspaceProjectPath } from '../lib/routes'
 
 export function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
@@ -74,7 +75,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
         qc.invalidateQueries({ queryKey: qk.projectsSummary }),
       ])
       onClose()
-      router.push(`/projects/${result.projectId}`)
+      router.push(workspaceProjectPath(getWorkspaceId(), result.projectId))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project')
     } finally {

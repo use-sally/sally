@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
@@ -8,6 +9,7 @@ import { getWorkspaceId, loadSession, pickPreferredWorkspaceId, saveSession, set
 import { apiUrl, createWorkspace, getMe, getNotifications, getProfile, logout, readAllNotifications, readNotification, updateProfile } from '../lib/api'
 import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
+import { workspaceProjectPath, workspaceProjectTaskPath } from '../lib/routes'
 import {
   applyFontScale,
   applyStatusTint,
@@ -244,7 +246,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const activeWorkspace = workspaceOptions.find((option) => option.id === activeWorkspaceId)
   const platformRole = loadSession()?.account?.platformRole
   const isPlatformAdminSession = platformRole === 'SUPERADMIN' || platformRole === 'ADMIN'
-  const isAdminArea = pathname.startsWith('/team') || pathname.startsWith('/workspaces') || pathname.startsWith('/audit-log') || pathname.startsWith('/edition-license') || pathname.startsWith('/security') || pathname.startsWith('/system')
+  const isWorkspaceScopedProjectPath = /^\/workspaces\/[^/]+\/projects(?:\/|$)/.test(pathname)
+  const isProjectArea = pathname.startsWith('/projects') || isWorkspaceScopedProjectPath
+  const isAdminArea = pathname.startsWith('/team') || (pathname.startsWith('/workspaces') && !isWorkspaceScopedProjectPath) || pathname.startsWith('/audit-log') || pathname.startsWith('/edition-license') || pathname.startsWith('/security') || pathname.startsWith('/system')
 
   const handleNotificationClick = async (notification: Notification) => {
     await readNotification(notification.id)
@@ -252,13 +256,16 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     setNotificationsOpen(false)
     const targetWorkspaceId = notification.workspaceId || activeWorkspaceId
     if (targetWorkspaceId) setWorkspaceId(targetWorkspaceId)
-    const workspaceQuery = targetWorkspaceId ? `?workspaceId=${encodeURIComponent(targetWorkspaceId)}` : ''
+    if (notification.taskId && notification.projectId) {
+      router.push(workspaceProjectTaskPath(targetWorkspaceId, notification.projectId, notification.taskId))
+      return
+    }
     if (notification.taskId) {
-      router.push(`/tasks/${notification.taskId}${workspaceQuery}`)
+      router.push(`/tasks/${notification.taskId}`)
       return
     }
     if (notification.projectId) {
-      router.push(`/projects/${notification.projectId}${workspaceQuery}`)
+      router.push(workspaceProjectPath(targetWorkspaceId, notification.projectId))
     }
   }
 
@@ -283,7 +290,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
         flex: '0 0 auto',
       }}
     >
-      {accountAvatarUrl ? <img src={accountAvatarUrl} alt="" aria-hidden="true" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (accountName?.trim()?.[0] || '?').toUpperCase()}
+      {accountAvatarUrl ? <Image src={accountAvatarUrl} alt="" aria-hidden="true" width={36} height={36} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (accountName?.trim()?.[0] || '?').toUpperCase()}
     </Link>
   )
 
@@ -454,7 +461,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                     Back to app
                   </Link>
                   {adminNavItems.map((item) => {
-                    const active = pathname.startsWith(item.href)
+                    const active = item.href === '/workspaces' ? pathname.startsWith('/workspaces') && !isWorkspaceScopedProjectPath : pathname.startsWith(item.href)
                     return (
                       <Link
                         key={item.href}
@@ -514,13 +521,13 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   display: 'block',
                   padding: '10px 12px',
                   borderRadius: 12,
-                  color: pathname.startsWith('/projects') ? '#052e16' : 'var(--text-secondary)',
+                  color: isProjectArea ? '#052e16' : 'var(--text-secondary)',
                   fontWeight: 700,
                   fontSize: 'var(--font-13)',
                   lineHeight: 1.2,
                   textDecoration: 'none',
-                  background: pathname.startsWith('/projects') ? '#fcd34d' : 'transparent',
-                  border: pathname.startsWith('/projects') ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                  background: isProjectArea ? '#fcd34d' : 'transparent',
+                  border: isProjectArea ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
                   flex: '0 0 auto',
                 }}
               >
@@ -528,8 +535,8 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
               </Link>
               <div style={{ display: 'grid', gap: 6, paddingLeft: 4, overflowY: 'auto', minHeight: 0, alignContent: 'start' }}>
                 {projects.map((project) => {
-                  const projectHref = `/projects/${project.id}`
-                  const projectActive = pathname.startsWith(projectHref)
+                  const projectHref = workspaceProjectPath(activeWorkspaceId, project.id)
+                  const projectActive = pathname.startsWith(projectHref) || pathname.startsWith(`/projects/${project.id}`)
                   return (
                     <Link
                       key={project.id}

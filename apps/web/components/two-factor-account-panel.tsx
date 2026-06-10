@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { FormEvent, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { startRegistration } from '@simplewebauthn/browser'
@@ -111,7 +112,7 @@ export function TwoFactorAccountPanel() {
       {!enabled && !secret ? <button type="button" disabled={working || loading} onClick={start} style={buttonStyle}>Set up authenticator app</button> : null}
       {secret ? <form onSubmit={confirm} style={{ display: 'grid', gap: 10 }}>
         <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Scan this QR code with your authenticator app, or enter the setup key manually.</div>
-        {qrCodeDataUrl ? <img src={qrCodeDataUrl} alt="QR code for authenticator app setup" width={192} height={192} style={{ borderRadius: 12, border: '1px solid var(--panel-border)', background: '#fff', padding: 10 }} /> : <div style={{ width: 192, height: 192, borderRadius: 12, border: '1px solid var(--panel-border)', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>Generating QR…</div>}
+        {qrCodeDataUrl ? <Image src={qrCodeDataUrl} alt="QR code for authenticator app setup" width={192} height={192} unoptimized style={{ borderRadius: 12, border: '1px solid var(--panel-border)', background: '#fff', padding: 10 }} /> : <div style={{ width: 192, height: 192, borderRadius: 12, border: '1px solid var(--panel-border)', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-12)' }}>Generating QR…</div>}
         <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)' }}>Setup key: <code style={{ color: 'var(--text-primary)', wordBreak: 'break-all' }}>{secret}</code></div>
         {otpauthUrl ? <a href={otpauthUrl} style={{ color: 'var(--task-title)', fontSize: 'var(--font-13)' }}>Open authenticator app</a> : null}
         <input value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" placeholder="123456" style={inputStyle} />

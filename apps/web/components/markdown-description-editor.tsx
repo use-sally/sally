@@ -236,13 +236,16 @@ export function MarkdownDescriptionEditor({
     editor.setEditable(!busy)
   }, [editor, busy])
 
+  const fileCommandQuery = fileCommand?.query
+  const fileCommandProviderCommand = fileCommand?.providerCommand
+
   useEffect(() => {
-    if (!onFileSearch || !fileCommand) return
+    if (!onFileSearch || !fileCommandQuery || !fileCommandProviderCommand) return
     let cancelled = false
     setFileSearchLoading(true)
     setFileSearchError(null)
     const timeout = window.setTimeout(() => {
-      onFileSearch(fileCommand.query, fileCommand.providerCommand)
+      onFileSearch(fileCommandQuery, fileCommandProviderCommand)
         .then((items) => { if (!cancelled) setFileResults(items) })
         .catch((error) => {
           if (!cancelled) {
@@ -256,7 +259,7 @@ export function MarkdownDescriptionEditor({
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [fileCommand?.query, onFileSearch])
+  }, [fileCommandProviderCommand, fileCommandQuery, onFileSearch])
 
   function integrationSlugForCommand(command: string) {
     if (command === 'sharepoint' || command === 'onedrive') return 'microsoft-365' as const

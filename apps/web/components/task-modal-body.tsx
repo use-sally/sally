@@ -401,13 +401,16 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
     return response.items
   }, [])
 
+  const commentFileQuery = commentFileCommand?.query
+  const commentFileProviderCommand = commentFileCommand?.providerCommand
+
   useEffect(() => {
-    if (!commentFileCommand) return
+    if (!commentFileQuery || !commentFileProviderCommand) return
     let cancelled = false
     setCommentFileLoading(true)
     setCommentFileError(null)
     const timeout = window.setTimeout(() => {
-      searchDescriptionFiles(commentFileCommand.query, commentFileCommand.providerCommand)
+      searchDescriptionFiles(commentFileQuery, commentFileProviderCommand)
         .then((items) => { if (!cancelled) setCommentFileResults(items) })
         .catch((error) => {
           if (!cancelled) {
@@ -421,7 +424,7 @@ export function TaskModalBody({ taskId, projectId }: { taskId: string; projectId
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [commentFileCommand?.query, commentFileCommand?.providerCommand, searchDescriptionFiles])
+  }, [commentFileProviderCommand, commentFileQuery, searchDescriptionFiles])
 
   function insertCommentFileResource(resource: ProviderResource) {
     if (!commentFileCommand) return

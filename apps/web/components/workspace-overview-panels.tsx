@@ -8,15 +8,31 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { WorkspaceMember } from '@sally/types/src'
 import { AssigneeAvatar } from './assignee-avatar'
 import { cancelWorkspaceInvite, createProject, getWorkspaceMembers } from '../lib/api'
-import { inviteWorkspaceMember, removeWorkspaceMember, resendWorkspaceInvite, updateAccountPlatformRole, updateWorkspaceMember } from '../lib/api'
+import { inviteWorkspaceMember, removeWorkspaceMember, resendWorkspaceInvite, updateAccountPlatformRole, updateWorkspaceMember, type InviteResponse } from '../lib/api'
 import { getWorkspaceId, loadSession } from '../lib/auth'
 import { canEditProject } from '../lib/permissions'
 import { qk, useClientsQuery, useProjectsQuery } from '../lib/query'
 import { canChangeWorkspaceMemberRole, canInviteWorkspaceMembers, canManageWorkspaceInvite, canRemoveWorkspaceMember } from '../lib/workspace-permissions'
 import { platformRoleLabel, workspaceRoleHelp, workspaceRoleLabel, workspaceRoleOptions } from '../lib/roles'
+import { workspaceProjectPath } from '../lib/routes'
 import { panel, pill } from './app-shell'
 import { labelText, projectInputField, sectionLabelText, taskTitleText } from '../lib/theme'
 import { SectionHeaderWithInfo } from './info-flag'
+
+function inviteLinkFromParts(input: { inviteUrl?: string | null; invitePath?: string | null; inviteToken?: string | null }) {
+  if (input.inviteUrl) return input.inviteUrl
+  if (input.invitePath && typeof window !== 'undefined') return `${window.location.origin}${input.invitePath}`
+  if (input.inviteToken && typeof window !== 'undefined') return `${window.location.origin}/accept-invite?token=${encodeURIComponent(input.inviteToken)}`
+  return null
+}
+
+function inviteLinkFromResponse(response: InviteResponse) {
+  return inviteLinkFromParts(response)
+}
+
+async function copyTextToClipboard(value: string) {
+  await navigator.clipboard?.writeText(value)
+}
 
 function WorkspaceMemberAvatar({
   member,
@@ -33,6 +49,7 @@ function WorkspaceMemberAvatar({
   onRemove,
   onResendInvite,
   onCancelInvite,
+  onCopyInviteLink,
 }: {
   member: WorkspaceMember
   roleUpdating: boolean
@@ -48,6 +65,7 @@ function WorkspaceMemberAvatar({
   onRemove: (memberId: string, memberName?: string | null) => void
   onResendInvite: (inviteId: string) => void
   onCancelInvite: (inviteId: string, email: string) => void
+  onCopyInviteLink: (member: WorkspaceMember) => void
 }) {
   const [open, setOpen] = useState(false)
   const [roleMenuOpen, setRoleMenuOpen] = useState(false)
@@ -136,6 +154,7 @@ function WorkspaceMemberAvatar({
             ) : null}
             {member.invited && member.inviteId && canManageInvite ? (
               <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => onCopyInviteLink(member)} disabled={inviteActionBusy} style={memberActionButton}>Copy link</button>
                 <button type="button" onClick={() => onResendInvite(member.inviteId!)} disabled={inviteActionBusy} style={memberActionButton}>{inviteActionBusy ? 'Working…' : 'Resend'}</button>
                 <button type="button" onClick={() => onCancelInvite(member.inviteId!, member.email)} disabled={inviteActionBusy} style={memberActionButton}>Cancel</button>
               </div>
@@ -190,7 +209,7 @@ export function WorkspaceOverviewPanels() {
       setNewProjectName('')
       await qc.invalidateQueries({ queryKey: ['projects'] })
       await qc.invalidateQueries({ queryKey: qk.projectsSummary })
-      router.push(`/projects/${created.projectId}`)
+      router.push(workspaceProjectPath(getWorkspaceId(), created.projectId))
     } finally {
       setCreatingProject(false)
     }
@@ -236,7 +255,7 @@ export function WorkspaceOverviewPanels() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-                  <Link href={`/projects/${project.id}`} style={{ ...taskTitleText, fontWeight: 700, textDecoration: 'none' }}>{project.name}</Link>
+                  <Link href={workspaceProjectPath(getWorkspaceId(), project.id)} style={{ ...taskTitleText, fontWeight: 700, textDecoration: 'none' }}>{project.name}</Link>
                   <span style={pill(
                     project.status === 'Active'
                       ? 'rgba(16, 185, 129, 0.14)'
@@ -252,7 +271,7 @@ export function WorkspaceOverviewPanels() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                   <div style={{ ...labelText, fontSize: 'var(--font-13)' }}>{clientName} · {project.tasks} open items</div>
-                  <Link href={`/projects/${project.id}`} style={{ textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', fontWeight: 700 }}>Open →</Link>
+                  <Link href={workspaceProjectPath(getWorkspaceId(), project.id)} style={{ textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 'var(--font-13)', fontWeight: 700 }}>Open →</Link>
                 </div>
               </div>
             )
@@ -270,6 +289,7 @@ export function WorkspaceMembersCard() {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -333,6 +353,7 @@ export function WorkspaceMembersCard() {
     setInviting(true)
     setError(null)
     setInfo(null)
+    setInviteLink(null)
     try {
       const response = await inviteWorkspaceMember({ email: inviteEmail.trim(), role: inviteRole })
       setInviteEmail('')
@@ -340,7 +361,9 @@ export function WorkspaceMembersCard() {
       setInviteRole('MEMBER')
       setMemberInviteMode(false)
       setMemberPickerOpen(false)
-      setInfo(response.emailed ? 'Invite email sent.' : 'Invite created, but the email could not be sent. Check SMTP configuration and resend the invite.')
+      const link = inviteLinkFromResponse(response)
+      setInviteLink(link)
+      setInfo(response.emailed ? 'Invite email sent.' : link ? 'Invite created. Copy and share the link with the user.' : 'Invite created, but the email could not be sent. Check SMTP configuration and resend the invite.')
       await loadMembers(workspaceId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to invite member')
@@ -353,6 +376,7 @@ export function WorkspaceMembersCard() {
     if (!workspaceId) return
     setRoleUpdatingId(memberId)
     setError(null)
+    setInviteLink(null)
     try {
       await updateWorkspaceMember(workspaceId, memberId, { role })
       await loadMembers(workspaceId)
@@ -382,6 +406,7 @@ export function WorkspaceMembersCard() {
     if (!window.confirm(`Remove ${memberName || 'this member'} from the workspace?`)) return
     setRemovingId(memberId)
     setError(null)
+    setInviteLink(null)
     try {
       await removeWorkspaceMember(workspaceId, memberId)
       await loadMembers(workspaceId)
@@ -396,8 +421,12 @@ export function WorkspaceMembersCard() {
     if (!workspaceId) return
     setInviteActionId(inviteId)
     setError(null)
+    setInviteLink(null)
     try {
-      await resendWorkspaceInvite(workspaceId, inviteId)
+      const response = await resendWorkspaceInvite(workspaceId, inviteId)
+      const link = inviteLinkFromResponse(response)
+      setInviteLink(link)
+      setInfo(response.emailed ? 'Invite email resent.' : link ? 'Invite link refreshed. Copy and share it with the user.' : 'Invite resend attempted, but no email was sent. Check SMTP configuration.')
       await loadMembers(workspaceId)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resend invite')
@@ -406,11 +435,27 @@ export function WorkspaceMembersCard() {
     }
   }
 
+  const handleCopyInviteLink = async (member: WorkspaceMember) => {
+    const link = inviteLinkFromParts(member)
+    if (!link) {
+      setError('Invite link is unavailable. Try resending the invite to refresh it.')
+      return
+    }
+    try {
+      await copyTextToClipboard(link)
+      setInviteLink(link)
+      setInfo(`Invite link copied for ${member.email}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy invite link')
+    }
+  }
+
   const handleCancelInvite = async (inviteId: string, email: string) => {
     if (!workspaceId) return
     if (!window.confirm(`Cancel the pending invite for ${email}?`)) return
     setInviteActionId(inviteId)
     setError(null)
+    setInviteLink(null)
     try {
       await cancelWorkspaceInvite(workspaceId, inviteId)
       await loadMembers(workspaceId)
@@ -427,6 +472,12 @@ export function WorkspaceMembersCard() {
       {loading ? <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>Loading…</div> : null}
       {error ? <div style={{ marginTop: 12, color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
       {info ? <div style={{ marginTop: 12, color: '#34d399', fontSize: 'var(--font-12)' }}>{info}</div> : null}
+      {inviteLink ? (
+        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 'var(--font-12)' }}>
+          <code style={{ color: 'var(--text-secondary)', maxWidth: 520, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inviteLink}</code>
+          <button type="button" onClick={() => void copyTextToClipboard(inviteLink).then(() => setInfo('Invite link copied.'))} style={memberActionButton}>Copy link</button>
+        </div>
+      ) : null}
       {!!members.length || inviteDecision.visible ? (
         <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           {members.map((member) => {
@@ -450,6 +501,7 @@ export function WorkspaceMembersCard() {
                 onRemove={handleRemove}
                 onResendInvite={handleResendInvite}
                 onCancelInvite={handleCancelInvite}
+                onCopyInviteLink={handleCopyInviteLink}
               />
             )
           })}

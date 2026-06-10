@@ -1,5 +1,6 @@
 'use client'
 
+import NextImage from 'next/image'
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { AccountIntegrationStatus, EditionInfo } from '@sally/types/src'
@@ -257,7 +258,7 @@ export default function ProfilePage() {
                 style={{ width: 72, height: 72, borderRadius: 999, background: 'color-mix(in srgb, var(--form-border-focus) 18%, transparent)', overflow: 'hidden', display: 'grid', placeItems: 'center', fontWeight: 700, color: 'var(--text-primary)', border: '1px solid var(--form-border)', padding: 0, cursor: uploadingImage ? 'progress' : 'pointer' }}
                 title={uploadingImage ? 'Uploading…' : 'Click to upload or replace profile image'}
               >
-                {avatarSrc ? <img src={avatarSrc} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (name?.trim()?.[0] || email?.trim()?.[0] || '?').toUpperCase()}
+                {avatarSrc ? <NextImage src={avatarSrc} alt="Profile" width={72} height={72} unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (name?.trim()?.[0] || email?.trim()?.[0] || '?').toUpperCase()}
               </button>
               <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleImageUpload(event)} style={{ display: 'none' }} />
             </div>

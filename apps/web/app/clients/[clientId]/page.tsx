@@ -9,6 +9,7 @@ import { deleteClient, updateClient } from '../../../lib/api'
 import { getWorkspaceId, loadSession } from '../../../lib/auth'
 import { canManageClients } from '../../../lib/client-permissions'
 import { qk, useClientQuery } from '../../../lib/query'
+import { workspaceProjectPath } from '../../../lib/routes'
 import { deleteTextAction, labelText, projectInputField } from '../../../lib/theme'
 
 export default function ClientDetailPage() {
@@ -98,7 +99,7 @@ export default function ClientDetailPage() {
           <div style={panelHeader}>Projects</div>
           {client?.projects.length ? (
             client.projects.map((project) => {
-              const projectHref = project.archivedAt ? `/projects/${project.id}?archived=true` : `/projects/${project.id}`
+              const projectHref = project.archivedAt ? `${workspaceProjectPath(getWorkspaceId(), project.id)}?archived=true` : workspaceProjectPath(getWorkspaceId(), project.id)
               return (
                 <div key={project.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 140px', padding: '14px 18px', borderBottom: '1px solid var(--panel-border)', alignItems: 'center' }}>
                   <Link href={projectHref} style={{ fontWeight: 700, textDecoration: 'none', color: 'var(--text-primary)' }}>{project.name}</Link>

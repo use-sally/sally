@@ -1,7 +1,7 @@
 'use client'
 
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { startAuthentication, type PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 import { completeTwoFactorLogin, getMe, getSamlStatus, login, requestPasswordReset, samlLoginUrl } from '../lib/api'
@@ -85,22 +85,21 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const requestedWorkspaceId = searchParams.get('workspaceId')
 
-  function pickWorkspaceId(memberships: Membership[]) {
+  const pickWorkspaceId = useCallback((memberships: Membership[]) => {
     return pickPreferredWorkspaceId(memberships, { requestedWorkspaceId })
-  }
+  }, [requestedWorkspaceId])
 
-  useEffect(() => {
-    if (isPublicAuthRoute) return
-    getSamlStatus().then((status) => setSamlEnabled(status.enabled)).catch(() => setSamlEnabled(false))
-    const existing = loadSession()
-    if (!existing?.token) {
-      setStatus('unauth')
+  const finishAuthenticatedSession = useCallback((account: { platformRole?: string | null }, memberships: Membership[]) => {
+    const hasPlatformAccess = account.platformRole === 'SUPERADMIN' || account.platformRole === 'ADMIN'
+    if (memberships.length) setWorkspaceId(pickWorkspaceId(memberships))
+    if (!memberships.length && !hasPlatformAccess) {
+      setStatus('no-access')
       return
     }
-    void refreshSession()
-  }, [isPublicAuthRoute, requestedWorkspaceId])
+    setStatus('authed')
+  }, [pickWorkspaceId])
 
-  const refreshSession = async () => {
+  const refreshSession = useCallback(async () => {
     try {
       setError(null)
       const me = await getMe()
@@ -112,17 +111,23 @@ export function AuthGate({ children }: { children: ReactNode }) {
         memberships: me.memberships,
       }
       saveSession(next)
-      if (!me.memberships.length) {
-        setStatus('no-access')
-        return
-      }
-      setWorkspaceId(pickWorkspaceId(me.memberships))
-      setStatus('authed')
+      finishAuthenticatedSession(me.account, me.memberships)
     } catch {
       clearSession()
       setStatus('unauth')
     }
-  }
+  }, [finishAuthenticatedSession])
+
+  useEffect(() => {
+    if (isPublicAuthRoute) return
+    getSamlStatus().then((status) => setSamlEnabled(status.enabled)).catch(() => setSamlEnabled(false))
+    const existing = loadSession()
+    if (!existing?.token) {
+      setStatus('unauth')
+      return
+    }
+    void refreshSession()
+  }, [isPublicAuthRoute, refreshSession])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -151,12 +156,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         account: response.account,
         memberships: response.memberships,
       })
-      if (!response.memberships.length) {
-        setStatus('no-access')
-        return
-      }
-      setWorkspaceId(pickWorkspaceId(response.memberships))
-      setStatus('authed')
+      finishAuthenticatedSession(response.account, response.memberships)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
       clearSession()
@@ -179,12 +179,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       saveSession({ token: response.sessionToken, expiresAt: response.expiresAt, account: response.account, memberships: response.memberships })
       setTwoFactorChallengeToken(null)
       setTwoFactorCode('')
-      if (!response.memberships.length) {
-        setStatus('no-access')
-        return
-      }
-      setWorkspaceId(pickWorkspaceId(response.memberships))
-      setStatus('authed')
+      finishAuthenticatedSession(response.account, response.memberships)
     } catch (err) {
       setError(err instanceof Error ? err.message : '2FA verification failed')
     } finally {
@@ -203,12 +198,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       setTwoFactorChallengeToken(null)
       setTwoFactorCode('')
       setWebAuthnOptions(null)
-      if (!response.memberships.length) {
-        setStatus('no-access')
-        return
-      }
-      setWorkspaceId(pickWorkspaceId(response.memberships))
-      setStatus('authed')
+      finishAuthenticatedSession(response.account, response.memberships)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Passkey verification failed')
     } finally {

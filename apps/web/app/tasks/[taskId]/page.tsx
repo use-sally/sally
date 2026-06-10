@@ -9,12 +9,13 @@ import { AssigneeAvatar } from '../../../components/assignee-avatar'
 import { TaskPeopleAvatarStack } from '../../../components/task-people-avatar-stack'
 import { MarkdownDescriptionEditor, renderMarkdownToHtml } from '../../../components/markdown-description-editor'
 import { TaskDescriptionRender } from '../../../components/task-description-render'
-import { getWorkspaceId, loadSession } from '../../../lib/auth'
+import { getWorkspaceId, loadSession, setWorkspaceId } from '../../../lib/auth'
 import { createComment, createTaskResource, createTaskTodo, deleteTaskResource, deleteTaskTodo, getEdition, getMentionableUsers, getProjectMembers, getTask, searchIntegrationResources, updateTask, updateTaskLabels, updateTaskTodo, uploadTaskDescriptionImage } from '../../../lib/api'
 import { canEditTask } from '../../../lib/task-permissions'
 import { projectInputField } from '../../../lib/theme'
+import { workspaceProjectPath, workspaceProjectTaskPath } from '../../../lib/routes'
 
-export default function TaskDetailPage({ params }: { params: Promise<{ taskId: string }> }) {
+export default function TaskDetailPage({ params }: { params: Promise<{ workspaceId?: string; projectId?: string; taskId: string }> }) {
   const [taskId, setTaskId] = useState('')
   const [task, setTask] = useState<TaskDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -48,7 +49,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
   const session = useMemo(() => loadSession(), [])
 
   useEffect(() => {
-    void params.then((p) => setTaskId(p.taskId))
+    void params.then((p) => {
+      if (p.workspaceId) setWorkspaceId(p.workspaceId)
+      setTaskId(p.taskId)
+    })
   }, [params])
 
   useEffect(() => {
@@ -222,7 +226,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
     <AppShell
       title=""
       subtitle={task ? `${task.project.name} · ${task.status}` : 'Task detail'}
-      actions={task ? <Link href={`/projects/${task.project.id}/board`} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', borderRadius: 12, padding: '11px 14px', fontWeight: 700, textDecoration: 'none' }}>Back to board</Link> : null}
+      actions={task ? <Link href={`${workspaceProjectPath(getWorkspaceId(), task.project.id)}?view=board`} style={{ background: 'var(--form-bg)', color: 'var(--form-text)', borderRadius: 12, padding: '11px 14px', fontWeight: 700, textDecoration: 'none' }}>Back to board</Link> : null}
     >
       <style>{`
         .comment-markdown h1,
@@ -475,7 +479,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
 
             <div style={panel}>
               <div style={{ display: 'grid', gap: 12 }}>
-                <div><div style={sectionLabel}>Project</div><div style={{ marginTop: 4 }}><Link href={`/projects/${task.project.id}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontWeight: 700 }}>{task.project.name}</Link></div></div>
+                <div><div style={sectionLabel}>Project</div><div style={{ marginTop: 4 }}><Link href={workspaceProjectPath(getWorkspaceId(), task.project.id)} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontWeight: 700 }}>{task.project.name}</Link></div></div>
                 <div><div style={sectionLabel}>People</div><div style={{ marginTop: 6 }}><TaskPeopleAvatarStack owner={task.owner} ownerAvatarUrl={task.ownerAvatarUrl} participants={task.participants} assignee={task.assignee} assigneeAvatarUrl={task.assigneeAvatarUrl} collaborators={task.collaborators} size={36} /></div></div>
                 <div><div style={sectionLabel}>Priority</div><div style={{ marginTop: 4, fontSize: 'var(--font-18)', color: 'var(--text-primary)' }}>{priorityStars(task.priority)}</div></div>
                 <div><div style={sectionLabel}>Status</div><div style={{ marginTop: 4 }}><span style={tagStyle()}>{task.status}</span></div></div>
@@ -486,7 +490,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                     <div style={sectionLabel}>Depends on</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {task.dependencies.map((dep) => (
-                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
+                        <Link key={dep.taskId} href={workspaceProjectTaskPath(getWorkspaceId(), task.project.id, dep.taskId)} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
                           {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
                         </Link>
                       ))}
@@ -498,7 +502,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ taskId: s
                     <div style={sectionLabel}>Blocks</div>
                     <div style={{ marginTop: 4, display: 'grid', gap: 4 }}>
                       {task.dependedOnBy.map((dep) => (
-                        <Link key={dep.taskId} href={`/tasks/${dep.taskId}`} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
+                        <Link key={dep.taskId} href={workspaceProjectTaskPath(getWorkspaceId(), task.project.id, dep.taskId)} style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: 'var(--font-13)' }}>
                           {dep.number != null ? <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{dep.number}</span> : null}{dep.title}
                         </Link>
                       ))}

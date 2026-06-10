@@ -254,9 +254,10 @@ Scopes include `platform`, `workspace`, `project`, `task`, `key`, and `policy`. 
 
 `Account.platformRole`:
 - `NONE`
+- `ADMIN`
 - `SUPERADMIN`
 
-`SUPERADMIN` bypasses most normal workspace/project permission checks.
+`ADMIN` and `SUPERADMIN` bypass most normal workspace/project permission checks for admin operations. Platform admins can enter the web app even when they have no active workspace membership, so they can recover from an empty-workspace state and create new workspaces.
 
 ### Workspace role
 
@@ -278,8 +279,10 @@ In practice, these routes mostly treat roles like this:
 
 Notable behavior:
 - workspace owners are effectively project owners
-- configured superadmin is effectively project owner
-- project `MEMBER` is more restricted than project `OWNER`/`VIEWER` for task visibility: they only see tasks assigned to one of their own assignee-name variants (account name or email)
+- configured platform admins are effectively project owners
+- project `OWNER` can manage project metadata, statuses, automation, and membership
+- project `MEMBER` can do normal task work, but task visibility can be restricted to tasks assigned to one of their own assignee-name variants (account name or email)
+- project `VIEWER` can read the project and tasks but cannot edit; task people fields are redacted for viewer-scoped reads
 
 ### Timesheet visibility
 
@@ -525,7 +528,41 @@ Request:
 Behavior:
 - if the account already exists and is already a workspace member, returns `{ ok:true, existing:true }`
 - if a live invite already exists, it re-sends email and returns `existing:true`
-- otherwise creates an invite token and email attempt result
+- otherwise creates an invite token and attempts email delivery
+- always returns invite link metadata when an invite exists, so admins can copy the link even if SMTP is not configured or the email is not delivered
+
+Response fields can include:
+```json
+{
+  "ok": true,
+  "existing": false,
+  "emailed": false,
+  "inviteToken": "...",
+  "invitePath": "/accept-invite?token=...",
+  "inviteUrl": "https://sally.example.com/accept-invite?token=...",
+  "expiresAt": "2026-06-16T12:00:00.000Z"
+}
+```
+
+`inviteUrl` is `null` when `APP_BASE_URL` is not configured.
+
+### `POST /team/accounts/:accountId/invites`
+Platform admin only.
+
+Creates or reuses a pending invite for a pre-created account that already belongs to a workspace.
+
+Request:
+```json
+{ "workspaceId": "...", "role": "MEMBER" }
+```
+
+Behavior:
+- account must exist
+- workspace must exist and not be archived
+- account must already be a member of the workspace
+- if a live invite already exists, it is reused
+- otherwise a new invite token is created
+- email delivery is attempted, but invite link metadata is returned regardless
 
 ### `POST /auth/accept-invite`
 Public route.
@@ -860,7 +897,9 @@ Important behavior:
 - workspace owners act as project owners
 - caller cannot change/remove their own project membership through these routes
 - project must keep at least one owner
-- API also exposes effective owners inherited from workspace owners and configured superadmin
+- API also exposes effective owners inherited from workspace owners and configured platform admins
+- `VIEWER` is a valid project role for read-only project/task access
+- viewer-scoped member reads only expose the viewer's own project membership entry
 
 ### Project activity
 

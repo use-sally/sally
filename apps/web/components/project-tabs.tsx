@@ -1,15 +1,18 @@
 'use client'
 
 import Link from 'next/link'
+import { getWorkspaceId } from '../lib/auth'
+import { workspaceProjectPath } from '../lib/routes'
 
 export type ProjectIslandView = 'tasks' | 'board' | 'automation' | 'timesheets'
 
 export function ProjectTabs({ projectId, current }: { projectId: string; current: ProjectIslandView }) {
+  const projectHref = workspaceProjectPath(getWorkspaceId(), projectId)
   const items = [
-    { key: 'tasks', href: `/projects/${projectId}`, label: 'Tasks' },
-    { key: 'board', href: `/projects/${projectId}?view=board`, label: 'Board' },
-    { key: 'automation', href: `/projects/${projectId}?view=automation`, label: 'Agent automation' },
-    { key: 'timesheets', href: `/projects/${projectId}?view=timesheets`, label: 'Timesheets' },
+    { key: 'tasks', href: projectHref, label: 'Tasks' },
+    { key: 'board', href: `${projectHref}?view=board`, label: 'Board' },
+    { key: 'automation', href: `${projectHref}?view=automation`, label: 'Agent automation' },
+    { key: 'timesheets', href: `${projectHref}?view=timesheets`, label: 'Timesheets' },
   ] as const
 
   return (

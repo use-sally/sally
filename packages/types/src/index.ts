@@ -403,6 +403,9 @@ export type WorkspaceMember = {
   createdAt: string
   invited?: boolean
   inviteId?: string | null
+  inviteToken?: string | null
+  invitePath?: string | null
+  inviteUrl?: string | null
   inviteAcceptedAt?: string | null
   inviteExpiresAt?: string | null
   platformRole?: string | null

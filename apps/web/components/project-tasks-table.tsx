@@ -421,7 +421,6 @@ export function ProjectTasksTable({ projectId, showFilters = true, limit, archiv
                               const expanded = expandedTaskId === task.id
                               return <SortableTaskListItem key={task.id} task={task} expanded={expanded} projectId={projectId} statuses={statusList} taskPermissionViewer={taskPermissionViewer} setExpandedTaskParam={setExpandedTaskParam} automationOverview={automationOverview} />
                             })}
-                            {!group.tasks.length ? <div style={{ padding: '12px 14px', color: 'var(--text-muted)', border: '1px dashed var(--panel-border)', borderRadius: 14, background: 'var(--panel-bg)' }}>No tasks in {group.status.name}.</div> : null}
                             {group.status.id !== '__unknown__' ? (
                               <AddTaskInStatus
                                 status={group.status}
