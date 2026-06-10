@@ -354,8 +354,8 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                 sally<span style={{ color: '#34d399', animation: 'sally-cursor-blink 1s steps(1, end) infinite' }}>_</span>
               </Link>
               <Link
-                href="/crm"
-                aria-label="Open Sally CRM"
+                href={isCrmArea ? '/projects' : '/crm'}
+                aria-label={isCrmArea ? 'Open Sally projects' : 'Open Sally CRM'}
                 style={{
                   borderRadius: 999,
                   border: isCrmArea ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--panel-border)',
@@ -370,7 +370,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   lineHeight: 1,
                 }}
               >
-                CRM
+                {isCrmArea ? 'Projects' : 'CRM'}
               </Link>
             </div>
             <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>{isCrmArea ? 'Sally CRM is a separate customer relationship surface.' : 'Minimal control surface for projects, tasks, clients, and time.'}</div>
