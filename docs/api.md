@@ -33,6 +33,14 @@ Current add-on feature keys include:
 
 Feature-gated routes return `402` when the feature is unavailable.
 
+For local testing or add-on trials, operators can append feature keys with:
+
+```txt
+SALLY_EXTRA_FEATURES=crm.core
+```
+
+`SALLY_FEATURES` is also accepted as an alias.
+
 ---
 
 ## Auth model

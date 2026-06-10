@@ -33,6 +33,17 @@ function readEnvOrFile(valueName: string, fileName: string): string | null {
   }
 }
 
+function readExtraFeatures(): FeatureKey[] {
+  const raw = process.env.SALLY_EXTRA_FEATURES || process.env.SALLY_FEATURES || ''
+  if (!raw.trim()) return []
+  const known = new Set<FeatureKey>([...ENTERPRISE_FEATURES, 'crm.core'])
+  return raw.split(',').map((feature) => feature.trim()).filter((feature): feature is FeatureKey => known.has(feature as FeatureKey))
+}
+
+function withExtraFeatures(features: FeatureKey[]) {
+  return [...new Set([...features, ...readExtraFeatures()])]
+}
+
 function decodeBase64Url(value: string): Buffer {
   return Buffer.from(value, 'base64url')
 }
@@ -115,7 +126,7 @@ function contextFromCertificate(input: { certificateRaw: string; signature?: str
   if (!certificateIsUsable(certificate, input.now)) throw new Error('License certificate is expired, canceled, or disabled')
   return {
     edition: certificate.edition,
-    features: certificate.edition === 'ENTERPRISE' ? [...new Set([...ENTERPRISE_FEATURES, ...certificate.features])] : [...certificate.features],
+    features: withExtraFeatures(certificate.edition === 'ENTERPRISE' ? [...new Set([...ENTERPRISE_FEATURES, ...certificate.features])] : [...certificate.features]),
     license: licenseInfoFromCertificate(certificate, input.source),
   }
 }
@@ -125,7 +136,7 @@ export function getLicenseContext(options: { now?: Date; installedLicense?: Inst
   if (process.env.SALLY_EDITION?.toLowerCase() === 'enterprise') {
     return {
       edition: 'ENTERPRISE',
-      features: [...ENTERPRISE_FEATURES],
+      features: withExtraFeatures([...ENTERPRISE_FEATURES]),
       license: { source: 'env_override', status: 'active' },
     }
   }
@@ -138,7 +149,7 @@ export function getLicenseContext(options: { now?: Date; installedLicense?: Inst
     } catch (error) {
       return {
         edition: 'COMMUNITY',
-        features: [...COMMUNITY_FEATURES],
+        features: withExtraFeatures([...COMMUNITY_FEATURES]),
         license: { source: 'community', status: 'invalid', error: error instanceof Error ? error.message : 'Invalid license certificate' },
       }
     }
@@ -150,13 +161,13 @@ export function getLicenseContext(options: { now?: Date; installedLicense?: Inst
     } catch (error) {
       return {
         edition: 'COMMUNITY',
-        features: [...COMMUNITY_FEATURES],
+        features: withExtraFeatures([...COMMUNITY_FEATURES]),
         license: { source: 'community', status: 'invalid', error: error instanceof Error ? error.message : 'Invalid installed license certificate' },
       }
     }
   }
 
-  return { edition: 'COMMUNITY', features: [...COMMUNITY_FEATURES], license: { source: 'community', status: 'missing' } }
+  return { edition: 'COMMUNITY', features: withExtraFeatures([...COMMUNITY_FEATURES]), license: { source: 'community', status: 'missing' } }
 }
 
 export function getSallyEdition(): SallyEdition {
