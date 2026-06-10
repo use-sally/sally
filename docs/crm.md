@@ -4,16 +4,26 @@ Sally CRM is planned as an optional add-on module for lightweight, API/MCP-first
 
 The goal is not to clone a large CRM suite. The goal is a Sally-style operational CRM that is simple for humans and excellent for agents.
 
-## Add-on feature key
+## CRM license pack
 
-The CRM add-on is gated by the feature key:
+The CRM add-on is gated as a separate license pack, not as a default Enterprise feature.
+
+Pack key:
+
+```txt
+crm
+```
+
+Feature key exposed by the pack:
 
 ```txt
 crm.core
 ```
 
-When the feature is disabled:
-- the web app shows a locked CRM add-on page
+A license certificate can enable CRM with `packs: ["crm"]` or, for local trials, operators can use `SALLY_LICENSE_PACKS=crm`.
+
+When the pack is disabled:
+- the web app shows a locked CRM pack upsell/onboarding page
 - `/crm` API routes return a feature-unavailable response
 - hosted MCP does not list CRM tools
 

@@ -91,7 +91,7 @@ function CrmPageContent() {
   </div>
 
   return <AppShell title="CRM" subtitle="A separate Sally surface for relationships, deals, and agent-ready customer context.">
-    {!enabled ? <EnterpriseLockedCard title="Sally CRM add-on" description="Organizations, people, deals, and activities are an optional Sally add-on designed to be API/MCP-first." /> : <div style={{ display: 'grid', gap: 16 }}>
+    {!enabled ? <EnterpriseLockedCard title="Sally CRM add-on" description="CRM is a separate license pack for relationship workflows, follow-ups, reminders, notes, and agent-managed sales/customer context. Purchase or activate the CRM pack to unlock this area." badge="CRM pack" ctaLabel="Talk to us about CRM" ctaHref="https://usesally.app/crm" hideCtaWhenEnterprise={false} /> : <div style={{ display: 'grid', gap: 16 }}>
       <Section title={section === 'people' ? 'People' : section === 'organizations' ? 'Organizations' : 'Deals'}>
         <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-14)', lineHeight: 1.6 }}>{status || 'Loading CRM…'} Filter the list, then click a row to open the detail modal.</p>
         {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}

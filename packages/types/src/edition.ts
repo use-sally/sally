@@ -1,5 +1,7 @@
 export type SallyEdition = 'COMMUNITY' | 'ENTERPRISE'
 
+export type LicensePack = 'crm'
+
 export type FeatureKey =
   | 'security.saml'
   | 'security.scim'
@@ -23,6 +25,7 @@ export type LicenseCertificate = {
   licenseId: string
   edition: SallyEdition
   features: FeatureKey[]
+  packs?: LicensePack[]
   status: LicenseStatus
   customer?: { email?: string | null; companyName?: string | null } | null
   instanceId?: string | null
@@ -49,11 +52,16 @@ export type EditionInfo = {
   ok: boolean
   edition: SallyEdition
   availableFeatures: FeatureKey[]
+  availablePacks?: LicensePack[]
   upgradeUrl: string
   license?: LicenseInfo
 }
 
 export const COMMUNITY_FEATURES = [] as const satisfies readonly FeatureKey[]
+
+export const CRM_PACK_FEATURES = [
+  'crm.core',
+] as const satisfies readonly FeatureKey[]
 
 export const ENTERPRISE_FEATURES = [
   'security.saml',

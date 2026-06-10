@@ -1,9 +1,10 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
-import { COMMUNITY_FEATURES, ENTERPRISE_FEATURES, type EditionInfo, type FeatureKey, type LicenseCertificate, type LicenseInfo, type SallyEdition } from '@sally/types'
+import { COMMUNITY_FEATURES, CRM_PACK_FEATURES, ENTERPRISE_FEATURES, type EditionInfo, type FeatureKey, type LicenseCertificate, type LicenseInfo, type LicensePack, type SallyEdition } from '@sally/types'
 
 export const ENTERPRISE_UPGRADE_URL = process.env.SALLY_ENTERPRISE_UPGRADE_URL || 'https://usesally.app/enterprise'
+export const CRM_UPSELL_URL = process.env.SALLY_CRM_UPSELL_URL || process.env.SALLY_ENTERPRISE_UPGRADE_URL || 'https://usesally.app/crm'
 
 const ACTIVE_LICENSE_STATUSES = new Set(['active', 'trialing', 'past_due'])
 
@@ -36,12 +37,27 @@ function readEnvOrFile(valueName: string, fileName: string): string | null {
 function readExtraFeatures(): FeatureKey[] {
   const raw = process.env.SALLY_EXTRA_FEATURES || process.env.SALLY_FEATURES || ''
   if (!raw.trim()) return []
-  const known = new Set<FeatureKey>([...ENTERPRISE_FEATURES, 'crm.core'])
+  const known = new Set<FeatureKey>([...ENTERPRISE_FEATURES, ...CRM_PACK_FEATURES])
   return raw.split(',').map((feature) => feature.trim()).filter((feature): feature is FeatureKey => known.has(feature as FeatureKey))
 }
 
-function withExtraFeatures(features: FeatureKey[]) {
-  return [...new Set([...features, ...readExtraFeatures()])]
+function readExtraPacks(): LicensePack[] {
+  const raw = process.env.SALLY_LICENSE_PACKS || process.env.SALLY_PACKS || ''
+  if (!raw.trim()) return []
+  return raw.split(',').map((pack) => pack.trim().toLowerCase()).filter((pack): pack is LicensePack => pack === 'crm')
+}
+
+function featuresForPacks(packs: LicensePack[] = []): FeatureKey[] {
+  return packs.includes('crm') ? [...CRM_PACK_FEATURES] : []
+}
+
+function withExtraFeatures(features: FeatureKey[], packs: LicensePack[] = []) {
+  const allPacks = [...new Set([...packs, ...readExtraPacks()])]
+  return [...new Set([...features, ...featuresForPacks(allPacks), ...readExtraFeatures()])]
+}
+
+function withExtraPacks(packs: LicensePack[] = []) {
+  return [...new Set([...packs, ...readExtraPacks()])]
 }
 
 function decodeBase64Url(value: string): Buffer {
@@ -77,6 +93,7 @@ function parseCertificate(raw: string): LicenseCertificate {
   if (!parsed.licenseId || typeof parsed.licenseId !== 'string') throw new Error('License certificate is missing licenseId')
   if (parsed.edition !== 'ENTERPRISE' && parsed.edition !== 'COMMUNITY') throw new Error('License certificate has invalid edition')
   if (!Array.isArray(parsed.features)) throw new Error('License certificate is missing features')
+  if (parsed.packs && (!Array.isArray(parsed.packs) || parsed.packs.some((pack) => pack !== 'crm'))) throw new Error('License certificate has invalid packs')
   if (!parsed.status || typeof parsed.status !== 'string') throw new Error('License certificate is missing status')
   if (!parsed.issuedAt || Number.isNaN(Date.parse(parsed.issuedAt))) throw new Error('License certificate has invalid issuedAt')
   if (!parsed.validUntil || Number.isNaN(Date.parse(parsed.validUntil))) throw new Error('License certificate has invalid validUntil')
@@ -124,19 +141,22 @@ function contextFromCertificate(input: { certificateRaw: string; signature?: str
   const signature = resolveSignature(input.certificateRaw, input.signature)
   if (!verifyCertificateSignature(input.certificateRaw, signature, input.publicKey)) throw new Error('License certificate signature verification failed')
   if (!certificateIsUsable(certificate, input.now)) throw new Error('License certificate is expired, canceled, or disabled')
+  const packs = withExtraPacks(certificate.packs || [])
   return {
     edition: certificate.edition,
-    features: withExtraFeatures(certificate.edition === 'ENTERPRISE' ? [...new Set([...ENTERPRISE_FEATURES, ...certificate.features])] : [...certificate.features]),
+    features: withExtraFeatures(certificate.edition === 'ENTERPRISE' ? [...new Set([...ENTERPRISE_FEATURES, ...certificate.features])] : [...certificate.features], packs),
+    packs,
     license: licenseInfoFromCertificate(certificate, input.source),
   }
 }
 
-export function getLicenseContext(options: { now?: Date; installedLicense?: InstalledLicenseInput } = {}): { edition: SallyEdition; features: FeatureKey[]; license: LicenseInfo } {
+export function getLicenseContext(options: { now?: Date; installedLicense?: InstalledLicenseInput } = {}): { edition: SallyEdition; features: FeatureKey[]; packs: LicensePack[]; license: LicenseInfo } {
   const now = options.now ?? new Date()
   if (process.env.SALLY_EDITION?.toLowerCase() === 'enterprise') {
     return {
       edition: 'ENTERPRISE',
       features: withExtraFeatures([...ENTERPRISE_FEATURES]),
+      packs: withExtraPacks(),
       license: { source: 'env_override', status: 'active' },
     }
   }
@@ -150,6 +170,7 @@ export function getLicenseContext(options: { now?: Date; installedLicense?: Inst
       return {
         edition: 'COMMUNITY',
         features: withExtraFeatures([...COMMUNITY_FEATURES]),
+        packs: withExtraPacks(),
         license: { source: 'community', status: 'invalid', error: error instanceof Error ? error.message : 'Invalid license certificate' },
       }
     }
@@ -162,12 +183,13 @@ export function getLicenseContext(options: { now?: Date; installedLicense?: Inst
       return {
         edition: 'COMMUNITY',
         features: withExtraFeatures([...COMMUNITY_FEATURES]),
+        packs: withExtraPacks(),
         license: { source: 'community', status: 'invalid', error: error instanceof Error ? error.message : 'Invalid installed license certificate' },
       }
     }
   }
 
-  return { edition: 'COMMUNITY', features: withExtraFeatures([...COMMUNITY_FEATURES]), license: { source: 'community', status: 'missing' } }
+  return { edition: 'COMMUNITY', features: withExtraFeatures([...COMMUNITY_FEATURES]), packs: withExtraPacks(), license: { source: 'community', status: 'missing' } }
 }
 
 export function getSallyEdition(): SallyEdition {
@@ -189,6 +211,7 @@ export function getEditionInfo(options: { installedLicense?: InstalledLicenseInp
     ok: true,
     edition: context.edition,
     availableFeatures: context.features,
+    availablePacks: context.packs,
     upgradeUrl: ENTERPRISE_UPGRADE_URL,
     license: context.license,
   }
@@ -202,7 +225,7 @@ export function requireFeature(feature: FeatureKey, readInstalledLicense?: () =>
       ok: false,
       error: feature.startsWith('crm.') ? 'CRM add-on feature' : 'Enterprise feature',
       feature,
-      upgradeUrl: ENTERPRISE_UPGRADE_URL,
+      upgradeUrl: feature.startsWith('crm.') ? CRM_UPSELL_URL : ENTERPRISE_UPGRADE_URL,
     })
   }
 }

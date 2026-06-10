@@ -28,18 +28,18 @@ This is one of the strongest candidates for later OpenAPI generation + contract 
 
 Sally supports optional feature-gated modules in addition to Community/Enterprise edition behavior.
 
-Current add-on feature keys include:
-- `crm.core`: Sally CRM add-on foundation for API/MCP-first CRM surfaces
+Current add-on packs include:
+- `crm`: Sally CRM pack for API/MCP-first relationship workflows, follow-ups, activities, and agent-managed customer context
 
-Feature-gated routes return `402` when the feature is unavailable.
+The CRM pack exposes feature key `crm.core`. Feature-gated routes return `402` when the pack/feature is unavailable.
 
-For local testing or add-on trials, operators can append feature keys with:
+For local testing or add-on trials, operators can enable packs with:
 
 ```txt
-SALLY_EXTRA_FEATURES=crm.core
+SALLY_LICENSE_PACKS=crm
 ```
 
-`SALLY_FEATURES` is also accepted as an alias.
+`SALLY_PACKS` is accepted as an alias. Low-level feature overrides are still available with `SALLY_EXTRA_FEATURES=crm.core` for development.
 
 ---
 
