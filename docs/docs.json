@@ -32,6 +32,12 @@
           "description": "Invite links, project viewers, superadmin workspace recovery, and canonical shareable URLs."
         },
         {
+          "slug": "crm",
+          "source": "docs/crm.md",
+          "title": "Sally CRM add-on",
+          "description": "Optional API/MCP-first CRM add-on architecture and planned surfaces."
+        },
+        {
           "slug": "architecture",
           "source": "docs/ARCHITECTURE.md",
           "title": "Architecture",

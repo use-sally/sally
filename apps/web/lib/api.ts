@@ -46,6 +46,7 @@ async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<Health> { return getJson('/health') }
 export function getEdition(): Promise<EditionInfo> { return getJson('/edition') }
+export function getCrmStatus(): Promise<{ ok: boolean; module: 'crm'; status: string; message: string }> { return getJson('/crm') }
 export type InstalledLicenseSummary = EditionInfo & {
   installed: null | {
     licenseServerUrl: string

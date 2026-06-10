@@ -189,7 +189,7 @@ export function requireFeature(feature: FeatureKey, readInstalledLicense?: () =>
     if (getLicenseContext({ installedLicense }).features.includes(feature)) return
     return reply.code(402).send({
       ok: false,
-      error: 'Enterprise feature',
+      error: feature.startsWith('crm.') ? 'CRM add-on feature' : 'Enterprise feature',
       feature,
       upgradeUrl: ENTERPRISE_UPGRADE_URL,
     })

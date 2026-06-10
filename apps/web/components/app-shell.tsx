@@ -30,6 +30,7 @@ const appNavItems = [
   { href: '/', label: 'Overview' },
   { href: '/projects', label: 'Projects' },
   { href: '/clients', label: 'Clients' },
+  { href: '/crm', label: 'CRM' },
   { href: '/timesheets', label: 'Timesheets' },
 ]
 

@@ -24,6 +24,17 @@ This is one of the strongest candidates for later OpenAPI generation + contract 
 
 ---
 
+## Optional add-on feature keys
+
+Sally supports optional feature-gated modules in addition to Community/Enterprise edition behavior.
+
+Current add-on feature keys include:
+- `crm.core`: Sally CRM add-on foundation for API/MCP-first CRM surfaces
+
+Feature-gated routes return `402` when the feature is unavailable.
+
+---
+
 ## Auth model
 
 Sally currently supports four auth paths:
@@ -779,6 +790,29 @@ Request:
 Superadmin only.
 
 Forces processing of pending `NotificationDelivery` rows.
+
+---
+
+## CRM add-on
+
+The CRM add-on is gated by `crm.core`.
+
+### `GET /crm`
+Requires the `crm.core` feature.
+
+Response when enabled:
+```json
+{
+  "ok": true,
+  "module": "crm",
+  "status": "enabled",
+  "message": "Sally CRM add-on is enabled. Headless CRM API and MCP tools can be attached here."
+}
+```
+
+When disabled, the route returns `402` with feature metadata.
+
+Hosted MCP lists `crm.addon.info` only when `crm.core` is enabled. Future CRM CRUD endpoints and MCP tools should be added under this same feature boundary.
 
 ---
 

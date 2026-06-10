@@ -1640,6 +1640,10 @@ type HostedMcpSession = {
 
 const hostedMcpSessions = new Map<string, HostedMcpSession>()
 
+const hostedCrmMcpTools: McpTool[] = [
+  { name: 'crm.addon.info', description: 'Get Sally CRM add-on status and integration notes.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' } }, additionalProperties: false } },
+]
+
 const hostedMcpTools: McpTool[] = [
   { name: 'workspace.list', description: 'List accessible workspaces.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'workspace.create', description: 'Create a workspace. Platform admin only.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, slug: { type: 'string' } }, required: ['name'], additionalProperties: false } },
@@ -1744,6 +1748,11 @@ async function injectJson(request: any, options: { method: 'GET' | 'POST' | 'PAT
 
 async function callHostedMcpTool(request: any, name: string, args: Record<string, any>) {
   switch (name) {
+    case 'crm.addon.info': {
+      const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+      if (!edition.availableFeatures.includes('crm.core')) throw new Error('CRM add-on feature is not enabled for this Sally instance')
+      return await injectJson(request, { method: 'GET', url: '/crm', args })
+    }
     case 'workspace.list': {
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       const items = memberships
@@ -1894,7 +1903,10 @@ function createHostedMcpServer(session: { account: { id: string; name: string | 
     { capabilities: { tools: {} } },
   )
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: hostedMcpTools }))
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const edition = getEditionInfo({ installedLicense: await readInstalledLicenseWithAutoRefresh(prisma) })
+    return { tools: edition.availableFeatures.includes('crm.core') ? [...hostedMcpTools, ...hostedCrmMcpTools] : hostedMcpTools }
+  })
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       const args = (request.params.arguments || {}) as Record<string, any>
@@ -2122,6 +2134,13 @@ const start = async () => {
       const edition = getEditionInfo({ installedLicense })
       return { ...edition, availableFeatures: edition.availableFeatures }
     })
+
+    app.get('/crm', { preHandler: requireFeature('crm.core', readInstalledLicenseForFeature) }, async () => ({
+      ok: true,
+      module: 'crm',
+      status: 'enabled',
+      message: 'Sally CRM add-on is enabled. Headless CRM API and MCP tools can be attached here.',
+    }))
 
     app.get('/license', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })

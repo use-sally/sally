@@ -184,6 +184,9 @@ Agents:
 - `agent_run.update`
 - `agent_run.heartbeat`
 
+CRM add-on tools are dynamic and only listed when `crm.core` is enabled:
+- `crm.addon.info`
+
 Notable task behavior:
 - `task.create` accepts `owner`, `participants`, `assignee`, `collaborators`, `description`, `priority`, `status`, `statusId`, `dueDate`, `labels`, and `todos`.
 - `task.update` accepts the editable task fields above. Supplying `projectId` moves the task to another project in the same workspace, using the API's project-move rules for task number, status mapping, label relinking, related records, and dependency cleanup.

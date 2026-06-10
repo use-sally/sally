@@ -13,6 +13,7 @@ export type FeatureKey =
   | 'automation.workflowPolicies'
   | 'integrations.webhooks'
   | 'integrations.cloudStorage'
+  | 'crm.core'
   | 'system.backupsUi'
   | 'reports.crossWorkspace'
 
