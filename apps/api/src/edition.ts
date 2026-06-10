@@ -4,7 +4,7 @@ import crypto from 'node:crypto'
 import { COMMUNITY_FEATURES, CRM_PACK_FEATURES, ENTERPRISE_FEATURES, type EditionInfo, type FeatureKey, type LicenseCertificate, type LicenseInfo, type LicensePack, type SallyEdition } from '@sally/types'
 
 export const ENTERPRISE_UPGRADE_URL = process.env.SALLY_ENTERPRISE_UPGRADE_URL || 'https://usesally.app/enterprise'
-export const CRM_UPSELL_URL = process.env.SALLY_CRM_UPSELL_URL || process.env.SALLY_ENTERPRISE_UPGRADE_URL || 'https://usesally.app/crm'
+export const CRM_UPSELL_URL = process.env.SALLY_CRM_UPSELL_URL || process.env.SALLY_ENTERPRISE_UPGRADE_URL || 'https://usesally.com/crm'
 
 const ACTIVE_LICENSE_STATUSES = new Set(['active', 'trialing', 'past_due'])
 

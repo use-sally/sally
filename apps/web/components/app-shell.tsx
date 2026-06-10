@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import type { Notification } from '@sally/types/src'
 import { getWorkspaceId, loadSession, pickPreferredWorkspaceId, saveSession, setWorkspaceId } from '../lib/auth'
-import { apiUrl, createWorkspace, getMe, getNotifications, getProfile, logout, readAllNotifications, readNotification, updateProfile } from '../lib/api'
+import { apiUrl, createWorkspace, getEdition, getMe, getNotifications, getProfile, logout, readAllNotifications, readNotification, updateProfile } from '../lib/api'
 import { useProjectsQuery } from '../lib/query'
 import { workspaceRoleLabel } from '../lib/roles'
 import { workspaceProjectPath, workspaceProjectTaskPath } from '../lib/routes'
@@ -76,6 +76,8 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [crmSection, setCrmSection] = useState<string>('')
+  const [crmPackEnabled, setCrmPackEnabled] = useState<boolean | null>(null)
+  const [crmUpsellOpen, setCrmUpsellOpen] = useState(false)
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
 
@@ -248,6 +250,17 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     setCrmSection(pathSection || 'people')
   }, [pathname])
 
+  useEffect(() => {
+    let cancelled = false
+    getEdition()
+      .then((edition) => {
+        if (cancelled) return
+        setCrmPackEnabled(Boolean(edition.availableFeatures?.includes('crm.core') || edition.availablePacks?.includes('crm')))
+      })
+      .catch(() => { if (!cancelled) setCrmPackEnabled(false) })
+    return () => { cancelled = true }
+  }, [])
+
   const unreadCount = notifications.filter((notification) => !notification.readAt).length
 
   const activeWorkspace = workspaceOptions.find((option) => option.id === activeWorkspaceId)
@@ -257,6 +270,31 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const isCrmArea = pathname.startsWith('/crm')
   const isProjectArea = pathname.startsWith('/projects') || isWorkspaceScopedProjectPath
   const isAdminArea = pathname.startsWith('/team') || (pathname.startsWith('/workspaces') && !isWorkspaceScopedProjectPath) || pathname.startsWith('/audit-log') || pathname.startsWith('/edition-license') || pathname.startsWith('/security') || pathname.startsWith('/system')
+
+  const handleCrmSwitchClick = async () => {
+    if (isCrmArea) {
+      router.push('/projects')
+      return
+    }
+    if (crmPackEnabled === true) {
+      router.push('/crm')
+      return
+    }
+    if (crmPackEnabled === null) {
+      try {
+        const edition = await getEdition()
+        const enabled = Boolean(edition.availableFeatures?.includes('crm.core') || edition.availablePacks?.includes('crm'))
+        setCrmPackEnabled(enabled)
+        if (enabled) {
+          router.push('/crm')
+          return
+        }
+      } catch {
+        setCrmPackEnabled(false)
+      }
+    }
+    setCrmUpsellOpen(true)
+  }
 
   const handleNotificationClick = async (notification: Notification) => {
     await readNotification(notification.id)
@@ -360,8 +398,9 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
               <Link href="/projects" style={{ fontSize: 'var(--font-24)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1, textDecoration: 'none' }}>
                 sally<span style={{ color: '#34d399', animation: 'sally-cursor-blink 1s steps(1, end) infinite' }}>_</span>
               </Link>
-              <Link
-                href={isCrmArea ? '/projects' : '/crm'}
+              <button
+                type="button"
+                onClick={() => void handleCrmSwitchClick()}
                 aria-label={isCrmArea ? 'Open Sally projects' : 'Open Sally CRM'}
                 style={{
                   borderRadius: 999,
@@ -375,10 +414,11 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                   textTransform: 'uppercase',
                   textDecoration: 'none',
                   lineHeight: 1,
+                  cursor: 'pointer',
                 }}
               >
                 {isCrmArea ? 'Projects' : 'CRM'}
-              </Link>
+              </button>
             </div>
             <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>{isCrmArea ? 'Sally CRM is a separate customer relationship surface.' : 'Minimal control surface for projects, tasks, clients, and time.'}</div>
             <div title={appBuildTime || undefined} style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 700 }}>
@@ -797,6 +837,61 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           {children}
         </section>
       </div>
+      {crmUpsellOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Sally CRM pack"
+          onMouseDown={() => setCrmUpsellOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(2, 6, 23, 0.72)', backdropFilter: 'blur(10px)' }}
+        >
+          <div
+            onMouseDown={(event) => event.stopPropagation()}
+            style={{ width: 'min(880px, 100%)', maxHeight: 'min(780px, calc(100vh - 48px))', overflow: 'auto', border: '1px solid rgba(250, 204, 21, 0.28)', borderRadius: 28, background: 'linear-gradient(135deg, rgba(15,23,42,0.98), rgba(2,6,23,0.98))', boxShadow: '0 28px 90px rgba(0,0,0,0.55)', padding: 28, display: 'grid', gap: 22 }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'start' }}>
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ color: '#fcd34d', fontSize: 'var(--font-12)', fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Sally CRM pack</div>
+                <h2 style={{ margin: 0, color: 'var(--heading-text)', fontSize: 'clamp(2rem, 5vw, 3.6rem)', lineHeight: 1, letterSpacing: '-0.06em' }}>Stop doing CRM admin work by hand.</h2>
+                <p style={{ margin: 0, maxWidth: 680, color: 'var(--text-secondary)', fontSize: 'var(--font-16)', lineHeight: 1.7 }}>
+                  Sally CRM is built for agentic follow-up workflows: tell your agent what happened, and let it update leads, people, organizations, deals, notes, and reminders for you.
+                </p>
+              </div>
+              <button type="button" onClick={() => setCrmUpsellOpen(false)} aria-label="Close CRM pack popup" style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 'var(--font-26)', lineHeight: 1 }}>×</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+              {[
+                ['No more tedious CRM typing', 'Log a phone call once. Your agent turns it into structured notes, deal updates, and next steps.'],
+                ['Your virtual sales assistant', 'Let an agent maintain leads, contacts, deal context, follow-up dates, and activity history.'],
+                ['Reminders from real conversations', '“Follow up in two weeks” becomes a dated CRM follow-up instead of a forgotten chat message.'],
+                ['API/MCP-first by design', 'Agents get first-class CRM tools instead of screen scraping a bloated CRM UI.'],
+              ].map(([headline, body]) => (
+                <div key={headline} style={{ border: '1px solid rgba(16,185,129,0.18)', borderRadius: 18, background: 'rgba(16,185,129,0.06)', padding: 16 }}>
+                  <div style={{ color: 'var(--text-primary)', fontWeight: 850, fontSize: 'var(--font-14)' }}>{headline}</div>
+                  <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.55 }}>{body}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ border: '1px solid rgba(250,204,21,0.22)', borderRadius: 20, background: 'rgba(250,204,21,0.07)', padding: 18, display: 'grid', gap: 10 }}>
+              <div style={{ color: '#fde68a', fontWeight: 900 }}>Example</div>
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-14)', lineHeight: 1.65 }}>
+                “I just talked to the client. We discussed a €10,000 project for May and need a follow-up meeting with their team in two weeks.”
+              </p>
+              <div style={{ color: 'var(--text-primary)', fontSize: 'var(--font-13)', lineHeight: 1.7 }}>
+                Your agent can log the call, update the person and organization, create or update the deal, add a timestamped note, and create a follow-up reminder.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+              <a href="https://usesally.com/crm" target="_blank" rel="noreferrer" style={{ borderRadius: 12, border: '1px solid rgba(250, 204, 21, 0.45)', background: '#fcd34d', color: '#052e16', padding: '11px 14px', textDecoration: 'none', fontWeight: 900, fontSize: 'var(--font-13)' }}>Get CRM pack</a>
+              <a href="mailto:hello@usesally.com?subject=Sally%20CRM%20Pack" style={{ color: 'var(--text-secondary)', fontWeight: 800, fontSize: 'var(--font-13)' }}>Talk to us</a>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-12)' }}>Separate license pack. Not enabled on this instance yet.</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }
