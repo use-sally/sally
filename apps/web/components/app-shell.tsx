@@ -75,6 +75,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
+  const [crmSection, setCrmSection] = useState<string>('')
   const notificationsRef = useRef<HTMLDivElement | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
 
@@ -240,6 +241,11 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
     document.addEventListener('mousedown', handlePointerDown)
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [workspaceMenuOpen])
+
+  useEffect(() => {
+    if (!pathname.startsWith('/crm')) return
+    setCrmSection(new URLSearchParams(window.location.search).get('section') || 'people')
+  }, [pathname])
 
   const unreadCount = notifications.filter((notification) => !notification.readAt).length
 
@@ -475,19 +481,32 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
             <nav style={{ display: 'grid', gap: 8 }}>
               {isCrmArea ? (
                 <>
-                  <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Mode</div>
-                  <Link
-                    href="/crm"
-                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: '#052e16', fontWeight: 700, fontSize: 'var(--font-13)', lineHeight: 1.2, textDecoration: 'none', background: '#fcd34d', border: '1px solid rgba(250, 204, 21, 0.5)' }}
-                  >
-                    CRM
-                  </Link>
-                  <Link
-                    href="/projects"
-                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: 'var(--text-secondary)', fontWeight: 700, fontSize: 'var(--font-13)', lineHeight: 1.2, textDecoration: 'none', background: 'transparent', border: '1px solid var(--panel-border)' }}
-                  >
-                    Project management
-                  </Link>
+                  <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>CRM</div>
+                  {[
+                    { href: '/crm?section=organizations', label: 'Organizations', active: crmSection === 'organizations' },
+                    { href: '/crm?section=people', label: 'People', active: crmSection === 'people' },
+                    { href: '/crm?section=deals', label: 'Deals', active: crmSection === 'deals' },
+                  ].map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setCrmSection(item.href.split('section=')[1] || 'people')}
+                      style={{
+                        display: 'block',
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        color: item.active ? '#052e16' : 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: 'var(--font-13)',
+                        lineHeight: 1.2,
+                        textDecoration: 'none',
+                        background: item.active ? '#fcd34d' : 'transparent',
+                        border: item.active ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid transparent',
+                      }}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                 </>
               ) : isAdminArea ? (
                 <>

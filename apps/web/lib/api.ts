@@ -52,10 +52,13 @@ export type CrmPerson = { id: string; name: string; email?: string | null; phone
 export type CrmDeal = { id: string; title: string; value?: number | null; currency?: string | null; stage?: string | null; status: 'OPEN' | 'WON' | 'LOST'; organization?: { id: string; name: string } | null; primaryPerson?: { id: string; name: string; email?: string | null } | null; updatedAt: string }
 export function listCrmOrganizations(): Promise<{ items: CrmOrganization[] }> { return getJson('/crm/organizations') }
 export function createCrmOrganization(payload: { name: string; website?: string; notes?: string }): Promise<CrmOrganization> { return getJson('/crm/organizations', { method: 'POST', body: JSON.stringify(payload) }) }
+export function updateCrmOrganization(organizationId: string, payload: { name?: string; website?: string | null; notes?: string | null }): Promise<CrmOrganization> { return getJson(`/crm/organizations/${organizationId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function listCrmPeople(): Promise<{ items: CrmPerson[] }> { return getJson('/crm/people') }
 export function createCrmPerson(payload: { name: string; email?: string; organizationId?: string | null }): Promise<CrmPerson> { return getJson('/crm/people', { method: 'POST', body: JSON.stringify(payload) }) }
+export function updateCrmPerson(personId: string, payload: { name?: string; email?: string | null; phone?: string | null; title?: string | null; organizationId?: string | null }): Promise<CrmPerson> { return getJson(`/crm/people/${personId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export function listCrmDeals(): Promise<{ items: CrmDeal[] }> { return getJson('/crm/deals') }
 export function createCrmDeal(payload: { title: string; organizationId?: string | null; value?: number | null; currency?: string; status?: string }): Promise<CrmDeal> { return getJson('/crm/deals', { method: 'POST', body: JSON.stringify(payload) }) }
+export function updateCrmDeal(dealId: string, payload: { title?: string; organizationId?: string | null; value?: number | null; currency?: string | null; stage?: string | null; status?: string }): Promise<CrmDeal> { return getJson(`/crm/deals/${dealId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
 export type InstalledLicenseSummary = EditionInfo & {
   installed: null | {
     licenseServerUrl: string
