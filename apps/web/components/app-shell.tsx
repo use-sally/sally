@@ -349,7 +349,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           }}
         >
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%' }}>
               <Link href="/projects" style={{ fontSize: 'var(--font-24)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1, textDecoration: 'none' }}>
                 sally<span style={{ color: '#34d399', animation: 'sally-cursor-blink 1s steps(1, end) infinite' }}>_</span>
               </Link>
