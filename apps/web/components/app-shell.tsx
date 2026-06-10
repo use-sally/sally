@@ -244,7 +244,8 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
 
   useEffect(() => {
     if (!pathname.startsWith('/crm')) return
-    setCrmSection(new URLSearchParams(window.location.search).get('section') || 'people')
+    const pathSection = pathname.split('/')[2]
+    setCrmSection(pathSection || 'people')
   }, [pathname])
 
   const unreadCount = notifications.filter((notification) => !notification.readAt).length
@@ -483,14 +484,14 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
                 <>
                   <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>CRM</div>
                   {[
-                    { href: '/crm?section=organizations', label: 'Organizations', active: crmSection === 'organizations' },
-                    { href: '/crm?section=people', label: 'People', active: crmSection === 'people' },
-                    { href: '/crm?section=deals', label: 'Deals', active: crmSection === 'deals' },
+                    { href: '/crm/organizations', label: 'Organizations', active: crmSection === 'organizations' },
+                    { href: '/crm/people', label: 'People', active: crmSection === 'people' },
+                    { href: '/crm/deals', label: 'Deals', active: crmSection === 'deals' },
                   ].map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
-                      onClick={() => setCrmSection(item.href.split('section=')[1] || 'people')}
+                      onClick={() => setCrmSection(item.href.split('/')[2] || 'people')}
                       style={{
                         display: 'block',
                         padding: '10px 12px',

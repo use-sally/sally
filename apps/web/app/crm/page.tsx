@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, Suspense, useEffect, useMemo, useState, type CSSProperties, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { AppShell, panel } from '../../components/app-shell'
 import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
 import { createCrmDeal, createCrmOrganization, createCrmPerson, getCrmStatus, getEdition, listCrmDeals, listCrmOrganizations, listCrmPeople, updateCrmDeal, updateCrmOrganization, updateCrmPerson, type CrmDeal, type CrmOrganization, type CrmPerson } from '../../lib/api'
@@ -28,8 +28,10 @@ const rowButton: CSSProperties = { border: 'none', borderTop: '1px solid var(--p
 
 function CrmPageContent() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const section = (searchParams.get('section') as CrmSection | null) || 'people'
+  const pathSection = pathname.split('/')[2]
+  const section = (pathSection === 'organizations' || pathSection === 'people' || pathSection === 'deals' ? pathSection : 'people') as CrmSection
   const selectedPersonId = searchParams.get('personId')
   const selectedOrganizationId = searchParams.get('organizationId')
   const selectedDealId = searchParams.get('dealId')
@@ -61,9 +63,9 @@ function CrmPageContent() {
   const selectedPerson = people.find((p) => p.id === selectedPersonId)
   const selectedOrganization = organizations.find((o) => o.id === selectedOrganizationId)
   const selectedDeal = deals.find((d) => d.id === selectedDealId)
-  const closeModal = () => router.push(`/crm?section=${section}`)
+  const closeModal = () => router.push(`/crm/${section}`)
 
-  function openDetail(nextSection: CrmSection, idKey: string, id: string) { setDraft({}); router.push(`/crm?section=${nextSection}&${idKey}=${id}`) }
+  function openDetail(nextSection: CrmSection, idKey: string, id: string) { setDraft({}); router.push(`/crm/${nextSection}?${idKey}=${id}`) }
   async function submitOrg(event: FormEvent) { event.preventDefault(); if (!orgName.trim()) return; await createCrmOrganization({ name: orgName.trim() }); setOrgName(''); await loadCrm() }
   async function submitPerson(event: FormEvent) { event.preventDefault(); if (!personName.trim()) return; await createCrmPerson({ name: personName.trim(), email: personEmail.trim() || undefined }); setPersonName(''); setPersonEmail(''); await loadCrm() }
   async function submitDeal(event: FormEvent) { event.preventDefault(); if (!dealTitle.trim()) return; await createCrmDeal({ title: dealTitle.trim(), status: 'OPEN' }); setDealTitle(''); await loadCrm() }
