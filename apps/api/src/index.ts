@@ -3,7 +3,7 @@ import cors from '@fastify/cors'
 import { DOMParser } from '@xmldom/xmldom'
 import { SignedXml } from 'xml-crypto'
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server'
-import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider } from '@prisma/client'
+import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider, CrmDealStatus, CrmActivityType } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -599,6 +599,62 @@ async function requireWorkspaceRoleForWorkspaceId(request: any, reply: any, work
     return false
   }
   return true
+}
+
+function normalizeStringArray(input: unknown) {
+  if (!Array.isArray(input)) return input === undefined ? undefined : null
+  return input.map((item) => String(item).trim()).filter(Boolean)
+}
+
+function normalizeCrmDealStatus(input: unknown) {
+  const value = String(input || 'OPEN').trim().toUpperCase()
+  if (value === 'OPEN') return CrmDealStatus.OPEN
+  if (value === 'WON') return CrmDealStatus.WON
+  if (value === 'LOST') return CrmDealStatus.LOST
+  return null
+}
+
+function normalizeCrmActivityType(input: unknown) {
+  const value = String(input || 'NOTE').trim().toUpperCase()
+  if (value === 'NOTE') return CrmActivityType.NOTE
+  if (value === 'CALL') return CrmActivityType.CALL
+  if (value === 'EMAIL') return CrmActivityType.EMAIL
+  if (value === 'MEETING') return CrmActivityType.MEETING
+  if (value === 'FOLLOW_UP') return CrmActivityType.FOLLOW_UP
+  return null
+}
+
+async function requireCrmWorkspaceRead(request: any, reply: any) {
+  const workspace = (request as any).workspace as { id: string; archivedAt?: Date | null } | undefined
+  if (!workspace || !ensureWorkspaceIsActive(workspace, reply)) return false
+  if (isPlatformAdmin(request)) return true
+  const membership = (request as any).membership as { role: WorkspaceRole } | undefined
+  if (!membership) {
+    permissionDenied(reply, request, { error: 'Workspace access denied', scope: 'workspace', required: { workspaceRoles: [WorkspaceRole.OWNER, WorkspaceRole.MEMBER, WorkspaceRole.VIEWER] }, current: { workspaceRole: null }, reason: 'CRM requires workspace membership.' })
+    return false
+  }
+  return true
+}
+
+async function requireCrmWorkspaceWrite(request: any, reply: any) {
+  const workspace = (request as any).workspace as { id: string; archivedAt?: Date | null } | undefined
+  if (!workspace || !ensureWorkspaceIsActive(workspace, reply)) return false
+  if (isPlatformAdmin(request)) return true
+  const membership = (request as any).membership as { role: WorkspaceRole } | undefined
+  if (!membership || (membership.role !== WorkspaceRole.OWNER && membership.role !== WorkspaceRole.MEMBER)) {
+    permissionDenied(reply, request, { scope: 'workspace', required: { workspaceRoles: [WorkspaceRole.OWNER, WorkspaceRole.MEMBER] }, current: { workspaceRole: membership?.role || null }, reason: 'CRM writes require workspace owner or member access.' })
+    return false
+  }
+  return true
+}
+
+async function ensureCrmReferences(reply: any, workspaceId: string, refs: { organizationId?: string | null; personId?: string | null; dealId?: string | null; ownerId?: string | null; projectId?: string | null }) {
+  if (refs.organizationId && !(await prisma.crmOrganization.findFirst({ where: { id: refs.organizationId, workspaceId }, select: { id: true } }))) return reply.code(400).send({ ok: false, error: 'organizationId is not in this workspace' })
+  if (refs.personId && !(await prisma.crmPerson.findFirst({ where: { id: refs.personId, workspaceId }, select: { id: true } }))) return reply.code(400).send({ ok: false, error: 'personId is not in this workspace' })
+  if (refs.dealId && !(await prisma.crmDeal.findFirst({ where: { id: refs.dealId, workspaceId }, select: { id: true } }))) return reply.code(400).send({ ok: false, error: 'dealId is not in this workspace' })
+  if (refs.ownerId && !(await prisma.workspaceMembership.findFirst({ where: { accountId: refs.ownerId, workspaceId }, select: { id: true } }))) return reply.code(400).send({ ok: false, error: 'ownerId is not a member of this workspace' })
+  if (refs.projectId && !(await prisma.project.findFirst({ where: { id: refs.projectId, workspaceId }, select: { id: true } }))) return reply.code(400).send({ ok: false, error: 'projectId is not in this workspace' })
+  return null
 }
 
 async function requireProjectRole(request: any, reply: any, projectId: string, roles: ProjectRole[]) {
@@ -1642,6 +1698,20 @@ const hostedMcpSessions = new Map<string, HostedMcpSession>()
 
 const hostedCrmMcpTools: McpTool[] = [
   { name: 'crm.addon.info', description: 'Get Sally CRM add-on status and integration notes.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' } }, additionalProperties: false } },
+  { name: 'crm.organization.list', description: 'List CRM organizations.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, search: { type: 'string' }, archived: { type: 'boolean' } }, additionalProperties: false } },
+  { name: 'crm.organization.get', description: 'Get a CRM organization.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: 'string' } }, required: ['organizationId'], additionalProperties: false } },
+  { name: 'crm.organization.create', description: 'Create a CRM organization.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, name: { type: 'string' }, website: { type: 'string' }, notes: { type: 'string' }, labels: { type: 'array', items: { type: 'string' } }, ownerId: { type: 'string' } }, required: ['name'], additionalProperties: false } },
+  { name: 'crm.organization.update', description: 'Update a CRM organization.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: 'string' }, name: { type: 'string' }, website: { type: ['string','null'] }, notes: { type: ['string','null'] }, labels: { type: 'array', items: { type: 'string' } }, ownerId: { type: ['string','null'] }, archived: { type: 'boolean' } }, required: ['organizationId'], additionalProperties: false } },
+  { name: 'crm.person.list', description: 'List CRM people.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: 'string' }, search: { type: 'string' }, archived: { type: 'boolean' } }, additionalProperties: false } },
+  { name: 'crm.person.get', description: 'Get a CRM person.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, personId: { type: 'string' } }, required: ['personId'], additionalProperties: false } },
+  { name: 'crm.person.create', description: 'Create a CRM person.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: ['string','null'] }, name: { type: 'string' }, email: { type: 'string' }, phone: { type: 'string' }, title: { type: 'string' }, notes: { type: 'string' }, labels: { type: 'array', items: { type: 'string' } } }, required: ['name'], additionalProperties: false } },
+  { name: 'crm.person.update', description: 'Update a CRM person.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, personId: { type: 'string' }, organizationId: { type: ['string','null'] }, name: { type: 'string' }, email: { type: ['string','null'] }, phone: { type: ['string','null'] }, title: { type: ['string','null'] }, notes: { type: ['string','null'] }, labels: { type: 'array', items: { type: 'string' } }, archived: { type: 'boolean' } }, required: ['personId'], additionalProperties: false } },
+  { name: 'crm.deal.list', description: 'List CRM deals.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: 'string' }, status: { type: 'string', enum: ['OPEN', 'WON', 'LOST'] }, search: { type: 'string' }, archived: { type: 'boolean' } }, additionalProperties: false } },
+  { name: 'crm.deal.get', description: 'Get a CRM deal.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, dealId: { type: 'string' } }, required: ['dealId'], additionalProperties: false } },
+  { name: 'crm.deal.create', description: 'Create a CRM deal.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: ['string','null'] }, primaryPersonId: { type: ['string','null'] }, ownerId: { type: ['string','null'] }, projectId: { type: ['string','null'] }, title: { type: 'string' }, value: { type: ['number','null'] }, currency: { type: 'string' }, stage: { type: 'string' }, status: { type: 'string', enum: ['OPEN', 'WON', 'LOST'] }, expectedCloseAt: { type: ['string','null'] }, notes: { type: 'string' } }, required: ['title'], additionalProperties: false } },
+  { name: 'crm.deal.update', description: 'Update a CRM deal.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, dealId: { type: 'string' }, organizationId: { type: ['string','null'] }, primaryPersonId: { type: ['string','null'] }, ownerId: { type: ['string','null'] }, projectId: { type: ['string','null'] }, title: { type: 'string' }, value: { type: ['number','null'] }, currency: { type: ['string','null'] }, stage: { type: ['string','null'] }, status: { type: 'string', enum: ['OPEN', 'WON', 'LOST'] }, expectedCloseAt: { type: ['string','null'] }, notes: { type: ['string','null'] }, archived: { type: 'boolean' } }, required: ['dealId'], additionalProperties: false } },
+  { name: 'crm.activity.list', description: 'List CRM activities.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: 'string' }, personId: { type: 'string' }, dealId: { type: 'string' } }, additionalProperties: false } },
+  { name: 'crm.activity.add', description: 'Add a CRM activity.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: ['string','null'] }, personId: { type: ['string','null'] }, dealId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, type: { type: 'string', enum: ['NOTE', 'CALL', 'EMAIL', 'MEETING', 'FOLLOW_UP'] }, body: { type: 'string' }, occurredAt: { type: ['string','null'] } }, required: ['body'], additionalProperties: false } },
 ]
 
 const hostedMcpTools: McpTool[] = [
@@ -1753,6 +1823,44 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       if (!edition.availableFeatures.includes('crm.core')) throw new Error('CRM add-on feature is not enabled for this Sally instance')
       return await injectJson(request, { method: 'GET', url: '/crm', args })
     }
+    case 'crm.organization.list': {
+      const params = new URLSearchParams()
+      if (args.search) params.set('search', String(args.search))
+      if (args.archived !== undefined) params.set('archived', String(args.archived))
+      return await injectJson(request, { method: 'GET', url: `/crm/organizations${params.size ? `?${params}` : ''}`, args })
+    }
+    case 'crm.organization.get': return await injectJson(request, { method: 'GET', url: `/crm/organizations/${args.organizationId}`, args })
+    case 'crm.organization.create': return await injectJson(request, { method: 'POST', url: '/crm/organizations', args, payload: { name: args.name, website: args.website, notes: args.notes, labels: args.labels, ownerId: args.ownerId } })
+    case 'crm.organization.update': return await injectJson(request, { method: 'PATCH', url: `/crm/organizations/${args.organizationId}`, args, payload: { name: args.name, website: args.website, notes: args.notes, labels: args.labels, ownerId: args.ownerId, archived: args.archived } })
+    case 'crm.person.list': {
+      const params = new URLSearchParams()
+      if (args.organizationId) params.set('organizationId', String(args.organizationId))
+      if (args.search) params.set('search', String(args.search))
+      if (args.archived !== undefined) params.set('archived', String(args.archived))
+      return await injectJson(request, { method: 'GET', url: `/crm/people${params.size ? `?${params}` : ''}`, args })
+    }
+    case 'crm.person.get': return await injectJson(request, { method: 'GET', url: `/crm/people/${args.personId}`, args })
+    case 'crm.person.create': return await injectJson(request, { method: 'POST', url: '/crm/people', args, payload: { organizationId: args.organizationId, name: args.name, email: args.email, phone: args.phone, title: args.title, notes: args.notes, labels: args.labels } })
+    case 'crm.person.update': return await injectJson(request, { method: 'PATCH', url: `/crm/people/${args.personId}`, args, payload: { organizationId: args.organizationId, name: args.name, email: args.email, phone: args.phone, title: args.title, notes: args.notes, labels: args.labels, archived: args.archived } })
+    case 'crm.deal.list': {
+      const params = new URLSearchParams()
+      if (args.organizationId) params.set('organizationId', String(args.organizationId))
+      if (args.status) params.set('status', String(args.status))
+      if (args.search) params.set('search', String(args.search))
+      if (args.archived !== undefined) params.set('archived', String(args.archived))
+      return await injectJson(request, { method: 'GET', url: `/crm/deals${params.size ? `?${params}` : ''}`, args })
+    }
+    case 'crm.deal.get': return await injectJson(request, { method: 'GET', url: `/crm/deals/${args.dealId}`, args })
+    case 'crm.deal.create': return await injectJson(request, { method: 'POST', url: '/crm/deals', args, payload: { organizationId: args.organizationId, primaryPersonId: args.primaryPersonId, ownerId: args.ownerId, projectId: args.projectId, title: args.title, value: args.value, currency: args.currency, stage: args.stage, status: args.status, expectedCloseAt: args.expectedCloseAt, notes: args.notes } })
+    case 'crm.deal.update': return await injectJson(request, { method: 'PATCH', url: `/crm/deals/${args.dealId}`, args, payload: { organizationId: args.organizationId, primaryPersonId: args.primaryPersonId, ownerId: args.ownerId, projectId: args.projectId, title: args.title, value: args.value, currency: args.currency, stage: args.stage, status: args.status, expectedCloseAt: args.expectedCloseAt, notes: args.notes, archived: args.archived } })
+    case 'crm.activity.list': {
+      const params = new URLSearchParams()
+      if (args.organizationId) params.set('organizationId', String(args.organizationId))
+      if (args.personId) params.set('personId', String(args.personId))
+      if (args.dealId) params.set('dealId', String(args.dealId))
+      return await injectJson(request, { method: 'GET', url: `/crm/activities${params.size ? `?${params}` : ''}`, args })
+    }
+    case 'crm.activity.add': return await injectJson(request, { method: 'POST', url: '/crm/activities', args, payload: { organizationId: args.organizationId, personId: args.personId, dealId: args.dealId, taskId: args.taskId, type: args.type, body: args.body, occurredAt: args.occurredAt } })
     case 'workspace.list': {
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       const items = memberships
@@ -2135,12 +2243,178 @@ const start = async () => {
       return { ...edition, availableFeatures: edition.availableFeatures }
     })
 
-    app.get('/crm', { preHandler: requireFeature('crm.core', readInstalledLicenseForFeature) }, async () => ({
+    const crmPreHandler = requireFeature('crm.core', readInstalledLicenseForFeature)
+
+    app.get('/crm', { preHandler: crmPreHandler }, async () => ({
       ok: true,
       module: 'crm',
       status: 'enabled',
-      message: 'Sally CRM add-on is enabled. Headless CRM API and MCP tools can be attached here.',
+      message: 'Sally CRM add-on is enabled. Headless CRM API and MCP tools are available.',
     }))
+
+    app.get('/crm/organizations', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const query = request.query as any
+      const where: Prisma.CrmOrganizationWhereInput = { workspaceId: workspace.id, ...(query.archived === 'true' ? {} : { archivedAt: null }) }
+      if (query.search) where.OR = [{ name: { contains: String(query.search), mode: 'insensitive' } }, { website: { contains: String(query.search), mode: 'insensitive' } }]
+      return { items: await prisma.crmOrganization.findMany({ where, include: { owner: { select: { id: true, name: true, email: true } }, _count: { select: { people: true, deals: true, activities: true } } }, orderBy: { updatedAt: 'desc' }, take: Math.min(Number(query.limit) || 100, 250) }) }
+    })
+
+    app.post('/crm/organizations', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const body = request.body as any
+      const name = String(body?.name || '').trim()
+      if (!name) return reply.code(400).send({ ok: false, error: 'name required' })
+      const labels = normalizeStringArray(body.labels)
+      if (labels === null) return reply.code(400).send({ ok: false, error: 'labels must be an array of strings' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { ownerId: body.ownerId || null })
+      if (refError) return refError
+      return prisma.crmOrganization.create({ data: { workspaceId: workspace.id, name, website: body.website || null, notes: body.notes || null, labels: labels as any, ownerId: body.ownerId || null } })
+    })
+
+    app.get('/crm/organizations/:organizationId', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const { organizationId } = request.params as { organizationId: string }
+      const organization = await prisma.crmOrganization.findFirst({ where: { id: organizationId, workspaceId: workspace.id }, include: { owner: { select: { id: true, name: true, email: true } }, people: { where: { archivedAt: null }, orderBy: { updatedAt: 'desc' } }, deals: { where: { archivedAt: null }, orderBy: { updatedAt: 'desc' } }, activities: { orderBy: { occurredAt: 'desc' }, take: 25 } } })
+      if (!organization) return reply.code(404).send({ ok: false, error: 'Organization not found' })
+      return organization
+    })
+
+    app.patch('/crm/organizations/:organizationId', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const { organizationId } = request.params as { organizationId: string }
+      const body = request.body as any
+      const labels = normalizeStringArray(body.labels)
+      if (labels === null) return reply.code(400).send({ ok: false, error: 'labels must be an array of strings' })
+      const existing = await prisma.crmOrganization.findFirst({ where: { id: organizationId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Organization not found' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { ownerId: body.ownerId || null })
+      if (refError) return refError
+      return prisma.crmOrganization.update({ where: { id: organizationId }, data: { name: body.name === undefined ? undefined : String(body.name).trim(), website: body.website === undefined ? undefined : body.website || null, notes: body.notes === undefined ? undefined : body.notes || null, labels: labels === undefined ? undefined : labels as any, ownerId: body.ownerId === undefined ? undefined : body.ownerId || null, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
+    })
+
+    app.get('/crm/people', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const query = request.query as any
+      const where: Prisma.CrmPersonWhereInput = { workspaceId: workspace.id, ...(query.archived === 'true' ? {} : { archivedAt: null }) }
+      if (query.organizationId) where.organizationId = String(query.organizationId)
+      if (query.search) where.OR = [{ name: { contains: String(query.search), mode: 'insensitive' } }, { email: { contains: String(query.search), mode: 'insensitive' } }]
+      return { items: await prisma.crmPerson.findMany({ where, include: { organization: { select: { id: true, name: true } } }, orderBy: { updatedAt: 'desc' }, take: Math.min(Number(query.limit) || 100, 250) }) }
+    })
+
+    app.post('/crm/people', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const body = request.body as any
+      const name = String(body?.name || '').trim()
+      if (!name) return reply.code(400).send({ ok: false, error: 'name required' })
+      const labels = normalizeStringArray(body.labels)
+      if (labels === null) return reply.code(400).send({ ok: false, error: 'labels must be an array of strings' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null })
+      if (refError) return refError
+      return prisma.crmPerson.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, name, email: body.email || null, phone: body.phone || null, title: body.title || null, notes: body.notes || null, labels: labels as any } })
+    })
+
+    app.get('/crm/people/:personId', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const { personId } = request.params as { personId: string }
+      const person = await prisma.crmPerson.findFirst({ where: { id: personId, workspaceId: workspace.id }, include: { organization: { select: { id: true, name: true } }, deals: { orderBy: { updatedAt: 'desc' } }, activities: { orderBy: { occurredAt: 'desc' }, take: 25 } } })
+      if (!person) return reply.code(404).send({ ok: false, error: 'Person not found' })
+      return person
+    })
+
+    app.patch('/crm/people/:personId', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const { personId } = request.params as { personId: string }
+      const body = request.body as any
+      const labels = normalizeStringArray(body.labels)
+      if (labels === null) return reply.code(400).send({ ok: false, error: 'labels must be an array of strings' })
+      const existing = await prisma.crmPerson.findFirst({ where: { id: personId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Person not found' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null })
+      if (refError) return refError
+      return prisma.crmPerson.update({ where: { id: personId }, data: { organizationId: body.organizationId === undefined ? undefined : body.organizationId || null, name: body.name === undefined ? undefined : String(body.name).trim(), email: body.email === undefined ? undefined : body.email || null, phone: body.phone === undefined ? undefined : body.phone || null, title: body.title === undefined ? undefined : body.title || null, notes: body.notes === undefined ? undefined : body.notes || null, labels: labels === undefined ? undefined : labels as any, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
+    })
+
+    app.get('/crm/deals', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const query = request.query as any
+      const where: Prisma.CrmDealWhereInput = { workspaceId: workspace.id, ...(query.archived === 'true' ? {} : { archivedAt: null }) }
+      if (query.status) where.status = normalizeCrmDealStatus(query.status) || undefined
+      if (query.organizationId) where.organizationId = String(query.organizationId)
+      if (query.search) where.title = { contains: String(query.search), mode: 'insensitive' }
+      return { items: await prisma.crmDeal.findMany({ where, include: { organization: { select: { id: true, name: true } }, primaryPerson: { select: { id: true, name: true, email: true } }, owner: { select: { id: true, name: true, email: true } }, project: { select: { id: true, name: true } } }, orderBy: { updatedAt: 'desc' }, take: Math.min(Number(query.limit) || 100, 250) }) }
+    })
+
+    app.post('/crm/deals', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const body = request.body as any
+      const title = String(body?.title || '').trim()
+      if (!title) return reply.code(400).send({ ok: false, error: 'title required' })
+      const status = normalizeCrmDealStatus(body.status)
+      if (!status) return reply.code(400).send({ ok: false, error: 'invalid status' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.primaryPersonId || null, ownerId: body.ownerId || null, projectId: body.projectId || null })
+      if (refError) return refError
+      return prisma.crmDeal.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, primaryPersonId: body.primaryPersonId || null, ownerId: body.ownerId || null, projectId: body.projectId || null, title, value: body.value === undefined || body.value === null ? null : Number(body.value), currency: body.currency || null, stage: body.stage || null, status, expectedCloseAt: body.expectedCloseAt ? new Date(body.expectedCloseAt) : null, notes: body.notes || null } })
+    })
+
+    app.get('/crm/deals/:dealId', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const { dealId } = request.params as { dealId: string }
+      const deal = await prisma.crmDeal.findFirst({ where: { id: dealId, workspaceId: workspace.id }, include: { organization: true, primaryPerson: true, owner: { select: { id: true, name: true, email: true } }, project: { select: { id: true, name: true } }, activities: { orderBy: { occurredAt: 'desc' }, take: 25 } } })
+      if (!deal) return reply.code(404).send({ ok: false, error: 'Deal not found' })
+      return deal
+    })
+
+    app.patch('/crm/deals/:dealId', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const { dealId } = request.params as { dealId: string }
+      const body = request.body as any
+      const status = body.status === undefined ? undefined : normalizeCrmDealStatus(body.status)
+      if (body.status !== undefined && !status) return reply.code(400).send({ ok: false, error: 'invalid status' })
+      const nextStatus = status || undefined
+      const existing = await prisma.crmDeal.findFirst({ where: { id: dealId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Deal not found' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.primaryPersonId || null, ownerId: body.ownerId || null, projectId: body.projectId || null })
+      if (refError) return refError
+      return prisma.crmDeal.update({ where: { id: dealId }, data: { organizationId: body.organizationId === undefined ? undefined : body.organizationId || null, primaryPersonId: body.primaryPersonId === undefined ? undefined : body.primaryPersonId || null, ownerId: body.ownerId === undefined ? undefined : body.ownerId || null, projectId: body.projectId === undefined ? undefined : body.projectId || null, title: body.title === undefined ? undefined : String(body.title).trim(), value: body.value === undefined ? undefined : body.value === null ? null : Number(body.value), currency: body.currency === undefined ? undefined : body.currency || null, stage: body.stage === undefined ? undefined : body.stage || null, status: nextStatus, expectedCloseAt: body.expectedCloseAt === undefined ? undefined : body.expectedCloseAt ? new Date(body.expectedCloseAt) : null, notes: body.notes === undefined ? undefined : body.notes || null, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
+    })
+
+    app.get('/crm/activities', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const query = request.query as any
+      const where: Prisma.CrmActivityWhereInput = { workspaceId: workspace.id }
+      if (query.organizationId) where.organizationId = String(query.organizationId)
+      if (query.personId) where.personId = String(query.personId)
+      if (query.dealId) where.dealId = String(query.dealId)
+      return { items: await prisma.crmActivity.findMany({ where, include: { organization: { select: { id: true, name: true } }, person: { select: { id: true, name: true, email: true } }, deal: { select: { id: true, title: true, status: true } }, actor: { select: { id: true, name: true, email: true } } }, orderBy: { occurredAt: 'desc' }, take: Math.min(Number(query.limit) || 100, 250) }) }
+    })
+
+    app.post('/crm/activities', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const account = (request as any).account as { id: string } | undefined
+      const body = request.body as any
+      const type = normalizeCrmActivityType(body.type)
+      if (!type) return reply.code(400).send({ ok: false, error: 'invalid type' })
+      const bodyText = String(body?.body || '').trim()
+      if (!bodyText) return reply.code(400).send({ ok: false, error: 'body required' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.personId || null, dealId: body.dealId || null })
+      if (refError) return refError
+      return prisma.crmActivity.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, personId: body.personId || null, dealId: body.dealId || null, actorId: body.actorId || account?.id || null, taskId: body.taskId || null, type, body: bodyText, occurredAt: body.occurredAt ? new Date(body.occurredAt) : new Date() } })
+    })
 
     app.get('/license', async (request, reply) => {
       if (!isPlatformAdmin(request)) return reply.code(403).send({ ok: false, error: 'Insufficient permissions' })

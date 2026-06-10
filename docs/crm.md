@@ -22,18 +22,19 @@ When the feature is enabled:
 - hosted MCP can expose `crm.*` tools
 - the web UI can show CRM surfaces
 
-## Current foundation
+## Current implementation
 
-The current foundation adds the add-on boundary:
+The current implementation includes:
 
 - `FeatureKey`: `crm.core`
 - API gate: `GET /crm`
+- CRM data models for organizations, people, deals, and activities
+- CRUD-style API routes for organizations, people, and deals
+- activity list/add API routes
 - web route: `/crm`
-- hosted MCP gated tool: `crm.addon.info`
+- hosted MCP tools under `crm.*`
 
-This is intentionally a foundation. CRM data models and CRUD tools should be added behind the same feature boundary.
-
-## Planned headless CRM model
+## Headless CRM model
 
 Recommended CRM entities:
 
@@ -91,7 +92,7 @@ Suggested fields:
 - created timestamp
 - optional linked Sally task ID
 
-## Planned API shape
+## API shape
 
 Use a dedicated `/crm` prefix:
 
@@ -117,7 +118,7 @@ POST   /crm/activities
 
 All CRM routes should be workspace-scoped and should use Sally's normal workspace selector headers/query params.
 
-## Planned MCP tools
+## MCP tools
 
 Recommended hosted MCP tools:
 
@@ -136,11 +137,10 @@ crm.deal.create
 crm.deal.update
 crm.activity.list
 crm.activity.add
-crm.search
 crm.addon.info
 ```
 
-MCP tool listing should remain dynamic: only list CRM tools when `crm.core` is enabled.
+MCP tool listing is dynamic: CRM tools are only listed when `crm.core` is enabled.
 
 ## Permissions
 

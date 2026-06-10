@@ -146,6 +146,20 @@ enum BlockerStatus {
   CANCELLED
 }
 
+enum CrmDealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+enum CrmActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  FOLLOW_UP
+}
+
 model Workspace {
   id                       String                    @id @default(cuid())
   name                     String
@@ -155,6 +169,10 @@ model Workspace {
   archivedAt               DateTime?
   projects                 Project[]
   clients                  Client[]
+  crmOrganizations         CrmOrganization[]
+  crmPeople                CrmPerson[]
+  crmDeals                 CrmDeal[]
+  crmActivities            CrmActivity[]
   users                    User[]
   memberships              WorkspaceMembership[]
   invites                  AccountInvite[]
@@ -213,6 +231,9 @@ model Account {
   webAuthnChallenges      AccountWebAuthnChallenge[]
   integrations            AccountIntegration[]
   connectedTaskResources  TaskConnectedResource[]
+  ownedCrmOrganizations   CrmOrganization[]           @relation("CrmOrganizationOwner")
+  ownedCrmDeals           CrmDeal[]                   @relation("CrmDealOwner")
+  crmActivities           CrmActivity[]               @relation("CrmActivityActor")
 
   @@index([archivedAt])
 }
@@ -228,19 +249,19 @@ model CloudStorageProviderConfig {
 }
 
 model AccountIntegration {
-  id                 String               @id @default(cuid())
-  accountId          String
-  provider           TaskResourceProvider
-  accessTokenEnc     String
-  refreshTokenEnc    String?
-  expiresAt          DateTime?
-  scopes             String?
-  externalAccountId  String?
-  externalEmail      String?
-  metadata           Json?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  account            Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id                String               @id @default(cuid())
+  accountId         String
+  provider          TaskResourceProvider
+  accessTokenEnc    String
+  refreshTokenEnc   String?
+  expiresAt         DateTime?
+  scopes            String?
+  externalAccountId String?
+  externalEmail     String?
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  account           Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@unique([accountId, provider])
   @@index([provider])
@@ -660,6 +681,111 @@ model Client {
   @@unique([workspaceId, name])
 }
 
+model CrmOrganization {
+  id          String        @id @default(cuid())
+  workspaceId String
+  name        String
+  website     String?
+  notes       String?
+  labels      Json?
+  ownerId     String?
+  archivedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner       Account?      @relation("CrmOrganizationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  people      CrmPerson[]
+  deals       CrmDeal[]
+  activities  CrmActivity[]
+
+  @@index([workspaceId, archivedAt])
+  @@index([workspaceId, name])
+  @@index([ownerId])
+}
+
+model CrmPerson {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  organizationId String?
+  name           String
+  email          String?
+  phone          String?
+  title          String?
+  notes          String?
+  labels         Json?
+  archivedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization   CrmOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  deals          CrmDeal[]        @relation("CrmDealPrimaryPerson")
+  activities     CrmActivity[]
+
+  @@index([workspaceId, archivedAt])
+  @@index([workspaceId, name])
+  @@index([workspaceId, email])
+  @@index([organizationId])
+}
+
+model CrmDeal {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  organizationId  String?
+  primaryPersonId String?
+  ownerId         String?
+  projectId       String?
+  title           String
+  value           Int?
+  currency        String?
+  stage           String?
+  status          CrmDealStatus    @default(OPEN)
+  expectedCloseAt DateTime?
+  notes           String?
+  archivedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization    CrmOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  primaryPerson   CrmPerson?       @relation("CrmDealPrimaryPerson", fields: [primaryPersonId], references: [id], onDelete: SetNull)
+  owner           Account?         @relation("CrmDealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  activities      CrmActivity[]
+
+  @@index([workspaceId, archivedAt])
+  @@index([workspaceId, status])
+  @@index([organizationId])
+  @@index([primaryPersonId])
+  @@index([ownerId])
+  @@index([projectId])
+}
+
+model CrmActivity {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  organizationId String?
+  personId       String?
+  dealId         String?
+  actorId        String?
+  taskId         String?
+  type           CrmActivityType  @default(NOTE)
+  body           String
+  occurredAt     DateTime         @default(now())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization   CrmOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  person         CrmPerson?       @relation(fields: [personId], references: [id], onDelete: SetNull)
+  deal           CrmDeal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  actor          Account?         @relation("CrmActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, occurredAt])
+  @@index([organizationId])
+  @@index([personId])
+  @@index([dealId])
+  @@index([actorId])
+  @@index([taskId])
+}
+
 model User {
   id          String           @id @default(cuid())
   workspaceId String
@@ -704,6 +830,7 @@ model Project {
   workItemRefs      WorkItemRef[]
   approvalRequests  ApprovalRequest[]
   blockers          Blocker[]
+  crmDeals          CrmDeal[]
 
   @@unique([workspaceId, slug])
 }
@@ -732,38 +859,38 @@ model TaskStatus {
 }
 
 model Task {
-  id               String             @id @default(cuid())
-  projectId        String
-  statusId         String
-  number           Int
-  title            String
-  description      String?
-  priority         TaskPriority       @default(P2)
-  owner            String?
-  assignee         String?
-  dueDate          DateTime?
-  position         Int                @default(0)
-  archivedAt       DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  status           TaskStatus         @relation(fields: [statusId], references: [id], onDelete: Restrict)
-  comments         Comment[]
-  labels           TaskLabel[]
-  participants     TaskParticipant[]
-  collaborators    TaskCollaborator[]
-  todos            TaskTodo[]
-  timesheets       TimesheetEntry[]
-  activityLogs     ActivityLog[]
-  auditLogEvents   AuditLogEvent[]
-  notifications    Notification[]
-  dependencies     TaskDependency[]   @relation("taskDependencies")
-  dependedOnBy     TaskDependency[]   @relation("taskDependedOnBy")
-  agentJobs        AgentJob[]
-  agentRuns        AgentRun[]
-  workItemRefs     WorkItemRef[]
-  approvalRequests ApprovalRequest[]
-  blockers         Blocker[]
+  id                 String                  @id @default(cuid())
+  projectId          String
+  statusId           String
+  number             Int
+  title              String
+  description        String?
+  priority           TaskPriority            @default(P2)
+  owner              String?
+  assignee           String?
+  dueDate            DateTime?
+  position           Int                     @default(0)
+  archivedAt         DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  project            Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status             TaskStatus              @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  comments           Comment[]
+  labels             TaskLabel[]
+  participants       TaskParticipant[]
+  collaborators      TaskCollaborator[]
+  todos              TaskTodo[]
+  timesheets         TimesheetEntry[]
+  activityLogs       ActivityLog[]
+  auditLogEvents     AuditLogEvent[]
+  notifications      Notification[]
+  dependencies       TaskDependency[]        @relation("taskDependencies")
+  dependedOnBy       TaskDependency[]        @relation("taskDependedOnBy")
+  agentJobs          AgentJob[]
+  agentRuns          AgentRun[]
+  workItemRefs       WorkItemRef[]
+  approvalRequests   ApprovalRequest[]
+  blockers           Blocker[]
   connectedResources TaskConnectedResource[]
 
   @@unique([projectId, number])

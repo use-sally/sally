@@ -130,8 +130,8 @@ Sally is especially suited to teams that:
 - optional add-on feature key: `crm.core`
 - `/crm` web route with locked/enabled states
 - `/crm` API boundary protected by feature gating
-- hosted MCP foundation tool: `crm.addon.info`
-- planned CRM entities: organizations, people, deals, and activities
+- hosted MCP tools under `crm.*`
+- CRM entities: organizations, people, deals, and activities
 
 ## How Sally usually gets used
 

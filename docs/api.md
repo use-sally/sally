@@ -812,7 +812,56 @@ Response when enabled:
 
 When disabled, the route returns `402` with feature metadata.
 
-Hosted MCP lists `crm.addon.info` only when `crm.core` is enabled. Future CRM CRUD endpoints and MCP tools should be added under this same feature boundary.
+CRM routes are workspace-scoped. Workspace viewers can read CRM records; workspace members and owners can write CRM records. Hosted MCP lists `crm.*` tools only when `crm.core` is enabled.
+
+### Organizations
+
+```txt
+GET    /crm/organizations?search=&archived=
+POST   /crm/organizations
+GET    /crm/organizations/:organizationId
+PATCH  /crm/organizations/:organizationId
+```
+
+Create fields: `name`, `website`, `notes`, `labels`, `ownerId`.
+Patch fields: create fields plus `archived`.
+
+### People
+
+```txt
+GET    /crm/people?organizationId=&search=&archived=
+POST   /crm/people
+GET    /crm/people/:personId
+PATCH  /crm/people/:personId
+```
+
+Create fields: `organizationId`, `name`, `email`, `phone`, `title`, `notes`, `labels`.
+Patch fields: create fields plus `archived`.
+
+### Deals
+
+```txt
+GET    /crm/deals?organizationId=&status=&search=&archived=
+POST   /crm/deals
+GET    /crm/deals/:dealId
+PATCH  /crm/deals/:dealId
+```
+
+Create fields: `organizationId`, `primaryPersonId`, `ownerId`, `projectId`, `title`, `value`, `currency`, `stage`, `status`, `expectedCloseAt`, `notes`.
+Patch fields: create fields plus `archived`.
+
+Deal status values: `OPEN`, `WON`, `LOST`.
+
+### Activities
+
+```txt
+GET  /crm/activities?organizationId=&personId=&dealId=
+POST /crm/activities
+```
+
+Create fields: `organizationId`, `personId`, `dealId`, `taskId`, `type`, `body`, `occurredAt`.
+
+Activity type values: `NOTE`, `CALL`, `EMAIL`, `MEETING`, `FOLLOW_UP`.
 
 ---
 

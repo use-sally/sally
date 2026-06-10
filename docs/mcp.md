@@ -186,6 +186,20 @@ Agents:
 
 CRM add-on tools are dynamic and only listed when `crm.core` is enabled:
 - `crm.addon.info`
+- `crm.organization.list`
+- `crm.organization.get`
+- `crm.organization.create`
+- `crm.organization.update`
+- `crm.person.list`
+- `crm.person.get`
+- `crm.person.create`
+- `crm.person.update`
+- `crm.deal.list`
+- `crm.deal.get`
+- `crm.deal.create`
+- `crm.deal.update`
+- `crm.activity.list`
+- `crm.activity.add`
 
 Notable task behavior:
 - `task.create` accepts `owner`, `participants`, `assignee`, `collaborators`, `description`, `priority`, `status`, `statusId`, `dueDate`, `labels`, and `todos`.
