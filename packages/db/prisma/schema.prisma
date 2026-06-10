@@ -686,6 +686,16 @@ model CrmOrganization {
   workspaceId String
   name        String
   website     String?
+  email       String?
+  phone       String?
+  industry    String?
+  size        String?
+  source      String?
+  address     String?
+  city        String?
+  region      String?
+  postalCode  String?
+  country     String?
   notes       String?
   labels      Json?
   ownerId     String?
@@ -710,7 +720,10 @@ model CrmPerson {
   name           String
   email          String?
   phone          String?
+  mobile         String?
   title          String?
+  linkedinUrl    String?
+  source         String?
   notes          String?
   labels         Json?
   archivedAt     DateTime?
@@ -739,6 +752,8 @@ model CrmDeal {
   currency        String?
   stage           String?
   status          CrmDealStatus    @default(OPEN)
+  probability     Int?
+  nextStep        String?
   expectedCloseAt DateTime?
   notes           String?
   archivedAt      DateTime?

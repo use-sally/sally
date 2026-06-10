@@ -2271,7 +2271,7 @@ const start = async () => {
       if (labels === null) return reply.code(400).send({ ok: false, error: 'labels must be an array of strings' })
       const refError = await ensureCrmReferences(reply, workspace.id, { ownerId: body.ownerId || null })
       if (refError) return refError
-      return prisma.crmOrganization.create({ data: { workspaceId: workspace.id, name, website: body.website || null, notes: body.notes || null, labels: labels as any, ownerId: body.ownerId || null } })
+      return prisma.crmOrganization.create({ data: { workspaceId: workspace.id, name, website: body.website || null, email: body.email || null, phone: body.phone || null, industry: body.industry || null, size: body.size || null, source: body.source || null, address: body.address || null, city: body.city || null, region: body.region || null, postalCode: body.postalCode || null, country: body.country || null, notes: body.notes || null, labels: labels as any, ownerId: body.ownerId || null } })
     })
 
     app.get('/crm/organizations/:organizationId', { preHandler: crmPreHandler }, async (request, reply) => {
@@ -2294,7 +2294,7 @@ const start = async () => {
       if (!existing) return reply.code(404).send({ ok: false, error: 'Organization not found' })
       const refError = await ensureCrmReferences(reply, workspace.id, { ownerId: body.ownerId || null })
       if (refError) return refError
-      return prisma.crmOrganization.update({ where: { id: organizationId }, data: { name: body.name === undefined ? undefined : String(body.name).trim(), website: body.website === undefined ? undefined : body.website || null, notes: body.notes === undefined ? undefined : body.notes || null, labels: labels === undefined ? undefined : labels as any, ownerId: body.ownerId === undefined ? undefined : body.ownerId || null, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
+      return prisma.crmOrganization.update({ where: { id: organizationId }, data: { name: body.name === undefined ? undefined : String(body.name).trim(), website: body.website === undefined ? undefined : body.website || null, email: body.email === undefined ? undefined : body.email || null, phone: body.phone === undefined ? undefined : body.phone || null, industry: body.industry === undefined ? undefined : body.industry || null, size: body.size === undefined ? undefined : body.size || null, source: body.source === undefined ? undefined : body.source || null, address: body.address === undefined ? undefined : body.address || null, city: body.city === undefined ? undefined : body.city || null, region: body.region === undefined ? undefined : body.region || null, postalCode: body.postalCode === undefined ? undefined : body.postalCode || null, country: body.country === undefined ? undefined : body.country || null, notes: body.notes === undefined ? undefined : body.notes || null, labels: labels === undefined ? undefined : labels as any, ownerId: body.ownerId === undefined ? undefined : body.ownerId || null, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
     })
 
     app.get('/crm/people', { preHandler: crmPreHandler }, async (request, reply) => {
@@ -2317,7 +2317,7 @@ const start = async () => {
       if (labels === null) return reply.code(400).send({ ok: false, error: 'labels must be an array of strings' })
       const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null })
       if (refError) return refError
-      return prisma.crmPerson.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, name, email: body.email || null, phone: body.phone || null, title: body.title || null, notes: body.notes || null, labels: labels as any } })
+      return prisma.crmPerson.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, name, email: body.email || null, phone: body.phone || null, mobile: body.mobile || null, title: body.title || null, linkedinUrl: body.linkedinUrl || null, source: body.source || null, notes: body.notes || null, labels: labels as any } })
     })
 
     app.get('/crm/people/:personId', { preHandler: crmPreHandler }, async (request, reply) => {
@@ -2340,7 +2340,7 @@ const start = async () => {
       if (!existing) return reply.code(404).send({ ok: false, error: 'Person not found' })
       const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null })
       if (refError) return refError
-      return prisma.crmPerson.update({ where: { id: personId }, data: { organizationId: body.organizationId === undefined ? undefined : body.organizationId || null, name: body.name === undefined ? undefined : String(body.name).trim(), email: body.email === undefined ? undefined : body.email || null, phone: body.phone === undefined ? undefined : body.phone || null, title: body.title === undefined ? undefined : body.title || null, notes: body.notes === undefined ? undefined : body.notes || null, labels: labels === undefined ? undefined : labels as any, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
+      return prisma.crmPerson.update({ where: { id: personId }, data: { organizationId: body.organizationId === undefined ? undefined : body.organizationId || null, name: body.name === undefined ? undefined : String(body.name).trim(), email: body.email === undefined ? undefined : body.email || null, phone: body.phone === undefined ? undefined : body.phone || null, mobile: body.mobile === undefined ? undefined : body.mobile || null, title: body.title === undefined ? undefined : body.title || null, linkedinUrl: body.linkedinUrl === undefined ? undefined : body.linkedinUrl || null, source: body.source === undefined ? undefined : body.source || null, notes: body.notes === undefined ? undefined : body.notes || null, labels: labels === undefined ? undefined : labels as any, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
     })
 
     app.get('/crm/deals', { preHandler: crmPreHandler }, async (request, reply) => {
@@ -2364,7 +2364,7 @@ const start = async () => {
       if (!status) return reply.code(400).send({ ok: false, error: 'invalid status' })
       const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.primaryPersonId || null, ownerId: body.ownerId || null, projectId: body.projectId || null })
       if (refError) return refError
-      return prisma.crmDeal.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, primaryPersonId: body.primaryPersonId || null, ownerId: body.ownerId || null, projectId: body.projectId || null, title, value: body.value === undefined || body.value === null ? null : Number(body.value), currency: body.currency || null, stage: body.stage || null, status, expectedCloseAt: body.expectedCloseAt ? new Date(body.expectedCloseAt) : null, notes: body.notes || null } })
+      return prisma.crmDeal.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, primaryPersonId: body.primaryPersonId || null, ownerId: body.ownerId || null, projectId: body.projectId || null, title, value: body.value === undefined || body.value === null ? null : Number(body.value), currency: body.currency || null, stage: body.stage || null, status, probability: body.probability === undefined || body.probability === null ? null : Number(body.probability), nextStep: body.nextStep || null, expectedCloseAt: body.expectedCloseAt ? new Date(body.expectedCloseAt) : null, notes: body.notes || null } })
     })
 
     app.get('/crm/deals/:dealId', { preHandler: crmPreHandler }, async (request, reply) => {
@@ -2388,7 +2388,7 @@ const start = async () => {
       if (!existing) return reply.code(404).send({ ok: false, error: 'Deal not found' })
       const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.primaryPersonId || null, ownerId: body.ownerId || null, projectId: body.projectId || null })
       if (refError) return refError
-      return prisma.crmDeal.update({ where: { id: dealId }, data: { organizationId: body.organizationId === undefined ? undefined : body.organizationId || null, primaryPersonId: body.primaryPersonId === undefined ? undefined : body.primaryPersonId || null, ownerId: body.ownerId === undefined ? undefined : body.ownerId || null, projectId: body.projectId === undefined ? undefined : body.projectId || null, title: body.title === undefined ? undefined : String(body.title).trim(), value: body.value === undefined ? undefined : body.value === null ? null : Number(body.value), currency: body.currency === undefined ? undefined : body.currency || null, stage: body.stage === undefined ? undefined : body.stage || null, status: nextStatus, expectedCloseAt: body.expectedCloseAt === undefined ? undefined : body.expectedCloseAt ? new Date(body.expectedCloseAt) : null, notes: body.notes === undefined ? undefined : body.notes || null, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
+      return prisma.crmDeal.update({ where: { id: dealId }, data: { organizationId: body.organizationId === undefined ? undefined : body.organizationId || null, primaryPersonId: body.primaryPersonId === undefined ? undefined : body.primaryPersonId || null, ownerId: body.ownerId === undefined ? undefined : body.ownerId || null, projectId: body.projectId === undefined ? undefined : body.projectId || null, title: body.title === undefined ? undefined : String(body.title).trim(), value: body.value === undefined ? undefined : body.value === null ? null : Number(body.value), currency: body.currency === undefined ? undefined : body.currency || null, stage: body.stage === undefined ? undefined : body.stage || null, status: nextStatus, probability: body.probability === undefined ? undefined : body.probability === null ? null : Number(body.probability), nextStep: body.nextStep === undefined ? undefined : body.nextStep || null, expectedCloseAt: body.expectedCloseAt === undefined ? undefined : body.expectedCloseAt ? new Date(body.expectedCloseAt) : null, notes: body.notes === undefined ? undefined : body.notes || null, archivedAt: body.archived === undefined ? undefined : body.archived ? new Date() : null } })
     })
 
     app.get('/crm/activities', { preHandler: crmPreHandler }, async (request, reply) => {
