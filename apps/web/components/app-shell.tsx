@@ -30,7 +30,6 @@ const appNavItems = [
   { href: '/', label: 'Overview' },
   { href: '/projects', label: 'Projects' },
   { href: '/clients', label: 'Clients' },
-  { href: '/crm', label: 'CRM' },
   { href: '/timesheets', label: 'Timesheets' },
 ]
 
@@ -248,6 +247,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
   const platformRole = loadSession()?.account?.platformRole
   const isPlatformAdminSession = platformRole === 'SUPERADMIN' || platformRole === 'ADMIN'
   const isWorkspaceScopedProjectPath = /^\/workspaces\/[^/]+\/projects(?:\/|$)/.test(pathname)
+  const isCrmArea = pathname.startsWith('/crm')
   const isProjectArea = pathname.startsWith('/projects') || isWorkspaceScopedProjectPath
   const isAdminArea = pathname.startsWith('/team') || (pathname.startsWith('/workspaces') && !isWorkspaceScopedProjectPath) || pathname.startsWith('/audit-log') || pathname.startsWith('/edition-license') || pathname.startsWith('/security') || pathname.startsWith('/system')
 
@@ -349,17 +349,38 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
           }}
         >
           <div>
-            <div style={{ fontSize: 'var(--font-24)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1 }}>
-              sally<span style={{ color: '#34d399', animation: 'sally-cursor-blink 1s steps(1, end) infinite' }}>_</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Link href="/projects" style={{ fontSize: 'var(--font-24)', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--text-primary)', lineHeight: 1, textDecoration: 'none' }}>
+                sally<span style={{ color: '#34d399', animation: 'sally-cursor-blink 1s steps(1, end) infinite' }}>_</span>
+              </Link>
+              <Link
+                href="/crm"
+                aria-label="Open Sally CRM"
+                style={{
+                  borderRadius: 999,
+                  border: isCrmArea ? '1px solid rgba(250, 204, 21, 0.5)' : '1px solid var(--panel-border)',
+                  background: isCrmArea ? '#fcd34d' : 'transparent',
+                  color: isCrmArea ? '#052e16' : 'var(--text-secondary)',
+                  padding: '6px 10px',
+                  fontSize: 'var(--font-11)',
+                  fontWeight: 900,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  lineHeight: 1,
+                }}
+              >
+                CRM
+              </Link>
             </div>
-            <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>Minimal control surface for projects, tasks, clients, and time.</div>
+            <div style={{ marginTop: 8, color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5 }}>{isCrmArea ? 'Sally CRM is a separate customer relationship surface.' : 'Minimal control surface for projects, tasks, clients, and time.'}</div>
             <div title={appBuildTime || undefined} style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 700 }}>
               v{appVersionLabel()}
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, minHeight: 0 }}>
-            {!isAdminArea && workspaceOptions.length ? (
+            {!isAdminArea && !isCrmArea && workspaceOptions.length ? (
               <div ref={workspaceMenuRef} style={{ display: 'grid', gap: 6, position: 'relative' }}>
                 <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Workspace</div>
                 <button
@@ -452,7 +473,23 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
             ) : null}
 
             <nav style={{ display: 'grid', gap: 8 }}>
-              {isAdminArea ? (
+              {isCrmArea ? (
+                <>
+                  <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Mode</div>
+                  <Link
+                    href="/crm"
+                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: '#052e16', fontWeight: 700, fontSize: 'var(--font-13)', lineHeight: 1.2, textDecoration: 'none', background: '#fcd34d', border: '1px solid rgba(250, 204, 21, 0.5)' }}
+                  >
+                    CRM
+                  </Link>
+                  <Link
+                    href="/projects"
+                    style={{ display: 'block', padding: '10px 12px', borderRadius: 12, color: 'var(--text-secondary)', fontWeight: 700, fontSize: 'var(--font-13)', lineHeight: 1.2, textDecoration: 'none', background: 'transparent', border: '1px solid var(--panel-border)' }}
+                  >
+                    Project management
+                  </Link>
+                </>
+              ) : isAdminArea ? (
                 <>
                   <div style={{ fontSize: 'var(--font-11)', fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(250, 204, 21, 0.82)', textTransform: 'uppercase' }}>Admin</div>
                   <Link
@@ -514,7 +551,7 @@ export function AppShell({ title, subtitle, children, actions }: { title: string
               )}
             </nav>
 
-            {!isAdminArea ? (
+            {!isAdminArea && !isCrmArea ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, flex: 1 }}>
               <Link
                 href="/projects"

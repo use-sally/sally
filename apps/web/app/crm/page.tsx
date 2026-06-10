@@ -73,13 +73,13 @@ export default function CrmPage() {
   }
 
   return (
-    <AppShell title="CRM" subtitle="Headless customer relationship management for humans and agents.">
+    <AppShell title="CRM" subtitle="A separate Sally surface for relationships, deals, and agent-ready customer context.">
       {!enabled ? (
         <EnterpriseLockedCard title="Sally CRM add-on" description="Organizations, people, deals, and activities are an optional Sally add-on designed to be API/MCP-first." />
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>
           <Section title="Sally CRM add-on enabled">
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-14)', lineHeight: 1.6 }}>{status || 'Loading CRM…'}</p>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-14)', lineHeight: 1.6 }}>{status || 'Loading CRM…'} CRM is opened from the product switcher, not from the workspace/project navigation.</p>
             {error ? <div style={{ color: 'var(--danger-text)', fontSize: 'var(--font-13)' }}>{error}</div> : null}
           </Section>
 
