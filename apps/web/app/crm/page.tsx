@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useState, type InputHTMLAttributes, type ReactNode } from 'react'
+import { FormEvent, useEffect, useState, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'react'
 import { AppShell, panel } from '../../components/app-shell'
 import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
 import { createCrmDeal, createCrmOrganization, createCrmPerson, getCrmStatus, getEdition, listCrmDeals, listCrmOrganizations, listCrmPeople, type CrmDeal, type CrmOrganization, type CrmPerson } from '../../lib/api'
@@ -12,6 +12,18 @@ function Input(props: InputHTMLAttributes<HTMLInputElement>) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return <div style={{ ...panel, display: 'grid', gap: 12 }}><div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{title}</div>{children}</div>
+}
+
+const textButton: CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--text-secondary)',
+  padding: 0,
+  fontSize: 'var(--font-13)',
+  fontWeight: 800,
+  cursor: 'pointer',
+  textAlign: 'left',
+  whiteSpace: 'nowrap',
 }
 
 export default function CrmPage() {
@@ -85,15 +97,15 @@ export default function CrmPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
             <Section title="Organizations">
-              <form onSubmit={submitOrg} style={{ display: 'flex', gap: 8 }}><Input value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="New organization" /><button className="button">Add</button></form>
+              <form onSubmit={submitOrg} style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Input value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="New organization" /><button type="submit" style={textButton}>Add</button></form>
               {organizations.map((org) => <div key={org.id} style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-14)' }}>{org.name} <span style={{ opacity: .65 }}>({org._count?.people ?? 0} people, {org._count?.deals ?? 0} deals)</span></div>)}
             </Section>
             <Section title="People">
-              <form onSubmit={submitPerson} style={{ display: 'grid', gap: 8 }}><Input value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="New person" /><Input value={personEmail} onChange={(e) => setPersonEmail(e.target.value)} placeholder="Email" /><button className="button">Add</button></form>
+              <form onSubmit={submitPerson} style={{ display: 'grid', gap: 8 }}><Input value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="New person" /><Input value={personEmail} onChange={(e) => setPersonEmail(e.target.value)} placeholder="Email" /><button type="submit" style={textButton}>Add</button></form>
               {people.map((person) => <div key={person.id} style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-14)' }}>{person.name}{person.email ? ` · ${person.email}` : ''}</div>)}
             </Section>
             <Section title="Deals">
-              <form onSubmit={submitDeal} style={{ display: 'flex', gap: 8 }}><Input value={dealTitle} onChange={(e) => setDealTitle(e.target.value)} placeholder="New deal" /><button className="button">Add</button></form>
+              <form onSubmit={submitDeal} style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Input value={dealTitle} onChange={(e) => setDealTitle(e.target.value)} placeholder="New deal" /><button type="submit" style={textButton}>Add</button></form>
               {deals.map((deal) => <div key={deal.id} style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-14)' }}>{deal.title} <span style={{ opacity: .65 }}>{deal.status}</span></div>)}
             </Section>
           </div>
