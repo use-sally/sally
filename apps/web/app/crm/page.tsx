@@ -4,7 +4,7 @@ import { FormEvent, Suspense, useEffect, useMemo, useState, type CSSProperties, 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { AppShell, panel } from '../../components/app-shell'
 import { EnterpriseLockedCard } from '../../components/enterprise-locked-card'
-import { createCrmDeal, createCrmOrganization, createCrmPerson, getCrmStatus, getEdition, listCrmDeals, listCrmOrganizations, listCrmPeople, updateCrmDeal, updateCrmOrganization, updateCrmPerson, type CrmDeal, type CrmOrganization, type CrmPerson } from '../../lib/api'
+import { addCrmActivity, createCrmDeal, createCrmOrganization, createCrmPerson, getCrmStatus, getEdition, listCrmActivities, listCrmDeals, listCrmOrganizations, listCrmPeople, updateCrmDeal, updateCrmOrganization, updateCrmPerson, type CrmActivity, type CrmDeal, type CrmOrganization, type CrmPerson } from '../../lib/api'
 import { hasFeature, type EditionInfo } from '../../lib/edition'
 
 type CrmSection = 'organizations' | 'people' | 'deals'
@@ -43,15 +43,18 @@ function CrmPageContent() {
   const [organizations, setOrganizations] = useState<CrmOrganization[]>([])
   const [people, setPeople] = useState<CrmPerson[]>([])
   const [deals, setDeals] = useState<CrmDeal[]>([])
+  const [activities, setActivities] = useState<CrmActivity[]>([])
   const [orgName, setOrgName] = useState('')
   const [personName, setPersonName] = useState('')
   const [personEmail, setPersonEmail] = useState('')
   const [dealTitle, setDealTitle] = useState('')
+  const [infoBody, setInfoBody] = useState('')
+  const [infoOccurredAt, setInfoOccurredAt] = useState('')
   const [draft, setDraft] = useState<Record<string, string>>({})
 
   async function loadCrm() {
-    const [crmStatus, orgs, crmPeople, crmDeals] = await Promise.all([getCrmStatus(), listCrmOrganizations(), listCrmPeople(), listCrmDeals()])
-    setStatus(crmStatus.message); setOrganizations(orgs.items); setPeople(crmPeople.items); setDeals(crmDeals.items)
+    const [crmStatus, orgs, crmPeople, crmDeals, crmActivities] = await Promise.all([getCrmStatus(), listCrmOrganizations(), listCrmPeople(), listCrmDeals(), listCrmActivities()])
+    setStatus(crmStatus.message); setOrganizations(orgs.items); setPeople(crmPeople.items); setDeals(crmDeals.items); setActivities(crmActivities.items)
   }
   useEffect(() => { let cancelled = false; getEdition().then(async (info) => { if (cancelled) return; setEdition(info); if (hasFeature(info, 'crm.core')) await loadCrm() }).catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load CRM') }); return () => { cancelled = true } }, [])
 
@@ -63,12 +66,29 @@ function CrmPageContent() {
   const selectedPerson = people.find((p) => p.id === selectedPersonId)
   const selectedOrganization = organizations.find((o) => o.id === selectedOrganizationId)
   const selectedDeal = deals.find((d) => d.id === selectedDealId)
+  const selectedActivities = activities.filter((activity) => (selectedPerson && activity.personId === selectedPerson.id) || (selectedOrganization && activity.organizationId === selectedOrganization.id) || (selectedDeal && activity.dealId === selectedDeal.id))
   const closeModal = () => router.push(`/crm/${section}`)
 
   function openDetail(nextSection: CrmSection, idKey: string, id: string) { setDraft({}); router.push(`/crm/${nextSection}?${idKey}=${id}`) }
   async function submitOrg(event: FormEvent) { event.preventDefault(); if (!orgName.trim()) return; await createCrmOrganization({ name: orgName.trim() }); setOrgName(''); await loadCrm() }
   async function submitPerson(event: FormEvent) { event.preventDefault(); if (!personName.trim()) return; await createCrmPerson({ name: personName.trim(), email: personEmail.trim() || undefined }); setPersonName(''); setPersonEmail(''); await loadCrm() }
   async function submitDeal(event: FormEvent) { event.preventDefault(); if (!dealTitle.trim()) return; await createCrmDeal({ title: dealTitle.trim(), status: 'OPEN' }); setDealTitle(''); await loadCrm() }
+  async function submitInfo(event: FormEvent) {
+    event.preventDefault()
+    if (!infoBody.trim()) return
+    await addCrmActivity({ organizationId: selectedOrganization?.id || selectedPerson?.organizationId || selectedDeal?.organizationId || null, personId: selectedPerson?.id || selectedDeal?.primaryPersonId || null, dealId: selectedDeal?.id || null, type: 'NOTE', body: infoBody.trim(), occurredAt: infoOccurredAt ? new Date(infoOccurredAt).toISOString() : null })
+    setInfoBody(''); setInfoOccurredAt('')
+    await loadCrm()
+  }
+
+  const infoEntries = <div style={{ display: 'grid', gap: 10, borderTop: '1px solid var(--panel-border)', paddingTop: 14 }}>
+    <div style={{ color: 'var(--text-primary)', fontWeight: 800 }}>Information timeline</div>
+    <form onSubmit={submitInfo} style={{ display: 'grid', gap: 8 }}>
+      <Input value={infoBody} onChange={(event) => setInfoBody(event.target.value)} placeholder="Add note, call summary, meeting info…" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Input type="datetime-local" value={infoOccurredAt} onChange={(event) => setInfoOccurredAt(event.target.value)} /><button type="submit" style={textButton}>Add entry</button></div>
+    </form>
+    {selectedActivities.length ? selectedActivities.map((activity) => <div key={activity.id} style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-13)', lineHeight: 1.5, borderTop: '1px solid var(--panel-border)', paddingTop: 10 }}><div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-11)', fontWeight: 800 }}>{new Date(activity.occurredAt).toLocaleString()} · {activity.type.toLowerCase()}</div><div>{activity.body}</div></div>) : <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-13)' }}>No information entries yet.</div>}
+  </div>
 
   return <AppShell title="CRM" subtitle="A separate Sally surface for relationships, deals, and agent-ready customer context.">
     {!enabled ? <EnterpriseLockedCard title="Sally CRM add-on" description="Organizations, people, deals, and activities are an optional Sally add-on designed to be API/MCP-first." /> : <div style={{ display: 'grid', gap: 16 }}>
@@ -91,6 +111,7 @@ function CrmPageContent() {
         <Input value={draft.title ?? selectedPerson.title ?? ''} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="Title" />
         <Input value={draft.linkedinUrl ?? selectedPerson.linkedinUrl ?? ''} onChange={(e) => setDraft((d) => ({ ...d, linkedinUrl: e.target.value }))} placeholder="LinkedIn URL" />
         <Input value={draft.source ?? selectedPerson.source ?? ''} onChange={(e) => setDraft((d) => ({ ...d, source: e.target.value }))} placeholder="Source" />
+        {infoEntries}
         <button type="button" style={textButton} onClick={async () => { await updateCrmPerson(selectedPerson.id, { name: draft.name ?? selectedPerson.name, organizationId: (draft.organizationId ?? selectedPerson.organizationId) || null, email: draft.email ?? selectedPerson.email ?? null, phone: draft.phone ?? selectedPerson.phone ?? null, mobile: draft.mobile ?? selectedPerson.mobile ?? null, title: draft.title ?? selectedPerson.title ?? null, linkedinUrl: draft.linkedinUrl ?? selectedPerson.linkedinUrl ?? null, source: draft.source ?? selectedPerson.source ?? null }); await loadCrm(); closeModal() }}>Save</button>
       </ModalCard> : null}
       {selectedOrganization ? <ModalCard title={selectedOrganization.name} subtitle="Organization" onClose={closeModal}>
@@ -106,6 +127,7 @@ function CrmPageContent() {
         <Input value={draft.region ?? selectedOrganization.region ?? ''} onChange={(e) => setDraft((d) => ({ ...d, region: e.target.value }))} placeholder="Region" />
         <Input value={draft.postalCode ?? selectedOrganization.postalCode ?? ''} onChange={(e) => setDraft((d) => ({ ...d, postalCode: e.target.value }))} placeholder="Postal code" />
         <Input value={draft.country ?? selectedOrganization.country ?? ''} onChange={(e) => setDraft((d) => ({ ...d, country: e.target.value }))} placeholder="Country" />
+        {infoEntries}
         <button type="button" style={textButton} onClick={async () => { await updateCrmOrganization(selectedOrganization.id, { name: draft.name ?? selectedOrganization.name, website: draft.website ?? selectedOrganization.website ?? null, email: draft.email ?? selectedOrganization.email ?? null, phone: draft.phone ?? selectedOrganization.phone ?? null, industry: draft.industry ?? selectedOrganization.industry ?? null, size: draft.size ?? selectedOrganization.size ?? null, source: draft.source ?? selectedOrganization.source ?? null, address: draft.address ?? selectedOrganization.address ?? null, city: draft.city ?? selectedOrganization.city ?? null, region: draft.region ?? selectedOrganization.region ?? null, postalCode: draft.postalCode ?? selectedOrganization.postalCode ?? null, country: draft.country ?? selectedOrganization.country ?? null }); await loadCrm(); closeModal() }}>Save</button>
       </ModalCard> : null}
       {selectedDeal ? <ModalCard title={selectedDeal.title} subtitle="Deal" onClose={closeModal}>
@@ -118,6 +140,7 @@ function CrmPageContent() {
         <Input value={draft.currency ?? selectedDeal.currency ?? ''} onChange={(e) => setDraft((d) => ({ ...d, currency: e.target.value }))} placeholder="Currency" />
         <Input value={draft.probability ?? String(selectedDeal.probability ?? '')} onChange={(e) => setDraft((d) => ({ ...d, probability: e.target.value }))} placeholder="Probability %" />
         <Input value={draft.nextStep ?? selectedDeal.nextStep ?? ''} onChange={(e) => setDraft((d) => ({ ...d, nextStep: e.target.value }))} placeholder="Next step" />
+        {infoEntries}
         <button type="button" style={textButton} onClick={async () => { await updateCrmDeal(selectedDeal.id, { title: draft.title ?? selectedDeal.title, organizationId: (draft.organizationId ?? selectedDeal.organizationId) || null, primaryPersonId: (draft.primaryPersonId ?? selectedDeal.primaryPersonId) || null, status: (draft.status ?? selectedDeal.status) as CrmDeal['status'], stage: draft.stage ?? selectedDeal.stage ?? null, value: draft.value ? Number(draft.value) : selectedDeal.value ?? null, currency: draft.currency ?? selectedDeal.currency ?? null, probability: draft.probability ? Number(draft.probability) : selectedDeal.probability ?? null, nextStep: draft.nextStep ?? selectedDeal.nextStep ?? null }); await loadCrm(); closeModal() }}>Save</button>
       </ModalCard> : null}
     </div>}

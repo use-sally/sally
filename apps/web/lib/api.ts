@@ -50,6 +50,7 @@ export function getCrmStatus(): Promise<{ ok: boolean; module: 'crm'; status: st
 export type CrmOrganization = { id: string; name: string; website?: string | null; email?: string | null; phone?: string | null; industry?: string | null; size?: string | null; source?: string | null; address?: string | null; city?: string | null; region?: string | null; postalCode?: string | null; country?: string | null; notes?: string | null; labels?: string[] | null; updatedAt: string; _count?: { people: number; deals: number; activities: number } }
 export type CrmPerson = { id: string; name: string; email?: string | null; phone?: string | null; mobile?: string | null; title?: string | null; linkedinUrl?: string | null; source?: string | null; organization?: { id: string; name: string } | null; organizationId?: string | null; updatedAt: string }
 export type CrmDeal = { id: string; title: string; value?: number | null; currency?: string | null; stage?: string | null; status: 'OPEN' | 'WON' | 'LOST'; probability?: number | null; nextStep?: string | null; organization?: { id: string; name: string } | null; organizationId?: string | null; primaryPerson?: { id: string; name: string; email?: string | null } | null; primaryPersonId?: string | null; updatedAt: string }
+export type CrmActivity = { id: string; organizationId?: string | null; personId?: string | null; dealId?: string | null; type: 'NOTE' | 'CALL' | 'EMAIL' | 'MEETING' | 'FOLLOW_UP'; body: string; occurredAt: string; createdAt: string; actor?: { id: string; name?: string | null; email: string } | null }
 export function listCrmOrganizations(): Promise<{ items: CrmOrganization[] }> { return getJson('/crm/organizations') }
 export function createCrmOrganization(payload: { name: string; website?: string; notes?: string }): Promise<CrmOrganization> { return getJson('/crm/organizations', { method: 'POST', body: JSON.stringify(payload) }) }
 export function updateCrmOrganization(organizationId: string, payload: Partial<CrmOrganization>): Promise<CrmOrganization> { return getJson(`/crm/organizations/${organizationId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
@@ -59,6 +60,14 @@ export function updateCrmPerson(personId: string, payload: Partial<CrmPerson>): 
 export function listCrmDeals(): Promise<{ items: CrmDeal[] }> { return getJson('/crm/deals') }
 export function createCrmDeal(payload: { title: string; organizationId?: string | null; value?: number | null; currency?: string; status?: string }): Promise<CrmDeal> { return getJson('/crm/deals', { method: 'POST', body: JSON.stringify(payload) }) }
 export function updateCrmDeal(dealId: string, payload: Partial<CrmDeal>): Promise<CrmDeal> { return getJson(`/crm/deals/${dealId}`, { method: 'PATCH', body: JSON.stringify(payload) }) }
+export function listCrmActivities(params: { organizationId?: string; personId?: string; dealId?: string } = {}): Promise<{ items: CrmActivity[] }> {
+  const search = new URLSearchParams()
+  if (params.organizationId) search.set('organizationId', params.organizationId)
+  if (params.personId) search.set('personId', params.personId)
+  if (params.dealId) search.set('dealId', params.dealId)
+  return getJson(`/crm/activities${search.size ? `?${search}` : ''}`)
+}
+export function addCrmActivity(payload: { organizationId?: string | null; personId?: string | null; dealId?: string | null; type?: CrmActivity['type']; body: string; occurredAt?: string | null }): Promise<CrmActivity> { return getJson('/crm/activities', { method: 'POST', body: JSON.stringify(payload) }) }
 export type InstalledLicenseSummary = EditionInfo & {
   installed: null | {
     licenseServerUrl: string
