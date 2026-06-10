@@ -200,6 +200,9 @@ CRM add-on tools are dynamic and only listed when `crm.core` is enabled:
 - `crm.deal.update`
 - `crm.activity.list`
 - `crm.activity.add`
+- `crm.follow_up.list`
+- `crm.follow_up.add`
+- `crm.follow_up.update`
 
 Notable task behavior:
 - `task.create` accepts `owner`, `participants`, `assignee`, `collaborators`, `description`, `priority`, `status`, `statusId`, `dueDate`, `labels`, and `todos`.

@@ -871,6 +871,20 @@ Create fields: `organizationId`, `personId`, `dealId`, `taskId`, `type`, `body`,
 
 Activity type values: `NOTE`, `CALL`, `EMAIL`, `MEETING`, `FOLLOW_UP`.
 
+### Follow-ups / reminders
+
+Follow-ups are agent-friendly CRM reminders. They can be linked to an organization, person, deal, or any combination of those records.
+
+```txt
+GET   /crm/follow-ups?organizationId=&personId=&dealId=&status=
+POST  /crm/follow-ups
+PATCH /crm/follow-ups/:followUpId
+```
+
+Create fields: `organizationId`, `personId`, `dealId`, `ownerId`, `title`, `body`, `dueAt`, `status`.
+
+Status values: `OPEN`, `DONE`, `CANCELLED`.
+
 ---
 
 ## Clients

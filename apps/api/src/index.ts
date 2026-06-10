@@ -3,7 +3,7 @@ import cors from '@fastify/cors'
 import { DOMParser } from '@xmldom/xmldom'
 import { SignedXml } from 'xml-crypto'
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server'
-import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider, CrmDealStatus, CrmActivityType } from '@prisma/client'
+import { PrismaClient, Prisma, TaskStatusType, TaskPriority, WorkspaceRole, PlatformRole, PrincipalType, AgentJobStatus, AgentRunStatus, AgentConnectionStatus, ApprovalStatus, BlockerStatus, WorkItemProvider, CrmDealStatus, CrmActivityType, CrmFollowUpStatus } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -621,6 +621,14 @@ function normalizeCrmActivityType(input: unknown) {
   if (value === 'EMAIL') return CrmActivityType.EMAIL
   if (value === 'MEETING') return CrmActivityType.MEETING
   if (value === 'FOLLOW_UP') return CrmActivityType.FOLLOW_UP
+  return null
+}
+
+function normalizeCrmFollowUpStatus(input: unknown) {
+  const value = String(input || 'OPEN').trim().toUpperCase()
+  if (value === 'OPEN') return CrmFollowUpStatus.OPEN
+  if (value === 'DONE') return CrmFollowUpStatus.DONE
+  if (value === 'CANCELLED') return CrmFollowUpStatus.CANCELLED
   return null
 }
 
@@ -1712,6 +1720,9 @@ const hostedCrmMcpTools: McpTool[] = [
   { name: 'crm.deal.update', description: 'Update a CRM deal.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, dealId: { type: 'string' }, organizationId: { type: ['string','null'] }, primaryPersonId: { type: ['string','null'] }, ownerId: { type: ['string','null'] }, projectId: { type: ['string','null'] }, title: { type: 'string' }, value: { type: ['number','null'] }, currency: { type: ['string','null'] }, stage: { type: ['string','null'] }, status: { type: 'string', enum: ['OPEN', 'WON', 'LOST'] }, expectedCloseAt: { type: ['string','null'] }, notes: { type: ['string','null'] }, archived: { type: 'boolean' } }, required: ['dealId'], additionalProperties: false } },
   { name: 'crm.activity.list', description: 'List CRM activities.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: 'string' }, personId: { type: 'string' }, dealId: { type: 'string' } }, additionalProperties: false } },
   { name: 'crm.activity.add', description: 'Add a CRM activity.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: ['string','null'] }, personId: { type: ['string','null'] }, dealId: { type: ['string','null'] }, taskId: { type: ['string','null'] }, type: { type: 'string', enum: ['NOTE', 'CALL', 'EMAIL', 'MEETING', 'FOLLOW_UP'] }, body: { type: 'string' }, occurredAt: { type: ['string','null'] } }, required: ['body'], additionalProperties: false } },
+  { name: 'crm.follow_up.list', description: 'List CRM follow-ups/reminders.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: 'string' }, personId: { type: 'string' }, dealId: { type: 'string' }, status: { type: 'string', enum: ['OPEN', 'DONE', 'CANCELLED'] } }, additionalProperties: false } },
+  { name: 'crm.follow_up.add', description: 'Create a CRM follow-up/reminder.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, organizationId: { type: ['string','null'] }, personId: { type: ['string','null'] }, dealId: { type: ['string','null'] }, ownerId: { type: ['string','null'] }, title: { type: 'string' }, body: { type: 'string' }, dueAt: { type: ['string','null'] }, status: { type: 'string', enum: ['OPEN', 'DONE', 'CANCELLED'] } }, required: ['title'], additionalProperties: false } },
+  { name: 'crm.follow_up.update', description: 'Update a CRM follow-up/reminder.', inputSchema: { type: 'object', properties: { workspaceId: { type: 'string' }, workspaceSlug: { type: 'string' }, followUpId: { type: 'string' }, organizationId: { type: ['string','null'] }, personId: { type: ['string','null'] }, dealId: { type: ['string','null'] }, ownerId: { type: ['string','null'] }, title: { type: 'string' }, body: { type: ['string','null'] }, dueAt: { type: ['string','null'] }, status: { type: 'string', enum: ['OPEN', 'DONE', 'CANCELLED'] } }, required: ['followUpId'], additionalProperties: false } },
 ]
 
 const hostedMcpTools: McpTool[] = [
@@ -1861,6 +1872,16 @@ async function callHostedMcpTool(request: any, name: string, args: Record<string
       return await injectJson(request, { method: 'GET', url: `/crm/activities${params.size ? `?${params}` : ''}`, args })
     }
     case 'crm.activity.add': return await injectJson(request, { method: 'POST', url: '/crm/activities', args, payload: { organizationId: args.organizationId, personId: args.personId, dealId: args.dealId, taskId: args.taskId, type: args.type, body: args.body, occurredAt: args.occurredAt } })
+    case 'crm.follow_up.list': {
+      const params = new URLSearchParams()
+      if (args.organizationId) params.set('organizationId', String(args.organizationId))
+      if (args.personId) params.set('personId', String(args.personId))
+      if (args.dealId) params.set('dealId', String(args.dealId))
+      if (args.status) params.set('status', String(args.status))
+      return await injectJson(request, { method: 'GET', url: `/crm/follow-ups${params.size ? `?${params}` : ''}`, args })
+    }
+    case 'crm.follow_up.add': return await injectJson(request, { method: 'POST', url: '/crm/follow-ups', args, payload: { organizationId: args.organizationId, personId: args.personId, dealId: args.dealId, ownerId: args.ownerId, title: args.title, body: args.body, dueAt: args.dueAt, status: args.status } })
+    case 'crm.follow_up.update': return await injectJson(request, { method: 'PATCH', url: `/crm/follow-ups/${args.followUpId}`, args, payload: { organizationId: args.organizationId, personId: args.personId, dealId: args.dealId, ownerId: args.ownerId, title: args.title, body: args.body, dueAt: args.dueAt, status: args.status } })
     case 'workspace.list': {
       const memberships = await prisma.workspaceMembership.findMany({ where: { accountId: request.account.id, workspace: { archivedAt: null } }, include: { workspace: true }, orderBy: { createdAt: 'asc' } })
       const items = memberships
@@ -2414,6 +2435,49 @@ const start = async () => {
       const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.personId || null, dealId: body.dealId || null })
       if (refError) return refError
       return prisma.crmActivity.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, personId: body.personId || null, dealId: body.dealId || null, actorId: body.actorId || account?.id || null, taskId: body.taskId || null, type, body: bodyText, occurredAt: body.occurredAt ? new Date(body.occurredAt) : new Date() } })
+    })
+
+    app.get('/crm/follow-ups', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceRead(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const query = request.query as any
+      const status = query.status ? normalizeCrmFollowUpStatus(query.status) : null
+      if (query.status && !status) return reply.code(400).send({ ok: false, error: 'invalid status' })
+      const where: Prisma.CrmFollowUpWhereInput = { workspaceId: workspace.id }
+      if (status) where.status = status
+      if (query.organizationId) where.organizationId = String(query.organizationId)
+      if (query.personId) where.personId = String(query.personId)
+      if (query.dealId) where.dealId = String(query.dealId)
+      return { items: await prisma.crmFollowUp.findMany({ where, include: { organization: { select: { id: true, name: true } }, person: { select: { id: true, name: true, email: true } }, deal: { select: { id: true, title: true, status: true } }, owner: { select: { id: true, name: true, email: true } } }, orderBy: [{ status: 'asc' }, { dueAt: 'asc' }, { createdAt: 'desc' }], take: Math.min(Number(query.limit) || 100, 250) }) }
+    })
+
+    app.post('/crm/follow-ups', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const account = (request as any).account as { id: string } | undefined
+      const body = request.body as any
+      const title = String(body?.title || '').trim()
+      if (!title) return reply.code(400).send({ ok: false, error: 'title required' })
+      const status = normalizeCrmFollowUpStatus(body.status)
+      if (!status) return reply.code(400).send({ ok: false, error: 'invalid status' })
+      const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.personId || null, dealId: body.dealId || null, ownerId: body.ownerId || account?.id || null })
+      if (refError) return refError
+      return prisma.crmFollowUp.create({ data: { workspaceId: workspace.id, organizationId: body.organizationId || null, personId: body.personId || null, dealId: body.dealId || null, ownerId: body.ownerId || account?.id || null, createdById: account?.id || null, title, body: body.body || null, status, dueAt: body.dueAt ? new Date(body.dueAt) : null } })
+    })
+
+    app.patch('/crm/follow-ups/:followUpId', { preHandler: crmPreHandler }, async (request, reply) => {
+      if (!(await requireCrmWorkspaceWrite(request, reply))) return
+      const workspace = (request as any).workspace as { id: string }
+      const { followUpId } = request.params as { followUpId: string }
+      const body = request.body as any
+      const existing = await prisma.crmFollowUp.findFirst({ where: { id: followUpId, workspaceId: workspace.id } })
+      if (!existing) return reply.code(404).send({ ok: false, error: 'Follow-up not found' })
+      const status = body.status === undefined ? undefined : normalizeCrmFollowUpStatus(body.status)
+      if (body.status !== undefined && !status) return reply.code(400).send({ ok: false, error: 'invalid status' })
+      const nextStatus = status || undefined
+      const refError = await ensureCrmReferences(reply, workspace.id, { organizationId: body.organizationId || null, personId: body.personId || null, dealId: body.dealId || null, ownerId: body.ownerId || null })
+      if (refError) return refError
+      return prisma.crmFollowUp.update({ where: { id: followUpId }, data: { organizationId: body.organizationId === undefined ? undefined : body.organizationId || null, personId: body.personId === undefined ? undefined : body.personId || null, dealId: body.dealId === undefined ? undefined : body.dealId || null, ownerId: body.ownerId === undefined ? undefined : body.ownerId || null, title: body.title === undefined ? undefined : String(body.title).trim(), body: body.body === undefined ? undefined : body.body || null, status: nextStatus, dueAt: body.dueAt === undefined ? undefined : body.dueAt ? new Date(body.dueAt) : null, completedAt: nextStatus === CrmFollowUpStatus.DONE ? new Date() : body.completedAt === undefined ? undefined : body.completedAt ? new Date(body.completedAt) : null } })
     })
 
     app.get('/license', async (request, reply) => {

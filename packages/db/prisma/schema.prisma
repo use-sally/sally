@@ -160,6 +160,12 @@ enum CrmActivityType {
   FOLLOW_UP
 }
 
+enum CrmFollowUpStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
 model Workspace {
   id                       String                    @id @default(cuid())
   name                     String
@@ -173,6 +179,7 @@ model Workspace {
   crmPeople                CrmPerson[]
   crmDeals                 CrmDeal[]
   crmActivities            CrmActivity[]
+  crmFollowUps             CrmFollowUp[]
   users                    User[]
   memberships              WorkspaceMembership[]
   invites                  AccountInvite[]
@@ -234,6 +241,8 @@ model Account {
   ownedCrmOrganizations   CrmOrganization[]           @relation("CrmOrganizationOwner")
   ownedCrmDeals           CrmDeal[]                   @relation("CrmDealOwner")
   crmActivities           CrmActivity[]               @relation("CrmActivityActor")
+  crmFollowUps            CrmFollowUp[]               @relation("CrmFollowUpOwner")
+  createdCrmFollowUps     CrmFollowUp[]               @relation("CrmFollowUpCreator")
 
   @@index([archivedAt])
 }
@@ -707,6 +716,7 @@ model CrmOrganization {
   people      CrmPerson[]
   deals       CrmDeal[]
   activities  CrmActivity[]
+  followUps   CrmFollowUp[]
 
   @@index([workspaceId, archivedAt])
   @@index([workspaceId, name])
@@ -733,6 +743,7 @@ model CrmPerson {
   organization   CrmOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   deals          CrmDeal[]        @relation("CrmDealPrimaryPerson")
   activities     CrmActivity[]
+  followUps      CrmFollowUp[]
 
   @@index([workspaceId, archivedAt])
   @@index([workspaceId, name])
@@ -765,6 +776,7 @@ model CrmDeal {
   owner           Account?         @relation("CrmDealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   activities      CrmActivity[]
+  followUps       CrmFollowUp[]
 
   @@index([workspaceId, archivedAt])
   @@index([workspaceId, status])
@@ -772,6 +784,36 @@ model CrmDeal {
   @@index([primaryPersonId])
   @@index([ownerId])
   @@index([projectId])
+}
+
+model CrmFollowUp {
+  id             String            @id @default(cuid())
+  workspaceId    String
+  organizationId String?
+  personId       String?
+  dealId         String?
+  ownerId        String?
+  createdById    String?
+  title          String
+  body           String?
+  status         CrmFollowUpStatus @default(OPEN)
+  dueAt          DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  workspace      Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization   CrmOrganization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  person         CrmPerson?        @relation(fields: [personId], references: [id], onDelete: SetNull)
+  deal           CrmDeal?          @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  owner          Account?          @relation("CrmFollowUpOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy      Account?          @relation("CrmFollowUpCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, dueAt])
+  @@index([organizationId])
+  @@index([personId])
+  @@index([dealId])
+  @@index([ownerId])
+  @@index([createdById])
 }
 
 model CrmActivity {
