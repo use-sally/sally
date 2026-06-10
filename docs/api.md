@@ -24,25 +24,6 @@ This is one of the strongest candidates for later OpenAPI generation + contract 
 
 ---
 
-## Optional add-on feature keys
-
-Sally supports optional feature-gated modules in addition to Community/Enterprise edition behavior.
-
-Current add-on feature keys include:
-- `crm.core`: Sally CRM add-on foundation for API/MCP-first CRM surfaces
-
-Feature-gated routes return `402` when the feature is unavailable.
-
-For local testing or add-on trials, operators can append feature keys with:
-
-```txt
-SALLY_EXTRA_FEATURES=crm.core
-```
-
-`SALLY_FEATURES` is also accepted as an alias.
-
----
-
 ## Auth model
 
 Sally currently supports four auth paths:
@@ -798,92 +779,6 @@ Request:
 Superadmin only.
 
 Forces processing of pending `NotificationDelivery` rows.
-
----
-
-## CRM add-on
-
-The CRM add-on is gated by `crm.core`.
-
-### `GET /crm`
-Requires the `crm.core` feature.
-
-Response when enabled:
-```json
-{
-  "ok": true,
-  "module": "crm",
-  "status": "enabled",
-  "message": "Sally CRM add-on is enabled. Headless CRM API and MCP tools can be attached here."
-}
-```
-
-When disabled, the route returns `402` with feature metadata.
-
-CRM routes are workspace-scoped. Workspace viewers can read CRM records; workspace members and owners can write CRM records. Hosted MCP lists `crm.*` tools only when `crm.core` is enabled.
-
-### Organizations
-
-```txt
-GET    /crm/organizations?search=&archived=
-POST   /crm/organizations
-GET    /crm/organizations/:organizationId
-PATCH  /crm/organizations/:organizationId
-```
-
-Create fields: `name`, `website`, `notes`, `labels`, `ownerId`.
-Patch fields: create fields plus `archived`.
-
-### People
-
-```txt
-GET    /crm/people?organizationId=&search=&archived=
-POST   /crm/people
-GET    /crm/people/:personId
-PATCH  /crm/people/:personId
-```
-
-Create fields: `organizationId`, `name`, `email`, `phone`, `title`, `notes`, `labels`.
-Patch fields: create fields plus `archived`.
-
-### Deals
-
-```txt
-GET    /crm/deals?organizationId=&status=&search=&archived=
-POST   /crm/deals
-GET    /crm/deals/:dealId
-PATCH  /crm/deals/:dealId
-```
-
-Create fields: `organizationId`, `primaryPersonId`, `ownerId`, `projectId`, `title`, `value`, `currency`, `stage`, `status`, `expectedCloseAt`, `notes`.
-Patch fields: create fields plus `archived`.
-
-Deal status values: `OPEN`, `WON`, `LOST`.
-
-### Activities
-
-```txt
-GET  /crm/activities?organizationId=&personId=&dealId=
-POST /crm/activities
-```
-
-Create fields: `organizationId`, `personId`, `dealId`, `taskId`, `type`, `body`, `occurredAt`.
-
-Activity type values: `NOTE`, `CALL`, `EMAIL`, `MEETING`, `FOLLOW_UP`.
-
-### Follow-ups / reminders
-
-Follow-ups are agent-friendly CRM reminders. They can be linked to an organization, person, deal, or any combination of those records.
-
-```txt
-GET   /crm/follow-ups?organizationId=&personId=&dealId=&status=
-POST  /crm/follow-ups
-PATCH /crm/follow-ups/:followUpId
-```
-
-Create fields: `organizationId`, `personId`, `dealId`, `ownerId`, `title`, `body`, `dueAt`, `status`.
-
-Status values: `OPEN`, `DONE`, `CANCELLED`.
 
 ---
 

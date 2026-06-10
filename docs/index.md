@@ -20,7 +20,6 @@ If a page here disagrees with the actual implementation, trust the code in:
 ### If you want to understand the product quickly
 - [Product + workflow guide](./product-guide.md)
 - [Workspace access, invite links, and shareable URLs](./workspace-access-sharing.md)
-- [Sally CRM add-on](./crm.md)
 - [Architecture](./ARCHITECTURE.md)
 
 ### If you want to integrate with the API
@@ -52,7 +51,6 @@ Sally currently covers:
 - notifications for assignment and mentions
 - timesheets and reporting
 - hosted MCP via `/mcp`
-- optional Sally CRM add-on foundation for API/MCP-first CRM
 - local stdio MCP via `sally-mcp` as a parked advanced/legacy path
 
 ## Documentation style notes

@@ -32,9 +32,6 @@ Think of Sally as five connected layers:
    - hosted MCP at `/mcp`
    - local stdio MCP via `sally-mcp` only as a parked advanced/legacy path
 
-6. **optional add-ons**
-   - feature-gated modules such as Sally CRM can attach API, MCP, and web surfaces without becoming part of the core project-management workflow
-
 ## Who Sally is for
 
 Sally is especially suited to teams that:
@@ -123,15 +120,7 @@ Sally is especially suited to teams that:
 ### MCP
 - hosted MCP endpoint at `/mcp`
 - hosted MCP keys tied to real Sally accounts
-- CRM add-on tools are listed dynamically only when `crm.core` is enabled
 - local stdio MCP package kept parked for advanced/legacy setups
-
-### Sally CRM add-on
-- optional add-on feature key: `crm.core`
-- `/crm` web route with locked/enabled states
-- `/crm` API boundary protected by feature gating
-- hosted MCP tools under `crm.*`
-- CRM entities: organizations, people, deals, and activities
 
 ## How Sally usually gets used
 
@@ -212,6 +201,5 @@ It is trying to be a solid operational core for project and task execution.
 - For install: [`ubuntu-debian-install.md`](./ubuntu-debian-install.md)
 - For API integration: [`api.md`](./api.md)
 - For workspace access, invite links, and shareable URLs: [`workspace-access-sharing.md`](./workspace-access-sharing.md)
-- For Sally CRM add-on architecture: [`crm.md`](./crm.md)
 - For MCP usage: [`mcp.md`](./mcp.md)
 - For practical examples: [`tutorials.md`](./tutorials.md)
